@@ -5,6 +5,8 @@ plugins {
 }
 
 android {
+    // Python and QuickJS are executables shipped as native libraries; Android must unpack them.
+    packaging { jniLibs { useLegacyPackaging = true } }
     namespace = "dev.harp.harp"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
