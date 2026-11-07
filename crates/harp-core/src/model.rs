@@ -30,6 +30,14 @@ impl Song {
     }
 }
 
+pub fn to_json(s: &Song) -> String {
+    serde_json::to_string(s).unwrap_or_default()
+}
+
+pub fn from_json(raw: &str) -> Option<Song> {
+    serde_json::from_str(raw).ok()
+}
+
 #[cfg(test)]
 pub(crate) fn song(id: &str, title: &str, artist: &str) -> Song {
     Song {

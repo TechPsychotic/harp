@@ -1,0 +1,13 @@
+[package]
+name = "harp-ffi"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+flutter_rust_bridge = "=2.13.0"
+harp-core = { version = "0.1.0", path = "../harp-core" }
+harp-ytdlp = { version = "0.1.0", path = "../harp-ytdlp" }
+
+[lib]
+crate-type = ["cdylib", "staticlib", "lib"]
