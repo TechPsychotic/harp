@@ -477,15 +477,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "harp-ffi"
-version = "0.1.0"
-dependencies = [
- "flutter_rust_bridge",
- "harp-core",
- "harp-ytdlp",
-]
-
-[[package]]
 name = "harp-ytdlp"
 version = "0.1.0"
 dependencies = [
@@ -496,6 +487,15 @@ dependencies = [
  "sha2",
  "thiserror",
  "ureq",
+]
+
+[[package]]
+name = "harp_ffi"
+version = "0.1.0"
+dependencies = [
+ "flutter_rust_bridge",
+ "harp-core",
+ "harp-ytdlp",
 ]
 
 [[package]]

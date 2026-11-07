@@ -8,3 +8,5 @@ local.properties
 *.so
 *.part
 .DS_Store
+app/assets/python.zip
+app/android/build-tools/

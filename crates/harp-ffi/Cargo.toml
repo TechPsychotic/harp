@@ -1,5 +1,5 @@
 [package]
-name = "harp-ffi"
+name = "harp_ffi"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
