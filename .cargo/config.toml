@@ -1,0 +1,3 @@
+[build]
+# Keep local builds gentle on a 15 GB laptop; CI has its own settings.
+jobs = 3

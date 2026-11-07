@@ -55,4 +55,9 @@ with zipfile.ZipFile(out + ".tmp", "w", zipfile.ZIP_DEFLATED, compresslevel=9) a
             z.write(p, os.path.relpath(p, lib))
 os.replace(out + ".tmp", out)
 PY
+# Strip them (python goes from 54 MB to 23 MB) if an NDK is available.
+NDK=${ANDROID_NDK_HOME:-${ANDROID_NDK_ROOT:-${ANDROID_NDK_LATEST_HOME:-}}}
+[ -z "$NDK" ] && NDK=$(ls -d "${ANDROID_HOME:-$HOME/Android/Sdk}"/ndk/* 2>/dev/null | sort -V | tail -1)
+STRIP=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip
+if [ -x "$STRIP" ]; then "$STRIP" "$OUT/libpython.so" "$OUT/libqjs.so"; else echo "no NDK found: leaving binaries unstripped"; fi
 echo "done: $OUT/libpython.so, $OUT/libqjs.so, $ASSETS/python.zip"

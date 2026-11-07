@@ -1,0 +1,172 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  FLUTTER_VERSION: "3.47.8"
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Tests (Rust + Flutter)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --workspace
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - working-directory: app
+        run: |
+          flutter pub get
+          flutter analyze --no-fatal-infos
+          flutter test
+
+  linux:
+    name: Linux
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: System packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libmpv-dev mpv libasound2-dev
+      - working-directory: app
+        run: flutter build linux --release
+      - name: Package
+        run: |
+          mkdir -p dist
+          tar -C app/build/linux/x64/release/bundle -czf dist/harp-linux-x64.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: harp-linux-x64
+          path: dist/harp-linux-x64.tar.gz
+
+  android:
+    name: Android (arm64 APK)
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Python and QuickJS for yt-dlp (pinned SHA-256s)
+        run: |
+          sudo apt-get update && sudo apt-get install -y zstd
+          ./scripts/android-tools.sh
+      - working-directory: app
+        run: flutter build apk --release --target-platform android-arm64
+      - name: Check Python and QuickJS are inside the APK
+        run: |
+          unzip -l app/build/app/outputs/flutter-apk/app-release.apk | grep -E "libpython.so|libqjs.so|python.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: harp-android-arm64
+          path: app/build/app/outputs/flutter-apk/app-release.apk
+
+  # Windows and macOS minutes cost 2x and 10x on private repos, so these run
+  # for release tags and when started by hand.
+  windows:
+    name: Windows
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - working-directory: app
+        run: flutter build windows --release
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Compress-Archive -Path app/build/windows/x64/runner/Release/* -DestinationPath dist/harp-windows-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: harp-windows-x64
+          path: dist/harp-windows-x64.zip
+
+  macos:
+    name: macOS
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - working-directory: app
+        run: flutter build macos --release
+      - name: Package
+        run: |
+          mkdir -p dist
+          ditto -c -k --sequesterRsrc --keepParent app/build/macos/Build/Products/Release/harp.app dist/harp-macos.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: harp-macos
+          path: dist/harp-macos.zip
+
+  release:
+    name: GitHub release
+    needs: [linux, android, windows, macos]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ github.ref_name }}" dist/* --repo "${{ github.repository }}" --title "Harp ${{ github.ref_name }}" --generate-notes --draft
