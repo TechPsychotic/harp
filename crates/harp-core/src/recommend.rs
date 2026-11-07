@@ -1,0 +1,359 @@
+//! The recommender. Same ideas as a "self-learning shuffle", on the device and
+//! with no accounts or API keys:
+//!
+//! - skipping at 5% vs 75% is different; finishing a song scores highest;
+//! - a superlike (4x) also seeds future picks first;
+//! - a deliberate search is a strong signal for that artist;
+//! - cold start uses genre seed queries; once there are liked songs it pulls
+//!   "watch next" candidates from the source, with a 20% genre injection to
+//!   avoid a taste bubble;
+//! - every pick carries a reason line.
+
+use crate::error::Result;
+use crate::model::Song;
+use crate::rng::Rng;
+use crate::taste::{ArtistScore, Store};
+use std::collections::{HashMap, HashSet};
+
+pub const RECENT_WINDOW: usize = 50;
+pub const COLD_INJECT_RATE: f64 = 0.20;
+const SEARCH_SEED_WINDOW: usize = 10;
+
+/// Where candidates come from (yt-dlp in the app, a fake in tests).
+pub trait CandidateSource {
+    fn search(&self, query: &str, limit: usize) -> Result<Vec<Song>>;
+    /// Songs YouTube suggests after this one ("watch next" / mix).
+    fn related(&self, song_id: &str, limit: usize) -> Result<Vec<Song>>;
+}
+
+pub const SEED_QUERIES: &[&str] = &[
+    "80s pop hits", "90s pop hits", "2000s pop hits", "2010s pop hits", "70s classic rock",
+    "80s rock hits", "90s alternative rock", "classic rock hits", "classic country hits",
+    "90s country hits", "motown hits", "70s soul hits", "90s r&b hits", "2000s r&b hits",
+    "90s hip hop hits", "2000s hip hop hits", "classic rap hits", "90s dance hits",
+    "2000s euro dance hits", "classic edm hits", "80s new wave hits", "60s hits",
+    "jazz standards", "classic blues hits", "reggae hits", "latin pop hits", "folk hits",
+    "bollywood hits", "k-pop hits", "lofi beats", "indie pop hits", "synthwave hits",
+];
+
+/// (key, label, queries) for explicit genre requests and the "more/less energy" nudges.
+pub const GENRES: &[(&str, &str, &[&str])] = &[
+    ("pop", "Pop", &["pop hits", "2010s pop hits"]),
+    ("rock", "Rock", &["classic rock hits", "90s alternative rock"]),
+    ("hiphop", "Hip-Hop", &["90s hip hop hits", "2000s hip hop hits"]),
+    ("rnb", "R&B", &["90s r&b hits", "motown hits"]),
+    ("electronic", "Electronic", &["classic edm hits", "house music hits", "synthwave hits"]),
+    ("jazz", "Jazz", &["jazz standards", "smooth jazz hits"]),
+    ("country", "Country", &["classic country hits", "country pop hits"]),
+    ("folk", "Folk", &["folk hits", "singer songwriter hits"]),
+    ("latin", "Latin", &["latin pop hits", "reggaeton hits"]),
+    ("reggae", "Reggae", &["reggae hits", "ska hits"]),
+    ("indie", "Indie", &["indie pop hits", "indie rock hits"]),
+    ("more_energy", "More Energy", &["90s dance hits", "80s rock hits", "2000s euro dance hits"]),
+    ("less_energy", "Less Energy", &["jazz standards", "folk hits", "70s soul hits", "lofi beats"]),
+];
+
+#[derive(Clone, Debug, Default)]
+pub struct Request {
+    /// Genre key from [`GENRES`].
+    pub genre: Option<String>,
+    /// Play more by this artist (name).
+    pub artist: Option<String>,
+    /// The user explicitly asked (changes the wording of the reason).
+    pub requested: bool,
+    /// Song ids not to pick (e.g. what is already queued).
+    pub exclude: Vec<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct Recommendation {
+    pub song: Song,
+    pub reason: String,
+}
+
+fn playable(s: &Song) -> bool {
+    s.duration_secs.map_or(true, |d| (60..=600).contains(&d))
+}
+
+fn score(song: &Song, scores: &HashMap<String, ArtistScore>, rng: &mut Rng) -> f64 {
+    let mut base = rng.f64();
+    if let Some(s) = scores.get(&song.artist_key()) {
+        base += s.likes * 3.0 - s.skips * 2.0;
+    }
+    base
+}
+
+fn cold(src: &dyn CandidateSource, q: &str) -> Vec<Song> {
+    src.search(q, 25).unwrap_or_default().into_iter().filter(playable).collect()
+}
+
+fn format_query(q: &str) -> String {
+    let q = q.trim();
+    let q = q.strip_suffix(" hits").or_else(|| q.strip_suffix(" music")).unwrap_or(q);
+    q.split_whitespace()
+        .map(|w| {
+            if w.chars().next().map_or(false, |c| c.is_ascii_digit()) {
+                w.to_string()
+            } else {
+                let mut c = w.chars();
+                c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Picks the next song to play, with a reason.
+pub fn next(
+    store: &Store,
+    src: &dyn CandidateSource,
+    req: &Request,
+    rng: &mut Rng,
+) -> Result<Option<Recommendation>> {
+    let superliked = store.superliked(10)?;
+    let liked = store.liked_by_play(20)?;
+    let searched = store.searched(SEARCH_SEED_WINDOW)?;
+    let super_ids: HashSet<_> = superliked.iter().map(|s| s.id.clone()).collect();
+    let liked_ids: HashSet<_> = liked.iter().map(|s| s.id.clone()).collect();
+    let searched_only: HashSet<String> = searched
+        .iter()
+        .map(|s| s.id.clone())
+        .filter(|i| !liked_ids.contains(i) && !super_ids.contains(i))
+        .collect();
+
+    let seeds: Vec<Song> = if !superliked.is_empty() {
+        superliked
+    } else {
+        liked
+            .into_iter()
+            .chain(searched.into_iter().filter(|s| searched_only.contains(&s.id)))
+            .collect()
+    };
+
+    let mut used_seed: Option<Song> = None;
+    let candidates: Vec<Song>;
+    let mut reason: String;
+
+    let genre = req.genre.as_deref().and_then(|g| GENRES.iter().find(|x| x.0 == g));
+
+    if let Some(artist) = req.artist.as_deref() {
+        let mut c = cold(src, artist);
+        if c.is_empty() {
+            c = cold(src, rng.choose(SEED_QUERIES).copied().unwrap_or("pop hits"));
+        }
+        candidates = c;
+        reason = format!("Playing: {artist}");
+    } else if let Some((key, label, qs)) = genre {
+        candidates = cold(src, rng.choose(qs).copied().unwrap_or("pop hits"));
+        reason = match (*key, req.requested) {
+            ("more_energy", true) => "You wanted more energy".into(),
+            ("less_energy", true) => "You wanted something calmer".into(),
+            (_, true) => format!("You asked for: {label}"),
+            _ => format!("Genre: {label}"),
+        };
+    } else if seeds.is_empty() || rng.f64() < COLD_INJECT_RATE {
+        let q = rng.choose(SEED_QUERIES).copied().unwrap_or("pop hits");
+        let mut c = cold(src, q);
+        if c.is_empty() && !seeds.is_empty() {
+            c = warm(src, &seeds, rng).0;
+        }
+        candidates = c;
+        reason = format!("Mixing it up · {}", format_query(q));
+    } else {
+        let (c, picked) = warm(src, &seeds, rng);
+        used_seed = picked.first().cloned();
+        candidates = c;
+        reason = match &used_seed {
+            Some(s) => {
+                let verb = if super_ids.contains(&s.id) {
+                    "loved"
+                } else if searched_only.contains(&s.id) {
+                    "searched for"
+                } else {
+                    "liked"
+                };
+                format!("Because you {verb}: {} · {}", s.title, s.artist)
+            }
+            None => "Similar to songs you've liked".into(),
+        };
+    }
+
+    if candidates.is_empty() {
+        return Ok(None);
+    }
+
+    let mut avoid: HashSet<String> = store.recent_ids(RECENT_WINDOW)?.into_iter().collect();
+    avoid.extend(req.exclude.iter().cloned());
+    let fresh: Vec<&Song> = candidates.iter().filter(|c| !avoid.contains(&c.id)).collect();
+    let pool: Vec<&Song> = if fresh.is_empty() { candidates.iter().collect() } else { fresh };
+
+    let scores = store.artist_scores()?;
+    let song = pool
+        .into_iter()
+        .map(|s| (score(s, &scores, rng), s))
+        .max_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal))
+        .map(|(_, s)| s.clone())
+        .expect("pool is not empty");
+
+    if req.artist.is_none() {
+        let key = song.artist_key();
+        match scores.get(&key) {
+            None if scores.len() >= 3 => reason = format!("Introducing: {}", song.artist),
+            Some(s) => {
+                let n = s.likes.round() as i64;
+                let seed_key = used_seed.as_ref().map(|u| u.artist_key());
+                if n >= 3 && seed_key.as_deref() != Some(&key) {
+                    reason.push_str(&format!(" · you've liked {} {n}×", song.artist));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    Ok(Some(Recommendation { song, reason }))
+}
+
+/// "Up next" for the autoplay section: `n` picks, no repeats.
+pub fn batch(
+    store: &Store,
+    src: &dyn CandidateSource,
+    req: &Request,
+    n: usize,
+    rng: &mut Rng,
+) -> Result<Vec<Recommendation>> {
+    let mut req = req.clone();
+    let mut out = Vec::new();
+    for _ in 0..n {
+        match next(store, src, &req, rng)? {
+            Some(r) => {
+                req.exclude.push(r.song.id.clone());
+                out.push(r);
+            }
+            None => break,
+        }
+    }
+    Ok(out)
+}
+
+fn warm(src: &dyn CandidateSource, seeds: &[Song], rng: &mut Rng) -> (Vec<Song>, Vec<Song>) {
+    let picked = rng.sample(seeds, 3);
+    let mut seen: HashSet<String> = picked.iter().map(|s| s.id.clone()).collect();
+    let mut out = Vec::new();
+    for seed in &picked {
+        for s in src.related(&seed.id, 25).unwrap_or_default() {
+            if playable(&s) && seen.insert(s.id.clone()) {
+                out.push(s);
+            }
+        }
+    }
+    if out.len() < 10 {
+        out.extend(cold(src, rng.choose(SEED_QUERIES).copied().unwrap_or("pop hits")));
+    }
+    (out, picked)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::song;
+    use crate::taste::{PlayRecord, PlaySource};
+
+    struct Fake;
+    impl CandidateSource for Fake {
+        fn search(&self, q: &str, _: usize) -> Result<Vec<Song>> {
+            Ok((0..5).map(|i| song(&format!("s{i}"), &format!("{q} {i}"), &format!("Cold{i}"))).collect())
+        }
+        fn related(&self, id: &str, _: usize) -> Result<Vec<Song>> {
+            Ok((0..12).map(|i| song(&format!("{id}-r{i}"), "rel", &format!("Rel{i}"))).collect())
+        }
+    }
+
+    fn play(st: &Store, s: &Song, c: f64, sl: bool, src: PlaySource) {
+        st.record_play(&PlayRecord { song: s.clone(), completion: c, superliked: sl, source: src }).unwrap();
+    }
+
+    #[test]
+    fn cold_start_mixes_it_up() {
+        let st = Store::open_memory().unwrap();
+        let r = next(&st, &Fake, &Request::default(), &mut Rng::new(1)).unwrap().unwrap();
+        assert!(r.reason.starts_with("Mixing it up"), "{}", r.reason);
+    }
+
+    #[test]
+    fn warm_seeds_from_a_liked_song() {
+        let st = Store::open_memory().unwrap();
+        play(&st, &song("seed", "Seed", "Z"), 1.0, false, PlaySource::Recommended);
+        // find a seed where the 20% injection doesn't fire
+        let mut hit = false;
+        for seed in 1..30 {
+            let r = next(&st, &Fake, &Request::default(), &mut Rng::new(seed)).unwrap().unwrap();
+            if r.reason.starts_with("Because you liked: Seed") {
+                assert!(r.song.id.starts_with("seed-r"));
+                hit = true;
+                break;
+            }
+        }
+        assert!(hit);
+    }
+
+    #[test]
+    fn superlike_beats_likes_as_seed() {
+        let st = Store::open_memory().unwrap();
+        play(&st, &song("l", "Liked", "A"), 1.0, false, PlaySource::Recommended);
+        play(&st, &song("sl", "Loved", "B"), 0.5, true, PlaySource::Recommended);
+        for seed in 1..30 {
+            let r = next(&st, &Fake, &Request::default(), &mut Rng::new(seed)).unwrap().unwrap();
+            assert!(!r.reason.contains("Liked"), "{}", r.reason);
+        }
+    }
+
+    #[test]
+    fn avoids_recent_and_excluded() {
+        let st = Store::open_memory().unwrap();
+        play(&st, &song("s0", "x", "Cold0"), 0.9, false, PlaySource::Queue);
+        let req = Request { exclude: vec!["s1".into()], ..Default::default() };
+        for seed in 1..20 {
+            let r = next(&st, &Fake, &req, &mut Rng::new(seed)).unwrap().unwrap();
+            if r.reason.starts_with("Mixing") {
+                assert!(r.song.id != "s0" && r.song.id != "s1");
+            }
+        }
+    }
+
+    #[test]
+    fn disliked_artist_loses() {
+        let st = Store::open_memory().unwrap();
+        for i in 0..3 {
+            play(&st, &song(&format!("x{i}"), "x", "Cold0"), 0.0, false, PlaySource::Recommended);
+        }
+        let req = Request { genre: Some("jazz".into()), ..Default::default() };
+        for seed in 1..20 {
+            let r = next(&st, &Fake, &req, &mut Rng::new(seed)).unwrap().unwrap();
+            assert_ne!(r.song.artist, "Cold0");
+        }
+    }
+
+    #[test]
+    fn artist_and_genre_requests() {
+        let st = Store::open_memory().unwrap();
+        let r = next(&st, &Fake, &Request { artist: Some("Queen".into()), ..Default::default() }, &mut Rng::new(2)).unwrap().unwrap();
+        assert_eq!(r.reason, "Playing: Queen");
+        let r = next(&st, &Fake, &Request { genre: Some("more_energy".into()), requested: true, ..Default::default() }, &mut Rng::new(2)).unwrap().unwrap();
+        assert_eq!(r.reason, "You wanted more energy");
+    }
+
+    #[test]
+    fn batch_has_no_duplicates() {
+        let st = Store::open_memory().unwrap();
+        let b = batch(&st, &Fake, &Request::default(), 4, &mut Rng::new(5)).unwrap();
+        let ids: HashSet<_> = b.iter().map(|r| r.song.id.clone()).collect();
+        assert_eq!(ids.len(), b.len());
+        assert_eq!(b.len(), 4);
+    }
+
+    #[test]
+    fn query_formatting() {
+        assert_eq!(format_query("90s pop hits"), "90s Pop");
+        assert_eq!(format_query("jazz standards"), "Jazz Standards");
+    }
+}

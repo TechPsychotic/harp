@@ -1,0 +1,187 @@
+//! A loopback HTTP proxy with random credentials, for Android.
+//!
+//! The static (musl) Python that runs yt-dlp there cannot resolve names (no
+//! /etc/resolv.conf), so yt-dlp connects through this proxy, which dials with
+//! the app's own resolver. Other apps can reach loopback ports, hence the
+//! credentials, which only yt-dlp's command line holds.
+
+use std::io::{BufRead, BufReader, Read, Write};
+use std::net::{Shutdown, TcpListener, TcpStream, ToSocketAddrs};
+use std::sync::Arc;
+use std::time::Duration;
+
+pub struct Proxy {
+    pub url: String,
+    // Dropping stops nothing (threads end with the process); kept for the port.
+    pub port: u16,
+}
+
+fn b64(input: &[u8]) -> String {
+    const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut o = String::new();
+    for c in input.chunks(3) {
+        let n = (c[0] as u32) << 16 | (*c.get(1).unwrap_or(&0) as u32) << 8 | *c.get(2).unwrap_or(&0) as u32;
+        o.push(T[(n >> 18) as usize & 63] as char);
+        o.push(T[(n >> 12) as usize & 63] as char);
+        o.push(if c.len() > 1 { T[(n >> 6) as usize & 63] as char } else { '=' });
+        o.push(if c.len() > 2 { T[n as usize & 63] as char } else { '=' });
+    }
+    o
+}
+
+fn secret() -> String {
+    let mut b = [0u8; 16];
+    // /dev/urandom exists on Linux, Android and macOS; Windows is not a proxy target.
+    if std::fs::File::open("/dev/urandom").and_then(|mut f| f.read_exact(&mut b)).is_err() {
+        let n = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        b = n.to_le_bytes();
+    }
+    hex::encode(b)
+}
+
+impl Proxy {
+    pub fn start() -> std::io::Result<Proxy> {
+        let ln = TcpListener::bind("127.0.0.1:0")?;
+        let port = ln.local_addr()?.port();
+        let user = "harp";
+        let pass = secret();
+        let expect: Arc<String> = Arc::new(format!("Basic {}", b64(format!("{user}:{pass}").as_bytes())));
+        std::thread::spawn(move || {
+            for c in ln.incoming().flatten() {
+                let expect = expect.clone();
+                std::thread::spawn(move || {
+                    let _ = handle(c, &expect);
+                });
+            }
+        });
+        Ok(Proxy { url: format!("http://{user}:{pass}@127.0.0.1:{port}"), port })
+    }
+}
+
+fn reply(c: &mut TcpStream, status: &str) {
+    let _ = write!(c, "HTTP/1.1 {status}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+}
+
+fn handle(mut client: TcpStream, expect: &str) -> std::io::Result<()> {
+    client.set_read_timeout(Some(Duration::from_secs(30)))?;
+    let mut rd = BufReader::new(client.try_clone()?);
+    let mut line = String::new();
+    rd.read_line(&mut line)?;
+    let mut parts = line.split_whitespace();
+    let (method, target) = (parts.next().unwrap_or(""), parts.next().unwrap_or("").to_string());
+    let mut auth = String::new();
+    loop {
+        let mut h = String::new();
+        if rd.read_line(&mut h)? == 0 || h == "\r\n" || h == "\n" {
+            break;
+        }
+        if let Some((k, v)) = h.split_once(':') {
+            if k.eq_ignore_ascii_case("proxy-authorization") {
+                auth = v.trim().to_string();
+            }
+        }
+    }
+    if auth != expect {
+        reply(&mut client, "407 Proxy Authentication Required");
+        return Ok(());
+    }
+    // Only HTTPS tunnels: yt-dlp talks TLS to YouTube; plain http is refused.
+    if method != "CONNECT" || target.contains(['/', '@']) {
+        reply(&mut client, "400 Bad Request");
+        return Ok(());
+    }
+    let addr = match target.to_socket_addrs().ok().and_then(|mut a| a.next()) {
+        Some(a) => a,
+        None => {
+            reply(&mut client, "502 Bad Gateway");
+            return Ok(());
+        }
+    };
+    let up = match TcpStream::connect_timeout(&addr, Duration::from_secs(30)) {
+        Ok(u) => u,
+        Err(_) => {
+            reply(&mut client, "502 Bad Gateway");
+            return Ok(());
+        }
+    };
+    client.write_all(b"HTTP/1.1 200 Connection established\r\n\r\n")?;
+    client.set_read_timeout(None)?;
+    // Bytes the client sent after its request are already in the BufReader.
+    let buffered = rd.buffer().to_vec();
+    let mut up_w = up.try_clone()?;
+    up_w.write_all(&buffered)?;
+    let mut c_r = client.try_clone()?;
+    let mut up_r = up.try_clone()?;
+    let t = std::thread::spawn(move || {
+        let _ = std::io::copy(&mut c_r, &mut up_w);
+        let _ = up_w.shutdown(Shutdown::Write);
+    });
+    let _ = std::io::copy(&mut up_r, &mut client);
+    let _ = client.shutdown(Shutdown::Write);
+    let _ = t.join();
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn base64_vectors() {
+        assert_eq!(b64(b"harp:x"), "aGFycDp4");
+        assert_eq!(b64(b"a"), "YQ==");
+        assert_eq!(b64(b"ab"), "YWI=");
+    }
+
+    fn echo_server() -> u16 {
+        let ln = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = ln.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            for mut s in ln.incoming().flatten() {
+                std::thread::spawn(move || {
+                    let mut buf = [0u8; 64];
+                    while let Ok(n) = s.read(&mut buf) {
+                        if n == 0 || s.write_all(&buf[..n]).is_err() {
+                            break;
+                        }
+                    }
+                });
+            }
+        });
+        port
+    }
+
+    fn connect_via(p: &Proxy, auth: Option<&str>, target: &str) -> String {
+        let mut c = TcpStream::connect(("127.0.0.1", p.port)).unwrap();
+        c.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        let a = auth.map(|a| format!("Proxy-Authorization: Basic {}\r\n", b64(a.as_bytes()))).unwrap_or_default();
+        write!(c, "CONNECT {target} HTTP/1.1\r\nHost: {target}\r\n{a}\r\n").unwrap();
+        let mut rd = BufReader::new(c.try_clone().unwrap());
+        let mut status = String::new();
+        rd.read_line(&mut status).unwrap();
+        if status.contains("200") {
+            let mut l = String::new();
+            rd.read_line(&mut l).unwrap(); // blank line
+            c.write_all(b"ping\n").unwrap();
+            let mut echo = String::new();
+            rd.read_line(&mut echo).unwrap();
+            return format!("200 {}", echo.trim());
+        }
+        status.trim().to_string()
+    }
+
+    #[test]
+    fn tunnels_with_credentials_and_refuses_without() {
+        let echo = echo_server();
+        let p = Proxy::start().unwrap();
+        let cred = p.url.strip_prefix("http://").unwrap().split('@').next().unwrap().to_string();
+        let target = format!("127.0.0.1:{echo}");
+        assert_eq!(connect_via(&p, Some(&cred), &target), "200 ping");
+        assert!(connect_via(&p, None, &target).contains("407"));
+        assert!(connect_via(&p, Some("harp:wrong"), &target).contains("407"));
+        assert!(connect_via(&p, Some(&cred), "a/b:1").contains("400"));
+    }
+}

@@ -1,0 +1,13 @@
+[package]
+name = "harp-ytdlp"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+harp-core = { version = "0.1.0", path = "../harp-core" }
+hex = "0.4.3"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+thiserror = "2.0.21"
+ureq = "3.5.1"

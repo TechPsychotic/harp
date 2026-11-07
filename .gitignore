@@ -1,0 +1,10 @@
+target/
+.dart_tool/
+build/
+*.iml
+.idea/
+.flutter-plugins*
+local.properties
+*.so
+*.part
+.DS_Store
