@@ -10,6 +10,7 @@ pub mod extractor;
 pub mod install;
 pub mod parse;
 pub mod proxy;
+pub mod ytmusic;
 
 pub use config::Tool;
 pub use extractor::{Stream, YtDlp};

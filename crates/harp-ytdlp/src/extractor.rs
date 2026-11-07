@@ -17,6 +17,7 @@ const EXPIRY_MARGIN_SECS: u64 = 300;
 pub struct YtDlp {
     tool: Tool,
     cache: Mutex<HashMap<String, Stream>>,
+    ytmusic: bool,
 }
 
 fn now() -> u64 {
@@ -25,7 +26,13 @@ fn now() -> u64 {
 
 impl YtDlp {
     pub fn new(tool: Tool) -> Self {
-        YtDlp { tool, cache: Mutex::new(HashMap::new()) }
+        YtDlp { tool, cache: Mutex::new(HashMap::new()), ytmusic: true }
+    }
+
+    /// Use only yt-dlp, never YouTube Music's web API (tests, or if it breaks).
+    pub fn without_ytmusic(mut self) -> Self {
+        self.ytmusic = false;
+        self
     }
 
     fn run(&self, extra: &[String]) -> Result<String> {
@@ -81,13 +88,21 @@ impl YtDlp {
         parse::songs_from_playlist(&out)
     }
 
-    /// Search YouTube. (YouTube Music's search page gives yt-dlp only ids and
-    /// titles in flat mode: no artist, channel or length. Plain `ytsearch` has
-    /// all three, and `tidy` pulls "Artist - Title" apart.)
+    /// Search songs: YouTube Music's own search first (artist, album, length,
+    /// cover art), then yt-dlp's plain YouTube search if that fails or is empty.
+    /// (YouTube Music's page in yt-dlp's flat mode has only ids and titles, and
+    /// plain `ytsearch` has a channel name rather than the artist.)
     pub fn search_songs(&self, query: &str, limit: usize) -> Result<Vec<Song>> {
         let q = query.trim();
         if q.is_empty() {
             return Ok(vec![]);
+        }
+        if self.ytmusic {
+            if let Ok(v) = crate::ytmusic::search(q, limit) {
+                if !v.is_empty() {
+                    return Ok(v);
+                }
+            }
         }
         self.flat(&format!("ytsearch{limit}:{q}"), limit)
     }
@@ -130,8 +145,15 @@ impl CandidateSource for YtDlp {
         self.search_songs(query, limit).map_err(|e| harp_core::Error::Source(e.to_string()))
     }
 
-    /// YouTube's mix for a video ("RD" + id playlist) is its watch-next list.
+    /// YouTube Music's song radio, else YouTube's mix for a video ("RD" + id playlist) is its watch-next list.
     fn related(&self, song_id: &str, limit: usize) -> harp_core::Result<Vec<Song>> {
+        if self.ytmusic {
+            if let Ok(v) = crate::ytmusic::radio(song_id, limit) {
+                if !v.is_empty() {
+                    return Ok(v);
+                }
+            }
+        }
         let url = format!("https://www.youtube.com/watch?v={song_id}&list=RD{song_id}");
         let mut v = self.flat(&url, limit + 1).map_err(|e| harp_core::Error::Source(e.to_string()))?;
         v.retain(|s| s.id != song_id);
@@ -166,7 +188,7 @@ mod tests {
 
     #[test]
     fn search_uses_youtube_search() {
-        let y = YtDlp::new(fake(&tmp("search")));
+        let y = YtDlp::new(fake(&tmp("search"))).without_ytmusic();
         let v = y.search_songs("daft punk", 5).unwrap();
         assert_eq!(v[0].title, "Get Lucky");
     }
@@ -185,7 +207,7 @@ mod tests {
 
     #[test]
     fn related_drops_the_seed() {
-        let y = YtDlp::new(fake(&tmp("rel")));
+        let y = YtDlp::new(fake(&tmp("rel"))).without_ytmusic();
         let v = y.related("5NV6Rdv1a3I", 10).unwrap();
         assert!(v.iter().all(|s| s.id != "5NV6Rdv1a3I"));
         assert_eq!(v.len(), 2);
