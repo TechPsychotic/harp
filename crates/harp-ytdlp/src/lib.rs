@@ -10,10 +10,11 @@ pub mod extractor;
 pub mod install;
 pub mod parse;
 pub mod proxy;
+pub mod thumbs;
 pub mod ytmusic;
 
 pub use config::Tool;
-pub use extractor::{Stream, YtDlp};
+pub use extractor::{Quality, Stream, YtDlp};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {

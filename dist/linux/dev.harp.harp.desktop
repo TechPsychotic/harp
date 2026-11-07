@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=Harp
+GenericName=Music Player
+Comment=Music that learns your taste, on this device
+Exec=harp %U
+Icon=dev.harp.harp
+Terminal=false
+Categories=AudioVideo;Audio;Music;Player;
+Keywords=music;audio;player;songs;playlist;streaming;offline;
+MimeType=audio/mpeg;audio/mp4;audio/x-m4a;audio/flac;audio/ogg;audio/opus;audio/x-wav;audio/webm;audio/aac;application/x-mpegurl;audio/x-mpegurl;
+StartupNotify=true
+StartupWMClass=dev.harp.harp
+X-GNOME-UsesNotifications=true

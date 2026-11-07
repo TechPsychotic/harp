@@ -133,6 +133,35 @@ impl Queue {
         Some(first)
     }
 
+    /// Jumps to an item in the user's queue: the items before it are skipped
+    /// (they go to history) and it starts playing.
+    pub fn jump_user(&mut self, index: usize) -> Option<&Song> {
+        if index >= self.user.len() {
+            return None;
+        }
+        for _ in 0..index {
+            if let Some(s) = self.user.pop_front() {
+                self.history.push(s);
+            }
+        }
+        self.next(false)
+    }
+
+    /// Jumps to an item in the autoplay section. The user's own queue stays
+    /// where it is; autoplay items before the chosen one are dropped.
+    pub fn jump_auto(&mut self, index: usize) -> Option<&Song> {
+        if index >= self.auto.len() {
+            return None;
+        }
+        self.auto.drain(..index);
+        let s = self.auto.pop_front()?;
+        if let Some(c) = self.current.take() {
+            self.history.push(c);
+        }
+        self.current = Some(s);
+        self.current.as_ref()
+    }
+
     pub fn previous(&mut self) -> Option<&Song> {
         let prev = self.history.pop()?;
         if let Some(c) = self.current.take() {
@@ -215,6 +244,23 @@ mod tests {
         q.next(false);
         assert_eq!(q.previous().unwrap().id, "a");
         assert_eq!(q.next(false).unwrap().id, "b");
+    }
+
+    #[test]
+    fn jumping_skips_the_songs_in_between() {
+        let mut q = Queue::new();
+        q.play_now(s("cur"));
+        for n in ["u1", "u2", "u3"] {
+            q.add_to_queue(s(n));
+        }
+        q.set_autoplay(vec![s("a1"), s("a2"), s("a3")]);
+        assert_eq!(q.jump_user(1).unwrap().id, "u2");
+        assert_eq!(q.user_queue().map(|x| x.id.as_str()).collect::<Vec<_>>(), ["u3"]);
+        assert_eq!(q.history().len(), 2, "cur and u1 are behind us");
+        assert_eq!(q.jump_auto(1).unwrap().id, "a2");
+        assert_eq!(q.autoplay().map(|x| x.id.as_str()).collect::<Vec<_>>(), ["a3"]);
+        assert_eq!(q.user_len(), 1);
+        assert!(q.jump_user(9).is_none());
     }
 
     #[test]

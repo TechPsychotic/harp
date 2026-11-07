@@ -2,13 +2,15 @@ import 'package:flutter/material.dart';
 
 import '../player/controller.dart';
 import '../theme/glass.dart';
+import '../theme/logo.dart';
 import '../widgets/cover.dart';
 import 'home.dart';
 import 'library.dart';
 import 'now_playing.dart';
 import 'search.dart';
 
-/// Adaptive shell: a side rail on wide windows, a bottom bar on phones.
+/// Adaptive shell: a side rail on wide windows, a docked bar on phones. The
+/// dock (mini player + navigation) is attached to the bottom edge.
 class Shell extends StatefulWidget {
   const Shell({super.key, required this.player});
   final PlayerController player;
@@ -19,90 +21,103 @@ class Shell extends StatefulWidget {
 
 class _ShellState extends State<Shell> {
   int _tab = 0;
+  late final List<Widget> _pages = [
+    HomeScreen(player: widget.player),
+    SearchScreen(player: widget.player),
+    LibraryScreen(player: widget.player),
+  ];
   static const _items = [
     (Icons.home_rounded, 'Home'),
     (Icons.search_rounded, 'Search'),
     (Icons.library_music_rounded, 'Library'),
   ];
 
+  void _openNowPlaying() => Navigator.of(context).push(PageRouteBuilder(
+        pageBuilder: (_, _, _) => NowPlayingScreen(player: widget.player),
+        transitionsBuilder: (_, a, _, child) => FadeTransition(opacity: a, child: child),
+      ));
+
   @override
   Widget build(BuildContext context) {
     final p = widget.player;
-    final pages = [HomeScreen(player: p), SearchScreen(player: p), LibraryScreen(player: p)];
     return ListenableBuilder(
       listenable: p,
       builder: (context, _) {
         final accent = HarpColors.accentFor(p.current?.id);
-        return Theme(
-          data: harpTheme(accent),
-          child: AuroraBackground(
-            accent: accent,
-            child: LayoutBuilder(builder: (context, c) {
-              final wide = c.maxWidth >= 760;
-              final body = Stack(children: [
-                IndexedStack(index: _tab, children: pages),
-                Positioned(
-                  left: 12,
-                  right: 12,
-                  bottom: wide ? 14 : 84,
-                  child: _MiniPlayer(player: p, onOpen: () => Navigator.of(context).push(PageRouteBuilder(
-                    pageBuilder: (_, _, _) => NowPlayingScreen(player: p),
-                    transitionsBuilder: (_, a, __, child) => FadeTransition(opacity: a, child: child),
-                  ))),
-                ),
-              ]);
-              return Scaffold(
-                body: wide
-                    ? Row(children: [
-                        SafeArea(
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: GlassCard(
-                              radius: 28,
-                              padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 6),
-                              child: SizedBox(
-                                width: 84,
-                                child: Column(children: [
-                                  const Icon(Icons.graphic_eq_rounded, size: 30),
-                                  const Text('Harp', style: TextStyle(fontWeight: FontWeight.w700, letterSpacing: 1.2)),
-                                  const SizedBox(height: 26),
-                                  for (var i = 0; i < _items.length; i++)
-                                    _RailItem(icon: _items[i].$1, label: _items[i].$2, selected: _tab == i, onTap: () => setState(() => _tab = i)),
-                                ]),
-                              ),
-                            ),
-                          ),
-                        ),
-                        Expanded(child: SafeArea(child: body)),
-                      ])
-                    : SafeArea(bottom: false, child: body),
-                bottomNavigationBar: wide
-                    ? null
-                    : Padding(
-                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                        child: SafeArea(
-                          top: false,
-                          child: GlassCard(
-                            radius: 26,
-                            padding: const EdgeInsets.symmetric(vertical: 6),
-                            child: Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
-                              for (var i = 0; i < _items.length; i++)
-                                _RailItem(icon: _items[i].$1, label: _items[i].$2, selected: _tab == i, onTap: () => setState(() => _tab = i)),
-                            ]),
-                          ),
-                        ),
-                      ),
-              );
-            }),
-          ),
+        return AuroraBackground(
+          accent: accent,
+          active: p.playing,
+          level: p.settings.reactiveBackground ? p.viz.level : null,
+          child: LayoutBuilder(builder: (context, c) {
+            final wide = c.maxWidth >= 760;
+            final content = IndexedStack(index: _tab, children: _pages);
+            return Scaffold(
+              body: SafeArea(
+                bottom: false,
+                child: Column(children: [
+                  Expanded(
+                    child: wide
+                        ? Row(children: [
+                            _Rail(tab: _tab, onTap: (i) => setState(() => _tab = i)),
+                            Expanded(child: content),
+                          ])
+                        : content,
+                  ),
+                  _Dock(player: p, onOpen: _openNowPlaying, nav: wide ? null : _NavBar(tab: _tab, onTap: (i) => setState(() => _tab = i))),
+                ]),
+              ),
+            );
+          }),
         );
       },
     );
   }
 }
 
-class _RailItem extends StatelessWidget {
-  const _RailItem({required this.icon, required this.label, required this.selected, required this.onTap});
+class _Rail extends StatelessWidget {
+  const _Rail({required this.tab, required this.onTap});
+  final int tab;
+  final ValueChanged<int> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 12, 0, 12),
+      child: GlassCard(
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 6),
+        child: SizedBox(
+          width: 80,
+          child: Column(children: [
+            const HarpLogo(size: 40),
+            const SizedBox(height: 22),
+            for (var i = 0; i < _ShellState._items.length; i++)
+              _NavItem(icon: _ShellState._items[i].$1, label: _ShellState._items[i].$2, selected: tab == i, onTap: () => onTap(i)),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+class _NavBar extends StatelessWidget {
+  const _NavBar({required this.tab, required this.onTap});
+  final int tab;
+  final ValueChanged<int> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
+        for (var i = 0; i < _ShellState._items.length; i++)
+          _NavItem(icon: _ShellState._items[i].$1, label: _ShellState._items[i].$2, selected: tab == i, onTap: () => onTap(i)),
+      ]),
+    );
+  }
+}
+
+class _NavItem extends StatelessWidget {
+  const _NavItem({required this.icon, required this.label, required this.selected, required this.onTap});
   final IconData icon;
   final String label;
   final bool selected;
@@ -110,68 +125,92 @@ class _RailItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tok = context.tok;
     final accent = Theme.of(context).colorScheme.primary;
+    final fg = selected ? tok.text : tok.textDim;
     return InkWell(
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(Radii.control),
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(18),
-          color: selected ? accent.withValues(alpha: 0.28) : Colors.transparent,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(Radii.control), color: selected ? accent.withValues(alpha: 0.22) : Colors.transparent),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, color: selected ? Colors.white : HarpColors.textDim),
+          Icon(icon, color: fg),
           const SizedBox(height: 2),
-          Text(label, style: TextStyle(fontSize: 11, color: selected ? Colors.white : HarpColors.textDim)),
+          Text(label, style: TextStyle(fontSize: 11, color: fg)),
         ]),
       ),
     );
   }
 }
 
-class _MiniPlayer extends StatelessWidget {
-  const _MiniPlayer({required this.player, required this.onOpen});
+/// The bottom dock: the mini player, then the navigation (on phones). One
+/// frosted surface attached to the bottom edge of the window.
+class _Dock extends StatelessWidget {
+  const _Dock({required this.player, required this.onOpen, this.nav});
   final PlayerController player;
   final VoidCallback onOpen;
+  final Widget? nav;
 
   @override
   Widget build(BuildContext context) {
     final s = player.current;
-    if (s == null) return const SizedBox.shrink();
-    return GlassCard(
-      radius: 22,
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-      onTap: onOpen,
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Row(children: [
-          Cover(url: s.thumbnail, seed: s.id, size: 44, radius: 12),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(s.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
-              Text(s.artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: HarpColors.textDim, fontSize: 12.5)),
-            ]),
-          ),
-          GlassIconButton(
-            icon: player.loading ? Icons.hourglass_top_rounded : (player.playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
-            size: 42,
-            filled: true,
-            onPressed: player.togglePlay,
-          ),
-          const SizedBox(width: 8),
-          GlassIconButton(icon: Icons.skip_next_rounded, size: 42, onPressed: player.next),
+    if (s == null && nav == null) return const SizedBox.shrink();
+    return GlassSurface(
+      topBorderOnly: true,
+      child: SafeArea(
+        top: false,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          if (s != null)
+            InkWell(
+              onTap: onOpen,
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                  child: Row(children: [
+                    Cover(url: s.thumbnail, seed: s.id, size: 42, radius: Radii.cover),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(s.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
+                        Text(s.artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: context.tok.textDim, fontSize: 12.5)),
+                      ]),
+                    ),
+                    GlassIconButton(
+                      icon: s.liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                      color: s.liked ? const Color(0xFFFF6B9A) : null,
+                      size: 38,
+                      onPressed: player.toggleLike,
+                    ),
+                    const SizedBox(width: 8),
+                    GlassIconButton(
+                      icon: player.loading ? Icons.hourglass_top_rounded : (player.playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
+                      size: 42,
+                      filled: true,
+                      round: true,
+                      onPressed: player.togglePlay,
+                    ),
+                    const SizedBox(width: 8),
+                    GlassIconButton(icon: Icons.skip_next_rounded, size: 38, onPressed: player.next),
+                  ]),
+                ),
+                // Only the thin progress bar rebuilds on every tick.
+                ValueListenableBuilder<Duration>(
+                  valueListenable: player.position,
+                  builder: (_, pos, _) => ValueListenableBuilder<Duration>(
+                    valueListenable: player.duration,
+                    builder: (_, dur, _) => LinearProgressIndicator(
+                      value: dur.inMilliseconds == 0 ? 0 : (pos.inMilliseconds / dur.inMilliseconds).clamp(0.0, 1.0),
+                      minHeight: 2,
+                      backgroundColor: Colors.transparent,
+                    ),
+                  ),
+                ),
+              ]),
+            ),
+          ?nav,
         ]),
-        const SizedBox(height: 8),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(3),
-          child: LinearProgressIndicator(
-            value: player.progress,
-            minHeight: 3,
-            backgroundColor: Colors.white.withValues(alpha: 0.12),
-          ),
-        ),
-      ]),
+      ),
     );
   }
 }

@@ -33,6 +33,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   EngineConfig dco_decode_box_autoadd_engine_config(dynamic raw);
 
   @protected
+  ImportTrackView dco_decode_box_autoadd_import_track_view(dynamic raw);
+
+  @protected
   Pick dco_decode_box_autoadd_pick(dynamic raw);
 
   @protected
@@ -45,10 +48,40 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   BigInt dco_decode_box_autoadd_u_64(dynamic raw);
 
   @protected
+  DownloadView dco_decode_download_view(dynamic raw);
+
+  @protected
   EngineConfig dco_decode_engine_config(dynamic raw);
 
   @protected
   double dco_decode_f_64(dynamic raw);
+
+  @protected
+  HomeFeed dco_decode_home_feed(dynamic raw);
+
+  @protected
+  PlatformInt64 dco_decode_i_64(dynamic raw);
+
+  @protected
+  ImportPlaylistView dco_decode_import_playlist_view(dynamic raw);
+
+  @protected
+  ImportTrackView dco_decode_import_track_view(dynamic raw);
+
+  @protected
+  List<String> dco_decode_list_String(dynamic raw);
+
+  @protected
+  List<DownloadView> dco_decode_list_download_view(dynamic raw);
+
+  @protected
+  List<ImportPlaylistView> dco_decode_list_import_playlist_view(dynamic raw);
+
+  @protected
+  List<ImportTrackView> dco_decode_list_import_track_view(dynamic raw);
+
+  @protected
+  List<PlaylistView> dco_decode_list_playlist_view(dynamic raw);
 
   @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
@@ -58,6 +91,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<SongView> dco_decode_list_song_view(dynamic raw);
+
+  @protected
+  MatchView dco_decode_match_view(dynamic raw);
 
   @protected
   String? dco_decode_opt_String(dynamic raw);
@@ -76,6 +112,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   Pick dco_decode_pick(dynamic raw);
+
+  @protected
+  PlaylistView dco_decode_playlist_view(dynamic raw);
 
   @protected
   QueueView dco_decode_queue_view(dynamic raw);
@@ -116,6 +155,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  ImportTrackView sse_decode_box_autoadd_import_track_view(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   Pick sse_decode_box_autoadd_pick(SseDeserializer deserializer);
 
   @protected
@@ -128,10 +172,50 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   BigInt sse_decode_box_autoadd_u_64(SseDeserializer deserializer);
 
   @protected
+  DownloadView sse_decode_download_view(SseDeserializer deserializer);
+
+  @protected
   EngineConfig sse_decode_engine_config(SseDeserializer deserializer);
 
   @protected
   double sse_decode_f_64(SseDeserializer deserializer);
+
+  @protected
+  HomeFeed sse_decode_home_feed(SseDeserializer deserializer);
+
+  @protected
+  PlatformInt64 sse_decode_i_64(SseDeserializer deserializer);
+
+  @protected
+  ImportPlaylistView sse_decode_import_playlist_view(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ImportTrackView sse_decode_import_track_view(SseDeserializer deserializer);
+
+  @protected
+  List<String> sse_decode_list_String(SseDeserializer deserializer);
+
+  @protected
+  List<DownloadView> sse_decode_list_download_view(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<ImportPlaylistView> sse_decode_list_import_playlist_view(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<ImportTrackView> sse_decode_list_import_track_view(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<PlaylistView> sse_decode_list_playlist_view(
+    SseDeserializer deserializer,
+  );
 
   @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
@@ -143,6 +227,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<SongView> sse_decode_list_song_view(SseDeserializer deserializer);
+
+  @protected
+  MatchView sse_decode_match_view(SseDeserializer deserializer);
 
   @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
@@ -161,6 +248,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   Pick sse_decode_pick(SseDeserializer deserializer);
+
+  @protected
+  PlaylistView sse_decode_playlist_view(SseDeserializer deserializer);
 
   @protected
   QueueView sse_decode_queue_view(SseDeserializer deserializer);
@@ -207,6 +297,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_box_autoadd_import_track_view(
+    ImportTrackView self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_pick(Pick self, SseSerializer serializer);
 
   @protected
@@ -222,10 +318,58 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_box_autoadd_u_64(BigInt self, SseSerializer serializer);
 
   @protected
+  void sse_encode_download_view(DownloadView self, SseSerializer serializer);
+
+  @protected
   void sse_encode_engine_config(EngineConfig self, SseSerializer serializer);
 
   @protected
   void sse_encode_f_64(double self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_home_feed(HomeFeed self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_import_playlist_view(
+    ImportPlaylistView self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_import_track_view(
+    ImportTrackView self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_String(List<String> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_download_view(
+    List<DownloadView> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_import_playlist_view(
+    List<ImportPlaylistView> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_import_track_view(
+    List<ImportTrackView> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_playlist_view(
+    List<PlaylistView> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_prim_u_8_strict(
@@ -241,6 +385,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_list_song_view(List<SongView> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_match_view(MatchView self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
@@ -262,6 +409,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_pick(Pick self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_playlist_view(PlaylistView self, SseSerializer serializer);
 
   @protected
   void sse_encode_queue_view(QueueView self, SseSerializer serializer);

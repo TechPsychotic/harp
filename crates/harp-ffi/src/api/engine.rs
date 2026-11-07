@@ -1,9 +1,11 @@
+use crate::home_cache::{now_secs, HomeCache, HOME_TTL_SECS};
+use harp_core::import as imp;
 use harp_core::queue::{Queue, Repeat};
-use harp_core::recommend::{self, Request};
+use harp_core::recommend::{self, CandidateSource, Request};
 use harp_core::rng::Rng;
 use harp_core::taste::{PlayRecord, PlaySource, SkipReason, Store};
 use harp_core::Song;
-use harp_ytdlp::{install, proxy::Proxy, Tool, YtDlp};
+use harp_ytdlp::{install, proxy::Proxy, thumbs, Quality, Tool, YtDlp};
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
@@ -17,6 +19,7 @@ pub struct SongView {
     pub duration_secs: Option<u32>,
     pub thumbnail: String,
     pub liked: bool,
+    pub downloaded: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -30,7 +33,9 @@ pub struct QueueView {
 
 #[derive(Clone, Debug)]
 pub struct StreamView {
+    /// A URL, or a file path when `local`.
     pub url: String,
+    pub local: bool,
     pub headers: Vec<(String, String)>,
     /// Unix seconds, if known.
     pub expires_at: Option<u64>,
@@ -68,6 +73,8 @@ pub struct EngineConfig {
 
 struct Engine {
     yt: YtDlp,
+    downloads_dir: PathBuf,
+    thumbs_dir: PathBuf,
     /// Writes (plays, likes) never wait behind a recommendation's network calls.
     store: Mutex<Store>,
     rec_store: Mutex<Store>,
@@ -86,7 +93,7 @@ fn e<T: std::fmt::Display>(x: T) -> String {
     x.to_string()
 }
 
-fn view(s: &Song, liked: bool) -> SongView {
+fn view(s: &Song, liked: bool, downloaded: bool) -> SongView {
     SongView {
         id: s.id.clone(),
         title: s.title.clone(),
@@ -96,6 +103,7 @@ fn view(s: &Song, liked: bool) -> SongView {
         duration_secs: s.duration_secs,
         thumbnail: s.thumbnail_or_default(),
         liked,
+        downloaded,
     }
 }
 
@@ -115,7 +123,8 @@ fn views(en: &Engine, v: impl Iterator<Item = Song>) -> Vec<SongView> {
     let st = en.store.lock().unwrap();
     v.map(|s| {
         let liked = st.is_liked(&s.id).unwrap_or(false);
-        view(&s, liked)
+        let dl = st.downloaded_path(&s.id).ok().flatten().is_some();
+        view(&s, liked, dl)
     })
     .collect()
 }
@@ -183,6 +192,8 @@ pub fn start_engine(cfg: EngineConfig) -> Result<(), String> {
     };
 
     let engine = Engine {
+        downloads_dir: data.join("downloads"),
+        thumbs_dir: data.join("thumbs"),
         yt: YtDlp::new(tool),
         store: Mutex::new(Store::open(&db).map_err(e)?),
         rec_store: Mutex::new(Store::open(&db).map_err(e)?),
@@ -204,9 +215,17 @@ pub fn search(query: String) -> Result<Vec<SongView>, String> {
     Ok(views(en, found.into_iter()))
 }
 
-pub fn resolve_stream(id: String) -> Result<StreamView, String> {
-    let s = eng()?.yt.resolve(&id).map_err(e)?;
-    Ok(StreamView { url: s.url, headers: s.headers.into_iter().collect(), expires_at: s.expires_at })
+/// A stream for a song: its downloaded file if it has one, else a URL at the
+/// chosen quality ("low", "medium" or "high").
+pub fn resolve_stream(id: String, quality: String) -> Result<StreamView, String> {
+    let en = eng()?;
+    if let Some(p) = en.store.lock().unwrap().downloaded_path(&id).map_err(e)? {
+        if std::path::Path::new(&p).is_file() {
+            return Ok(StreamView { url: p, local: true, headers: vec![], expires_at: None });
+        }
+    }
+    let s = en.yt.resolve(&id, Quality::parse(&quality)).map_err(e)?;
+    Ok(StreamView { url: s.url, local: false, headers: s.headers.into_iter().collect(), expires_at: s.expires_at })
 }
 
 /// Drops a cached stream URL (after the player got a 403).
@@ -248,6 +267,27 @@ pub fn queue_next(auto_advance: bool) -> Result<QueueView, String> {
 pub fn queue_previous() -> Result<QueueView, String> {
     let en = eng()?;
     en.queue.lock().unwrap().previous();
+    Ok(queue_view(en))
+}
+
+/// Jumps to an item: `section` is "user" or "auto". The songs before it are skipped.
+pub fn queue_jump(section: String, index: u32) -> Result<QueueView, String> {
+    let en = eng()?;
+    {
+        let mut q = en.queue.lock().unwrap();
+        if section == "auto" {
+            q.jump_auto(index as usize);
+        } else {
+            q.jump_user(index as usize);
+        }
+    }
+    Ok(queue_view(en))
+}
+
+/// Replaces the autoplay section with these songs (used for offline mode: your downloads).
+pub fn queue_set_autoplay(songs: Vec<SongView>) -> Result<QueueView, String> {
+    let en = eng()?;
+    en.queue.lock().unwrap().set_autoplay(songs.iter().map(song).collect());
     Ok(queue_view(en))
 }
 
@@ -324,7 +364,7 @@ pub fn toggle_like(s: SongView) -> Result<bool, String> {
 pub fn liked_songs() -> Result<Vec<SongView>, String> {
     let en = eng()?;
     let v = en.store.lock().unwrap().liked_songs().map_err(e)?;
-    Ok(v.iter().map(|s| view(s, true)).collect())
+    Ok(views(en, v.into_iter()))
 }
 
 pub fn history(limit: u32) -> Result<Vec<SongView>, String> {
@@ -357,14 +397,14 @@ pub fn recommend_next(genre: Option<String>, artist: Option<String>) -> Result<O
     let mut rng = en.rng.lock().unwrap().clone();
     let r = recommend::next(&st, &en.yt, &request(genre, artist, exclude), &mut rng).map_err(e)?;
     drop(st);
-    Ok(r.map(|r| {
-        let liked = en.store.lock().unwrap().is_liked(&r.song.id).unwrap_or(false);
-        Pick { song: view(&r.song, liked), reason: r.reason }
+    Ok(r.map(|r| Pick {
+        song: views(en, std::iter::once(r.song)).remove(0),
+        reason: r.reason,
     }))
 }
 
 /// Fills the autoplay ("up next") section after the user's own queue.
-pub fn fill_autoplay(count: u32) -> Result<QueueView, String> {
+pub fn fill_autoplay(count: u32, genre: Option<String>) -> Result<QueueView, String> {
     let en = eng()?;
     let exclude: Vec<String> = {
         let q = en.queue.lock().unwrap();
@@ -373,7 +413,7 @@ pub fn fill_autoplay(count: u32) -> Result<QueueView, String> {
     let picks = {
         let st = en.rec_store.lock().unwrap();
         let mut rng = en.rng.lock().unwrap().clone();
-        recommend::batch(&st, &en.yt, &request(None, None, exclude), count as usize, &mut rng).map_err(e)?
+        recommend::batch(&st, &en.yt, &request(genre, None, exclude), count as usize, &mut rng).map_err(e)?
     };
     en.queue.lock().unwrap().set_autoplay(picks.into_iter().map(|p| p.song).collect());
     Ok(queue_view(en))
@@ -392,10 +432,7 @@ pub fn save_last_played(s: Option<SongView>) -> Result<(), String> {
 pub fn last_played() -> Result<Option<SongView>, String> {
     let en = eng()?;
     let raw = en.store.lock().unwrap().kv_get("last_played").map_err(e)?.unwrap_or_default();
-    Ok(song_from_json(&raw).map(|s| {
-        let liked = en.store.lock().unwrap().is_liked(&s.id).unwrap_or(false);
-        view(&s, liked)
-    }))
+    Ok(song_from_json(&raw).map(|s| views(en, std::iter::once(s)).remove(0)))
 }
 
 fn serde_json_string(s: &Song) -> String {
@@ -404,4 +441,355 @@ fn serde_json_string(s: &Song) -> String {
 
 fn song_from_json(raw: &str) -> Option<Song> {
     harp_core::model::from_json(raw)
+}
+
+
+// --- settings ---
+
+pub fn setting_get(key: String) -> Result<Option<String>, String> {
+    eng()?.store.lock().unwrap().kv_get(&format!("setting:{key}")).map_err(e)
+}
+
+pub fn setting_set(key: String, value: String) -> Result<(), String> {
+    eng()?.store.lock().unwrap().kv_set(&format!("setting:{key}"), &value).map_err(e)
+}
+
+// --- playlists ---
+
+#[derive(Clone, Debug)]
+pub struct PlaylistView {
+    pub id: i64,
+    pub name: String,
+    pub count: u32,
+}
+
+pub fn playlists() -> Result<Vec<PlaylistView>, String> {
+    let v = eng()?.store.lock().unwrap().playlists().map_err(e)?;
+    Ok(v.into_iter().map(|p| PlaylistView { id: p.id, name: p.name, count: p.count }).collect())
+}
+
+pub fn playlist_create(name: String) -> Result<i64, String> {
+    eng()?.store.lock().unwrap().create_playlist(&name).map_err(e)
+}
+
+pub fn playlist_rename(id: i64, name: String) -> Result<(), String> {
+    eng()?.store.lock().unwrap().rename_playlist(id, &name).map_err(e)
+}
+
+pub fn playlist_delete(id: i64) -> Result<(), String> {
+    eng()?.store.lock().unwrap().delete_playlist(id).map_err(e)
+}
+
+pub fn playlist_songs(id: i64) -> Result<Vec<SongView>, String> {
+    let en = eng()?;
+    let v = en.store.lock().unwrap().playlist_songs(id).map_err(e)?;
+    Ok(views(en, v.into_iter()))
+}
+
+/// Adds songs (skipping ones already there); returns how many were added.
+pub fn playlist_add(id: i64, songs: Vec<SongView>) -> Result<u32, String> {
+    let s: Vec<Song> = songs.iter().map(song).collect();
+    eng()?.store.lock().unwrap().add_to_playlist(id, &s).map_err(e)
+}
+
+pub fn playlist_remove(id: i64, index: u32) -> Result<(), String> {
+    eng()?.store.lock().unwrap().remove_from_playlist(id, index as usize).map_err(e)
+}
+
+pub fn playlist_move(id: i64, from: u32, to: u32) -> Result<(), String> {
+    eng()?.store.lock().unwrap().move_in_playlist(id, from as usize, to as usize).map_err(e)
+}
+
+/// Replaces the up-next queue with a playlist and starts it. `shuffle` mixes it first.
+pub fn queue_play_playlist(id: i64, shuffle: bool) -> Result<QueueView, String> {
+    let en = eng()?;
+    let mut songs = en.store.lock().unwrap().playlist_songs(id).map_err(e)?;
+    if shuffle {
+        en.rng.lock().unwrap().shuffle(&mut songs);
+    }
+    {
+        let mut q = en.queue.lock().unwrap();
+        q.clear_user();
+        let mut it = songs.into_iter();
+        if let Some(first) = it.next() {
+            q.play_now(first);
+            for s in it {
+                q.add_to_queue(s);
+            }
+        }
+    }
+    Ok(queue_view(en))
+}
+
+// --- downloads (offline) ---
+
+#[derive(Clone, Debug)]
+pub struct DownloadView {
+    pub song: SongView,
+    pub bytes: u64,
+    pub quality: String,
+}
+
+/// Downloads a song's audio for offline playback.
+pub fn download_song(s: SongView, quality: String) -> Result<SongView, String> {
+    let en = eng()?;
+    let (path, bytes) = en.yt.download(&s.id, &en.downloads_dir, Quality::parse(&quality)).map_err(e)?;
+    en.store
+        .lock()
+        .unwrap()
+        .record_download(&song(&s), &path.to_string_lossy(), bytes, &quality)
+        .map_err(e)?;
+    Ok(SongView { downloaded: true, ..s })
+}
+
+pub fn downloads() -> Result<Vec<DownloadView>, String> {
+    let en = eng()?;
+    let d = en.store.lock().unwrap().downloads().map_err(e)?;
+    Ok(d
+        .into_iter()
+        .filter(|d| std::path::Path::new(&d.path).is_file())
+        .map(|d| {
+            let liked = en.store.lock().unwrap().is_liked(&d.song.id).unwrap_or(false);
+            DownloadView { song: view(&d.song, liked, true), bytes: d.bytes, quality: d.quality }
+        })
+        .collect())
+}
+
+pub fn delete_download(id: String) -> Result<(), String> {
+    let en = eng()?;
+    if let Some(p) = en.store.lock().unwrap().delete_download(&id).map_err(e)? {
+        let _ = std::fs::remove_file(p);
+    }
+    Ok(())
+}
+
+// --- thumbnails ---
+
+/// The cached file for a cover URL (downloaded on first use); empty if it can't be fetched.
+pub fn cached_thumbnail(url: String) -> String {
+    let Ok(en) = eng() else { return String::new() };
+    thumbs::fetch(&en.thumbs_dir, &url).map(|p| p.to_string_lossy().into_owned()).unwrap_or_default()
+}
+
+/// Starts fetching covers in the background (4 at a time) and returns at once.
+pub fn precache_thumbnails(urls: Vec<String>) {
+    let Ok(en) = eng() else { return };
+    let dir = en.thumbs_dir.clone();
+    let queue = std::sync::Arc::new(Mutex::new(urls.into_iter()));
+    for _ in 0..4 {
+        let (q, dir) = (queue.clone(), dir.clone());
+        std::thread::spawn(move || loop {
+            let next = q.lock().unwrap().next();
+            match next {
+                Some(u) => {
+                    let _ = thumbs::fetch(&dir, &u);
+                }
+                None => break,
+            }
+        });
+    }
+}
+
+pub fn thumbnail_cache_bytes() -> u64 {
+    eng().map(|en| thumbs::size(&en.thumbs_dir)).unwrap_or(0)
+}
+
+pub fn clear_thumbnail_cache() {
+    if let Ok(en) = eng() {
+        thumbs::clear(&en.thumbs_dir);
+    }
+}
+
+// --- home page ---
+
+#[derive(Clone, Debug)]
+pub struct HomeFeed {
+    pub recommended: Vec<SongView>,
+    pub similar_to: Option<SongView>,
+    pub similar: Vec<SongView>,
+    pub recent: Vec<SongView>,
+    pub liked: Vec<SongView>,
+    pub downloads: Vec<SongView>,
+    pub playlists: Vec<PlaylistView>,
+    /// False when the recommendations came from the saved copy.
+    pub fresh: bool,
+}
+
+/// Everything the home page shows. The recommendations are kept for three
+/// hours so opening the app is instant (and works offline); `refresh` forces
+/// new ones. With `offline`, nothing touches the network.
+pub fn home_feed(refresh: bool, offline: bool) -> Result<HomeFeed, String> {
+    let en = eng()?;
+    let cached: Option<HomeCache> = en
+        .store
+        .lock()
+        .unwrap()
+        .kv_get("home_cache")
+        .ok()
+        .flatten()
+        .and_then(|j| serde_json::from_str(&j).ok());
+    let stale = cached.as_ref().map_or(true, |c| now_secs().saturating_sub(c.ts) > HOME_TTL_SECS);
+    let mut fresh = false;
+    let mut cache = cached.unwrap_or_default();
+    if !offline && (refresh || stale) {
+        let attempt = (|| -> Result<HomeCache, String> {
+            let st = en.rec_store.lock().unwrap();
+            let mut rng = en.rng.lock().unwrap().clone();
+            let recs = recommend::batch(&st, &en.yt, &Request::default(), 14, &mut rng).map_err(e)?;
+            let last = st.history(1).map_err(e)?.into_iter().next();
+            drop(st);
+            let similar = match &last {
+                Some(s) => en.yt.related(&s.id, 12).unwrap_or_default(),
+                None => vec![],
+            };
+            Ok(HomeCache { ts: now_secs(), recommended: recs.into_iter().map(|r| r.song).collect(), similar_to: last, similar })
+        })();
+        if let Ok(c) = attempt {
+            if !c.recommended.is_empty() {
+                let _ = en.store.lock().unwrap().kv_set("home_cache", &serde_json::to_string(&c).unwrap_or_default());
+                cache = c;
+                fresh = true;
+            }
+        }
+    }
+    let st_recent = en.store.lock().unwrap().history(14).map_err(e)?;
+    let liked = en.store.lock().unwrap().liked_songs().map_err(e)?;
+    let dls: Vec<Song> = downloads()?.into_iter().map(|d| song(&d.song)).collect();
+    Ok(HomeFeed {
+        recommended: views(en, cache.recommended.into_iter()),
+        similar_to: cache.similar_to.map(|s| views(en, std::iter::once(s)).remove(0)),
+        similar: views(en, cache.similar.into_iter()),
+        recent: views(en, st_recent.into_iter()),
+        liked: views(en, liked.into_iter().take(14)),
+        downloads: views(en, dls.into_iter().take(14)),
+        playlists: playlists()?,
+        fresh,
+    })
+}
+
+pub fn moods() -> Vec<(String, String)> {
+    recommend::MOOD_KEYS
+        .iter()
+        .filter_map(|k| recommend::GENRES.iter().find(|g| g.0 == *k))
+        .map(|g| (g.0.to_string(), g.1.to_string()))
+        .collect()
+}
+
+// --- importing playlists ---
+
+#[derive(Clone, Debug)]
+pub struct ImportTrackView {
+    pub title: String,
+    pub artist: String,
+    pub album: Option<String>,
+    pub duration_secs: Option<u32>,
+}
+
+#[derive(Clone, Debug)]
+pub struct ImportPlaylistView {
+    pub name: String,
+    pub tracks: Vec<ImportTrackView>,
+    /// When the source already gave playable songs (a YouTube playlist), no matching is needed.
+    pub resolved: Vec<SongView>,
+}
+
+#[derive(Clone, Debug)]
+pub struct MatchView {
+    pub best: Option<SongView>,
+    pub score: f64,
+    /// "confident", "weak" or "none"
+    pub confidence: String,
+    pub alternatives: Vec<SongView>,
+}
+
+fn import_view(p: imp::ImportedPlaylist) -> ImportPlaylistView {
+    ImportPlaylistView {
+        name: p.name,
+        tracks: p
+            .tracks
+            .into_iter()
+            .map(|t| ImportTrackView { title: t.title, artist: t.artist, album: t.album, duration_secs: t.duration_secs })
+            .collect(),
+        resolved: vec![],
+    }
+}
+
+/// Parses exported or pasted playlists: Spotify's data export (JSON) or Exportify CSV,
+/// Apple Music's exported text, M3U, or lines of "Artist - Title".
+pub fn import_parse(text: String, name_hint: String) -> Vec<ImportPlaylistView> {
+    imp::parse(&text, &name_hint).into_iter().map(import_view).collect()
+}
+
+fn spotify_embed_url(url: &str) -> Option<String> {
+    let path = url.split("open.spotify.com/").nth(1)?;
+    let mut parts = path.split(['/', '?', '#']).filter(|p| !p.is_empty());
+    let mut kind = parts.next()?;
+    if kind.starts_with("intl-") {
+        kind = parts.next()?; // open.spotify.com/intl-de/playlist/...
+    }
+    let id = parts.next()?;
+    matches!(kind, "playlist" | "album").then(|| format!("https://open.spotify.com/embed/{kind}/{id}"))
+}
+
+/// Reads a public playlist link: Spotify, YouTube or YouTube Music.
+pub fn import_link(url: String) -> Result<Vec<ImportPlaylistView>, String> {
+    let en = eng()?;
+    let url = url.trim().to_string();
+    if url.contains("open.spotify.com") {
+        let embed = spotify_embed_url(&url).ok_or("That Spotify link isn't a playlist or album.")?;
+        let html = thumbs::get_text(&embed).map_err(e)?;
+        let p = imp::parse_spotify_embed(&html).ok_or("Couldn't read that Spotify playlist (is it public?).")?;
+        return Ok(vec![import_view(p)]);
+    }
+    if url.contains("youtube.com") || url.contains("youtu.be") {
+        let songs = en.yt.playlist(&url, 500).map_err(e)?;
+        if songs.is_empty() {
+            return Err("No songs found at that link (is the playlist public or unlisted?).".into());
+        }
+        let resolved = views(en, songs.into_iter());
+        return Ok(vec![ImportPlaylistView { name: "YouTube playlist".into(), tracks: vec![], resolved }]);
+    }
+    if url.contains("music.apple.com") || url.contains("amazon.") {
+        return Err("Apple Music and Amazon Music don't share playlist contents in links. Export it (Apple Music: File > Library > Export Playlist) or paste the song list.".into());
+    }
+    Err("Paste a Spotify, YouTube or YouTube Music playlist link.".into())
+}
+
+/// Finds the best match for a track on YouTube Music, with alternatives for the review screen.
+pub fn import_match(t: ImportTrackView) -> Result<MatchView, String> {
+    let en = eng()?;
+    let track = imp::ImportTrack { title: t.title, artist: t.artist, album: t.album, duration_secs: t.duration_secs };
+    let q = format!("{} {}", track.artist, track.title);
+    let cands = en.yt.search_songs(q.trim(), 6).map_err(e)?;
+    let ranked = imp::rank(&track, &cands);
+    let score = ranked.first().map_or(0.0, |r| r.1);
+    let confidence = match imp::confidence(score) {
+        imp::Confidence::Confident => "confident",
+        imp::Confidence::Weak => "weak",
+        imp::Confidence::None => "none",
+    };
+    let mut v = views(en, ranked.into_iter().map(|r| r.0));
+    // With no usable match the candidates still show up as alternatives.
+    let best = if v.is_empty() || confidence == "none" { None } else { Some(v.remove(0)) };
+    v.truncate(4);
+    Ok(MatchView { best, score, confidence: confidence.to_string(), alternatives: v })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn spotify_links() {
+        assert_eq!(
+            spotify_embed_url("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M?si=abc").as_deref(),
+            Some("https://open.spotify.com/embed/playlist/37i9dQZF1DXcBWIGoYBM5M")
+        );
+        assert_eq!(
+            spotify_embed_url("https://open.spotify.com/intl-de/album/1A2B").as_deref(),
+            Some("https://open.spotify.com/embed/album/1A2B")
+        );
+        assert_eq!(spotify_embed_url("https://open.spotify.com/track/xyz"), None);
+        assert_eq!(spotify_embed_url("https://example.com/playlist/1"), None);
+    }
 }

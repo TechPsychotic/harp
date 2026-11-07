@@ -496,6 +496,8 @@ dependencies = [
  "flutter_rust_bridge",
  "harp-core",
  "harp-ytdlp",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

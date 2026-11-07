@@ -11,12 +11,50 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 pub type Stream = StreamInfo;
 
+/// Audio quality for streaming and downloads.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Quality {
+    /// About 48 to 64 kbps: saves mobile data.
+    Low,
+    /// About 128 kbps.
+    Medium,
+    /// The best the source has (usually 128 to 160 kbps AAC / Opus).
+    High,
+}
+
+impl Quality {
+    pub fn parse(s: &str) -> Quality {
+        match s {
+            "low" => Quality::Low,
+            "medium" => Quality::Medium,
+            _ => Quality::High,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Quality::Low => "low",
+            Quality::Medium => "medium",
+            Quality::High => "high",
+        }
+    }
+
+    /// yt-dlp format selector. Falls back to worse/better so something always plays.
+    pub fn format(self) -> &'static str {
+        match self {
+            Quality::Low => "worstaudio[abr>=40]/bestaudio[abr<=70]/worstaudio/bestaudio",
+            Quality::Medium => "bestaudio[abr<=130]/bestaudio[abr<=160]/bestaudio",
+            Quality::High => "bestaudio[ext=m4a]/bestaudio/best",
+        }
+    }
+}
+
 /// Stop using a cached URL this long before it expires.
 const EXPIRY_MARGIN_SECS: u64 = 300;
 
 pub struct YtDlp {
     tool: Tool,
-    cache: Mutex<HashMap<String, Stream>>,
+    cache: Mutex<HashMap<(String, Quality), Stream>>,
     ytmusic: bool,
 }
 
@@ -107,9 +145,11 @@ impl YtDlp {
         self.flat(&format!("ytsearch{limit}:{q}"), limit)
     }
 
-    /// The best audio stream for a video, cached until shortly before it expires.
-    pub fn resolve(&self, id: &str) -> Result<Stream> {
-        if let Some(s) = self.cache.lock().unwrap().get(id) {
+    /// An audio stream for a video at the chosen quality, cached until shortly
+    /// before it expires.
+    pub fn resolve(&self, id: &str, q: Quality) -> Result<Stream> {
+        let key = (id.to_string(), q);
+        if let Some(s) = self.cache.lock().unwrap().get(&key) {
             if s.expires_at.map_or(true, |e| e > now() + EXPIRY_MARGIN_SECS) {
                 return Ok(s.clone());
             }
@@ -117,17 +157,45 @@ impl YtDlp {
         let out = self.run(&[
             "--no-playlist".into(),
             "-f".into(),
-            "bestaudio[ext=m4a]/bestaudio/best".into(),
+            q.format().into(),
             "-J".into(),
             format!("https://www.youtube.com/watch?v={id}"),
         ])?;
         let s = parse::stream_from_info(&out)?;
-        self.cache.lock().unwrap().insert(id.to_string(), s.clone());
+        self.cache.lock().unwrap().insert(key, s.clone());
         Ok(s)
     }
 
+    /// Downloads a song's audio into `dir` for offline playback. Returns the
+    /// file path and its size.
+    pub fn download(&self, id: &str, dir: &std::path::Path, q: Quality) -> Result<(std::path::PathBuf, u64)> {
+        std::fs::create_dir_all(dir)?;
+        let template = dir.join(format!("{id}.%(ext)s"));
+        let out = self.run(&[
+            "--no-playlist".into(),
+            "--no-part".into(),
+            "-f".into(),
+            q.format().into(),
+            "-o".into(),
+            template.to_string_lossy().into_owned(),
+            "--print".into(),
+            "after_move:filepath".into(),
+            "--no-simulate".into(),
+            format!("https://www.youtube.com/watch?v={id}"),
+        ])?;
+        let path = out
+            .lines()
+            .rev()
+            .map(str::trim)
+            .find(|l| !l.is_empty())
+            .map(std::path::PathBuf::from)
+            .ok_or_else(|| Error::Failed("yt-dlp did not report a file".into()))?;
+        let bytes = std::fs::metadata(&path)?.len();
+        Ok((path, bytes))
+    }
+
     pub fn forget(&self, id: &str) {
-        self.cache.lock().unwrap().remove(id);
+        self.cache.lock().unwrap().retain(|(i, _), _| i != id);
     }
 
     /// Songs in a playlist link.
@@ -197,12 +265,50 @@ mod tests {
     fn resolve_is_cached_until_expiry() {
         let d = tmp("resolve");
         let y = YtDlp::new(fake(&d));
-        let a = y.resolve("5NV6Rdv1a3I").unwrap();
+        let a = y.resolve("5NV6Rdv1a3I", Quality::High).unwrap();
         // The fixture's expiry is far in the future, so removing the tool must not matter.
         std::fs::remove_file(d.join("yt-dlp")).unwrap();
-        assert_eq!(y.resolve("5NV6Rdv1a3I").unwrap(), a);
+        assert_eq!(y.resolve("5NV6Rdv1a3I", Quality::High).unwrap(), a);
         y.forget("5NV6Rdv1a3I");
-        assert!(y.resolve("5NV6Rdv1a3I").is_err());
+        assert!(y.resolve("5NV6Rdv1a3I", Quality::High).is_err());
+    }
+
+    #[test]
+    fn qualities_parse_and_select_formats() {
+        assert_eq!(Quality::parse("low"), Quality::Low);
+        assert_eq!(Quality::parse("medium"), Quality::Medium);
+        assert_eq!(Quality::parse("anything"), Quality::High);
+        assert!(Quality::Low.format().starts_with("worstaudio"));
+        assert!(Quality::Medium.format().contains("abr<=130"));
+        assert_eq!(Quality::High.as_str(), "high");
+    }
+
+    #[test]
+    fn each_quality_is_cached_separately() {
+        let d = tmp("qcache");
+        let y = YtDlp::new(fake(&d)).without_ytmusic();
+        y.resolve("5NV6Rdv1a3I", Quality::High).unwrap();
+        std::fs::remove_file(d.join("yt-dlp")).unwrap();
+        assert!(y.resolve("5NV6Rdv1a3I", Quality::High).is_ok());
+        assert!(y.resolve("5NV6Rdv1a3I", Quality::Low).is_err(), "not cached at another quality");
+    }
+
+    #[test]
+    fn download_reports_the_file() {
+        let d = tmp("dl");
+        let tool = d.join("yt-dlp");
+        let out = d.join("music");
+        // A stand-in that writes the file it is asked for and prints its path.
+        std::fs::write(
+            &tool,
+            "#!/bin/sh\nfor a in \"$@\"; do case \"$a\" in *%\\(ext\\)s) T=\"$a\";; esac; done\nF=$(echo \"$T\" | sed 's/%(ext)s/m4a/')\nprintf 12345 > \"$F\"\necho \"$F\"\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&tool, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let y = YtDlp::new(Tool::binary(tool));
+        let (p, n) = y.download("abc", &out, Quality::Medium).unwrap();
+        assert!(p.ends_with("abc.m4a"));
+        assert_eq!(n, 5);
     }
 
     #[test]

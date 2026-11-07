@@ -75,7 +75,7 @@ pub struct Stats {
 }
 
 pub struct Store {
-    conn: Connection,
+    pub(crate) conn: Connection,
 }
 
 const SCHEMA: &str = "
@@ -95,6 +95,17 @@ CREATE TABLE IF NOT EXISTS likes(
   song_id TEXT PRIMARY KEY, song_json TEXT NOT NULL,
   at INTEGER NOT NULL DEFAULT (strftime('%s','now')));
 CREATE TABLE IF NOT EXISTS kv(k TEXT PRIMARY KEY, v TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS playlists(
+  id INTEGER PRIMARY KEY, name TEXT NOT NULL,
+  created INTEGER NOT NULL DEFAULT (strftime('%s','now')));
+CREATE TABLE IF NOT EXISTS playlist_items(
+  id INTEGER PRIMARY KEY, playlist_id INTEGER NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+  pos INTEGER NOT NULL, song_id TEXT NOT NULL, song_json TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS playlist_items_pl ON playlist_items(playlist_id, pos);
+CREATE TABLE IF NOT EXISTS downloads(
+  song_id TEXT PRIMARY KEY, song_json TEXT NOT NULL, path TEXT NOT NULL,
+  bytes INTEGER NOT NULL, quality TEXT NOT NULL,
+  at INTEGER NOT NULL DEFAULT (strftime('%s','now')));
 ";
 
 fn from_json(s: String) -> Option<Song> {
@@ -104,13 +115,14 @@ fn from_json(s: String) -> Option<Song> {
 impl Store {
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         let conn = Connection::open(path)?;
-        conn.execute_batch("PRAGMA journal_mode=WAL;")?;
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
         conn.execute_batch(SCHEMA)?;
         Ok(Store { conn })
     }
 
     pub fn open_memory() -> Result<Self> {
         let conn = Connection::open_in_memory()?;
+        conn.execute_batch("PRAGMA foreign_keys=ON;")?;
         conn.execute_batch(SCHEMA)?;
         Ok(Store { conn })
     }

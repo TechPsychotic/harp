@@ -7,9 +7,9 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `e`, `eng`, `queue_view`, `request`, `serde_json_string`, `song_from_json`, `song`, `view`, `views`
+// These functions are ignored because they are not marked as `pub`: `e`, `eng`, `import_view`, `queue_view`, `request`, `serde_json_string`, `song_from_json`, `song`, `spotify_embed_url`, `view`, `views`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Engine`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// Starts the engine: opens the database, makes sure yt-dlp is installed.
 /// Safe to call again (does nothing the second time).
@@ -22,8 +22,13 @@ Future<String> ytdlpVersion() =>
 Future<List<SongView>> search({required String query}) =>
     RustLib.instance.api.crateApiEngineSearch(query: query);
 
-Future<StreamView> resolveStream({required String id}) =>
-    RustLib.instance.api.crateApiEngineResolveStream(id: id);
+/// A stream for a song: its downloaded file if it has one, else a URL at the
+/// chosen quality ("low", "medium" or "high").
+Future<StreamView> resolveStream({
+  required String id,
+  required String quality,
+}) =>
+    RustLib.instance.api.crateApiEngineResolveStream(id: id, quality: quality);
 
 /// Drops a cached stream URL (after the player got a 403).
 Future<void> forgetStream({required String id}) =>
@@ -46,6 +51,17 @@ Future<QueueView> queueNext({required bool autoAdvance}) =>
 
 Future<QueueView> queuePrevious() =>
     RustLib.instance.api.crateApiEngineQueuePrevious();
+
+/// Jumps to an item: `section` is "user" or "auto". The songs before it are skipped.
+Future<QueueView> queueJump({required String section, required int index}) =>
+    RustLib.instance.api.crateApiEngineQueueJump(
+      section: section,
+      index: index,
+    );
+
+/// Replaces the autoplay section with these songs (used for offline mode: your downloads).
+Future<QueueView> queueSetAutoplay({required List<SongView> songs}) =>
+    RustLib.instance.api.crateApiEngineQueueSetAutoplay(songs: songs);
 
 Future<QueueView> queueRemove({required int index}) =>
     RustLib.instance.api.crateApiEngineQueueRemove(index: index);
@@ -102,8 +118,8 @@ Future<Pick?> recommendNext({String? genre, String? artist}) => RustLib
     .crateApiEngineRecommendNext(genre: genre, artist: artist);
 
 /// Fills the autoplay ("up next") section after the user's own queue.
-Future<QueueView> fillAutoplay({required int count}) =>
-    RustLib.instance.api.crateApiEngineFillAutoplay(count: count);
+Future<QueueView> fillAutoplay({required int count, String? genre}) =>
+    RustLib.instance.api.crateApiEngineFillAutoplay(count: count, genre: genre);
 
 /// Remembers what was playing so a restart can offer "Resume".
 Future<void> saveLastPlayed({SongView? s}) =>
@@ -111,6 +127,132 @@ Future<void> saveLastPlayed({SongView? s}) =>
 
 Future<SongView?> lastPlayed() =>
     RustLib.instance.api.crateApiEngineLastPlayed();
+
+Future<String?> settingGet({required String key}) =>
+    RustLib.instance.api.crateApiEngineSettingGet(key: key);
+
+Future<void> settingSet({required String key, required String value}) =>
+    RustLib.instance.api.crateApiEngineSettingSet(key: key, value: value);
+
+Future<List<PlaylistView>> playlists() =>
+    RustLib.instance.api.crateApiEnginePlaylists();
+
+Future<PlatformInt64> playlistCreate({required String name}) =>
+    RustLib.instance.api.crateApiEnginePlaylistCreate(name: name);
+
+Future<void> playlistRename({
+  required PlatformInt64 id,
+  required String name,
+}) => RustLib.instance.api.crateApiEnginePlaylistRename(id: id, name: name);
+
+Future<void> playlistDelete({required PlatformInt64 id}) =>
+    RustLib.instance.api.crateApiEnginePlaylistDelete(id: id);
+
+Future<List<SongView>> playlistSongs({required PlatformInt64 id}) =>
+    RustLib.instance.api.crateApiEnginePlaylistSongs(id: id);
+
+/// Adds songs (skipping ones already there); returns how many were added.
+Future<int> playlistAdd({
+  required PlatformInt64 id,
+  required List<SongView> songs,
+}) => RustLib.instance.api.crateApiEnginePlaylistAdd(id: id, songs: songs);
+
+Future<void> playlistRemove({required PlatformInt64 id, required int index}) =>
+    RustLib.instance.api.crateApiEnginePlaylistRemove(id: id, index: index);
+
+Future<void> playlistMove({
+  required PlatformInt64 id,
+  required int from,
+  required int to,
+}) =>
+    RustLib.instance.api.crateApiEnginePlaylistMove(id: id, from: from, to: to);
+
+/// Replaces the up-next queue with a playlist and starts it. `shuffle` mixes it first.
+Future<QueueView> queuePlayPlaylist({
+  required PlatformInt64 id,
+  required bool shuffle,
+}) => RustLib.instance.api.crateApiEngineQueuePlayPlaylist(
+  id: id,
+  shuffle: shuffle,
+);
+
+/// Downloads a song's audio for offline playback.
+Future<SongView> downloadSong({required SongView s, required String quality}) =>
+    RustLib.instance.api.crateApiEngineDownloadSong(s: s, quality: quality);
+
+Future<List<DownloadView>> downloads() =>
+    RustLib.instance.api.crateApiEngineDownloads();
+
+Future<void> deleteDownload({required String id}) =>
+    RustLib.instance.api.crateApiEngineDeleteDownload(id: id);
+
+/// The cached file for a cover URL (downloaded on first use); empty if it can't be fetched.
+Future<String> cachedThumbnail({required String url}) =>
+    RustLib.instance.api.crateApiEngineCachedThumbnail(url: url);
+
+/// Starts fetching covers in the background (4 at a time) and returns at once.
+Future<void> precacheThumbnails({required List<String> urls}) =>
+    RustLib.instance.api.crateApiEnginePrecacheThumbnails(urls: urls);
+
+Future<BigInt> thumbnailCacheBytes() =>
+    RustLib.instance.api.crateApiEngineThumbnailCacheBytes();
+
+Future<void> clearThumbnailCache() =>
+    RustLib.instance.api.crateApiEngineClearThumbnailCache();
+
+/// Everything the home page shows. The recommendations are kept for three
+/// hours so opening the app is instant (and works offline); `refresh` forces
+/// new ones. With `offline`, nothing touches the network.
+Future<HomeFeed> homeFeed({required bool refresh, required bool offline}) =>
+    RustLib.instance.api.crateApiEngineHomeFeed(
+      refresh: refresh,
+      offline: offline,
+    );
+
+Future<List<(String, String)>> moods() =>
+    RustLib.instance.api.crateApiEngineMoods();
+
+/// Parses exported or pasted playlists: Spotify's data export (JSON) or Exportify CSV,
+/// Apple Music's exported text, M3U, or lines of "Artist - Title".
+Future<List<ImportPlaylistView>> importParse({
+  required String text,
+  required String nameHint,
+}) => RustLib.instance.api.crateApiEngineImportParse(
+  text: text,
+  nameHint: nameHint,
+);
+
+/// Reads a public playlist link: Spotify, YouTube or YouTube Music.
+Future<List<ImportPlaylistView>> importLink({required String url}) =>
+    RustLib.instance.api.crateApiEngineImportLink(url: url);
+
+/// Finds the best match for a track on YouTube Music, with alternatives for the review screen.
+Future<MatchView> importMatch({required ImportTrackView t}) =>
+    RustLib.instance.api.crateApiEngineImportMatch(t: t);
+
+class DownloadView {
+  final SongView song;
+  final BigInt bytes;
+  final String quality;
+
+  const DownloadView({
+    required this.song,
+    required this.bytes,
+    required this.quality,
+  });
+
+  @override
+  int get hashCode => song.hashCode ^ bytes.hashCode ^ quality.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DownloadView &&
+          runtimeType == other.runtimeType &&
+          song == other.song &&
+          bytes == other.bytes &&
+          quality == other.quality;
+}
 
 /// Where things live. On desktop only `data_dir` is needed; on Android the app
 /// passes the bundled Python and QuickJS (native libraries) too.
@@ -163,6 +305,142 @@ class EngineConfig {
           ytdlpOverride == other.ytdlpOverride;
 }
 
+class HomeFeed {
+  final List<SongView> recommended;
+  final SongView? similarTo;
+  final List<SongView> similar;
+  final List<SongView> recent;
+  final List<SongView> liked;
+  final List<SongView> downloads;
+  final List<PlaylistView> playlists;
+
+  /// False when the recommendations came from the saved copy.
+  final bool fresh;
+
+  const HomeFeed({
+    required this.recommended,
+    this.similarTo,
+    required this.similar,
+    required this.recent,
+    required this.liked,
+    required this.downloads,
+    required this.playlists,
+    required this.fresh,
+  });
+
+  @override
+  int get hashCode =>
+      recommended.hashCode ^
+      similarTo.hashCode ^
+      similar.hashCode ^
+      recent.hashCode ^
+      liked.hashCode ^
+      downloads.hashCode ^
+      playlists.hashCode ^
+      fresh.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is HomeFeed &&
+          runtimeType == other.runtimeType &&
+          recommended == other.recommended &&
+          similarTo == other.similarTo &&
+          similar == other.similar &&
+          recent == other.recent &&
+          liked == other.liked &&
+          downloads == other.downloads &&
+          playlists == other.playlists &&
+          fresh == other.fresh;
+}
+
+class ImportPlaylistView {
+  final String name;
+  final List<ImportTrackView> tracks;
+
+  /// When the source already gave playable songs (a YouTube playlist), no matching is needed.
+  final List<SongView> resolved;
+
+  const ImportPlaylistView({
+    required this.name,
+    required this.tracks,
+    required this.resolved,
+  });
+
+  @override
+  int get hashCode => name.hashCode ^ tracks.hashCode ^ resolved.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ImportPlaylistView &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          tracks == other.tracks &&
+          resolved == other.resolved;
+}
+
+class ImportTrackView {
+  final String title;
+  final String artist;
+  final String? album;
+  final int? durationSecs;
+
+  const ImportTrackView({
+    required this.title,
+    required this.artist,
+    this.album,
+    this.durationSecs,
+  });
+
+  @override
+  int get hashCode =>
+      title.hashCode ^ artist.hashCode ^ album.hashCode ^ durationSecs.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ImportTrackView &&
+          runtimeType == other.runtimeType &&
+          title == other.title &&
+          artist == other.artist &&
+          album == other.album &&
+          durationSecs == other.durationSecs;
+}
+
+class MatchView {
+  final SongView? best;
+  final double score;
+
+  /// "confident", "weak" or "none"
+  final String confidence;
+  final List<SongView> alternatives;
+
+  const MatchView({
+    this.best,
+    required this.score,
+    required this.confidence,
+    required this.alternatives,
+  });
+
+  @override
+  int get hashCode =>
+      best.hashCode ^
+      score.hashCode ^
+      confidence.hashCode ^
+      alternatives.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is MatchView &&
+          runtimeType == other.runtimeType &&
+          best == other.best &&
+          score == other.score &&
+          confidence == other.confidence &&
+          alternatives == other.alternatives;
+}
+
 class Pick {
   final SongView song;
   final String reason;
@@ -179,6 +457,30 @@ class Pick {
           runtimeType == other.runtimeType &&
           song == other.song &&
           reason == other.reason;
+}
+
+class PlaylistView {
+  final PlatformInt64 id;
+  final String name;
+  final int count;
+
+  const PlaylistView({
+    required this.id,
+    required this.name,
+    required this.count,
+  });
+
+  @override
+  int get hashCode => id.hashCode ^ name.hashCode ^ count.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PlaylistView &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          name == other.name &&
+          count == other.count;
 }
 
 class QueueView {
@@ -220,6 +522,7 @@ class SongView {
   final int? durationSecs;
   final String thumbnail;
   final bool liked;
+  final bool downloaded;
 
   const SongView({
     required this.id,
@@ -230,6 +533,7 @@ class SongView {
     this.durationSecs,
     required this.thumbnail,
     required this.liked,
+    required this.downloaded,
   });
 
   @override
@@ -241,7 +545,8 @@ class SongView {
       album.hashCode ^
       durationSecs.hashCode ^
       thumbnail.hashCode ^
-      liked.hashCode;
+      liked.hashCode ^
+      downloaded.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -255,20 +560,29 @@ class SongView {
           album == other.album &&
           durationSecs == other.durationSecs &&
           thumbnail == other.thumbnail &&
-          liked == other.liked;
+          liked == other.liked &&
+          downloaded == other.downloaded;
 }
 
 class StreamView {
+  /// A URL, or a file path when `local`.
   final String url;
+  final bool local;
   final List<(String, String)> headers;
 
   /// Unix seconds, if known.
   final BigInt? expiresAt;
 
-  const StreamView({required this.url, required this.headers, this.expiresAt});
+  const StreamView({
+    required this.url,
+    required this.local,
+    required this.headers,
+    this.expiresAt,
+  });
 
   @override
-  int get hashCode => url.hashCode ^ headers.hashCode ^ expiresAt.hashCode;
+  int get hashCode =>
+      url.hashCode ^ local.hashCode ^ headers.hashCode ^ expiresAt.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -276,6 +590,7 @@ class StreamView {
       other is StreamView &&
           runtimeType == other.runtimeType &&
           url == other.url &&
+          local == other.local &&
           headers == other.headers &&
           expiresAt == other.expiresAt;
 }

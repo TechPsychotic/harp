@@ -49,9 +49,20 @@ pub const GENRES: &[(&str, &str, &[&str])] = &[
     ("latin", "Latin", &["latin pop hits", "reggaeton hits"]),
     ("reggae", "Reggae", &["reggae hits", "ska hits"]),
     ("indie", "Indie", &["indie pop hits", "indie rock hits"]),
+    ("chill", "Chill", &["chill vibes songs", "lofi beats", "acoustic chill songs"]),
+    ("focus", "Focus", &["focus music instrumental", "deep focus lofi", "study beats"]),
+    ("workout", "Workout", &["workout hits", "gym motivation songs", "running playlist hits"]),
+    ("party", "Party", &["party hits", "club dance hits", "bollywood party songs"]),
+    ("sad", "Feeling blue", &["sad songs", "heartbreak songs", "melancholy acoustic songs"]),
+    ("romance", "Romance", &["romantic songs", "love songs hits", "slow love ballads"]),
+    ("sleep", "Wind down", &["sleep music calm", "soft piano relaxing", "ambient calm songs"]),
+    ("commute", "On the road", &["road trip songs", "driving songs hits", "feel good hits"]),
     ("more_energy", "More Energy", &["90s dance hits", "80s rock hits", "2000s euro dance hits"]),
     ("less_energy", "Less Energy", &["jazz standards", "folk hits", "70s soul hits", "lofi beats"]),
 ];
+
+/// The genres above that are really moods, for the home page's "change the mood".
+pub const MOOD_KEYS: &[&str] = &["chill", "focus", "workout", "party", "sad", "romance", "sleep", "commute"];
 
 #[derive(Clone, Debug, Default)]
 pub struct Request {
@@ -103,13 +114,15 @@ fn format_query(q: &str) -> String {
         .join(" ")
 }
 
-/// Picks the next song to play, with a reason.
-pub fn next(
-    store: &Store,
-    src: &dyn CandidateSource,
-    req: &Request,
-    rng: &mut Rng,
-) -> Result<Option<Recommendation>> {
+struct Gathered {
+    candidates: Vec<Song>,
+    reason: String,
+    used_seed: Option<Song>,
+}
+
+/// Collects a pool of candidates (a few network calls, once) and the reason
+/// they were chosen. Picking from the pool afterwards is free.
+fn gather(store: &Store, src: &dyn CandidateSource, req: &Request, rng: &mut Rng) -> Result<Option<Gathered>> {
     let superliked = store.superliked(10)?;
     let liked = store.liked_by_play(20)?;
     let searched = store.searched(SEARCH_SEED_WINDOW)?;
@@ -132,7 +145,7 @@ pub fn next(
 
     let mut used_seed: Option<Song> = None;
     let candidates: Vec<Song>;
-    let mut reason: String;
+    let reason: String;
 
     let genre = req.genre.as_deref().and_then(|g| GENRES.iter().find(|x| x.0 == g));
 
@@ -181,39 +194,72 @@ pub fn next(
     if candidates.is_empty() {
         return Ok(None);
     }
-
-    let mut avoid: HashSet<String> = store.recent_ids(RECENT_WINDOW)?.into_iter().collect();
-    avoid.extend(req.exclude.iter().cloned());
-    let fresh: Vec<&Song> = candidates.iter().filter(|c| !avoid.contains(&c.id)).collect();
-    let pool: Vec<&Song> = if fresh.is_empty() { candidates.iter().collect() } else { fresh };
-
-    let scores = store.artist_scores()?;
-    let song = pool
-        .into_iter()
-        .map(|s| (score(s, &scores, rng), s))
-        .max_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal))
-        .map(|(_, s)| s.clone())
-        .expect("pool is not empty");
-
-    if req.artist.is_none() {
-        let key = song.artist_key();
-        match scores.get(&key) {
-            None if scores.len() >= 3 => reason = format!("Introducing: {}", song.artist),
-            Some(s) => {
-                let n = s.likes.round() as i64;
-                let seed_key = used_seed.as_ref().map(|u| u.artist_key());
-                if n >= 3 && seed_key.as_deref() != Some(&key) {
-                    reason.push_str(&format!(" · you've liked {} {n}×", song.artist));
-                }
-            }
-            _ => {}
-        }
-    }
-
-    Ok(Some(Recommendation { song, reason }))
+    Ok(Some(Gathered { candidates, reason, used_seed }))
 }
 
-/// "Up next" for the autoplay section: `n` picks, no repeats.
+/// Picks `n` songs from a gathered pool: best by taste first, at most two per
+/// artist when picking several so a list is varied.
+fn pick_n(
+    store: &Store,
+    g: &Gathered,
+    req: &Request,
+    n: usize,
+    rng: &mut Rng,
+) -> Result<Vec<Recommendation>> {
+    let mut avoid: HashSet<String> = store.recent_ids(RECENT_WINDOW)?.into_iter().collect();
+    avoid.extend(req.exclude.iter().cloned());
+    let fresh: Vec<&Song> = g.candidates.iter().filter(|c| !avoid.contains(&c.id)).collect();
+    let pool: Vec<&Song> = if fresh.is_empty() { g.candidates.iter().collect() } else { fresh };
+
+    let scores = store.artist_scores()?;
+    let mut ranked: Vec<(f64, &Song)> = pool.into_iter().map(|s| (score(s, &scores, rng), s)).collect();
+    ranked.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+
+    let cap = if n > 1 { 2 } else { usize::MAX };
+    let mut per_artist: HashMap<String, usize> = HashMap::new();
+    let mut out = Vec::new();
+    for (_, song) in ranked {
+        if out.len() >= n {
+            break;
+        }
+        let c = per_artist.entry(song.artist_key()).or_insert(0);
+        if *c >= cap {
+            continue;
+        }
+        *c += 1;
+        let mut reason = g.reason.clone();
+        if req.artist.is_none() {
+            let key = song.artist_key();
+            match scores.get(&key) {
+                None if scores.len() >= 3 => reason = format!("Introducing: {}", song.artist),
+                Some(s) => {
+                    let liked_n = s.likes.round() as i64;
+                    let seed_key = g.used_seed.as_ref().map(|u| u.artist_key());
+                    if liked_n >= 3 && seed_key.as_deref() != Some(&key) {
+                        reason.push_str(&format!(" · you've liked {} {liked_n}×", song.artist));
+                    }
+                }
+                _ => {}
+            }
+        }
+        out.push(Recommendation { song: song.clone(), reason });
+    }
+    Ok(out)
+}
+
+/// Picks the next song to play, with a reason.
+pub fn next(
+    store: &Store,
+    src: &dyn CandidateSource,
+    req: &Request,
+    rng: &mut Rng,
+) -> Result<Option<Recommendation>> {
+    let Some(g) = gather(store, src, req, rng)? else { return Ok(None) };
+    Ok(pick_n(store, &g, req, 1, rng)?.into_iter().next())
+}
+
+/// `n` picks from one pool of candidates (for "up next", and the home page).
+/// A few network calls in total, not one per song.
 pub fn batch(
     store: &Store,
     src: &dyn CandidateSource,
@@ -221,18 +267,8 @@ pub fn batch(
     n: usize,
     rng: &mut Rng,
 ) -> Result<Vec<Recommendation>> {
-    let mut req = req.clone();
-    let mut out = Vec::new();
-    for _ in 0..n {
-        match next(store, src, &req, rng)? {
-            Some(r) => {
-                req.exclude.push(r.song.id.clone());
-                out.push(r);
-            }
-            None => break,
-        }
-    }
-    Ok(out)
+    let Some(g) = gather(store, src, req, rng)? else { return Ok(vec![]) };
+    pick_n(store, &g, req, n, rng)
 }
 
 fn warm(src: &dyn CandidateSource, seeds: &[Song], rng: &mut Rng) -> (Vec<Song>, Vec<Song>) {
@@ -343,12 +379,49 @@ mod tests {
     }
 
     #[test]
+    fn batch_is_cheap_and_varied() {
+        use std::cell::Cell;
+        struct Counting(Cell<u32>);
+        impl CandidateSource for Counting {
+            fn search(&self, q: &str, l: usize) -> Result<Vec<Song>> {
+                self.0.set(self.0.get() + 1);
+                Fake.search(q, l)
+            }
+            fn related(&self, id: &str, l: usize) -> Result<Vec<Song>> {
+                self.0.set(self.0.get() + 1);
+                Fake.related(id, l)
+            }
+        }
+        let st = Store::open_memory().unwrap();
+        play(&st, &song("seed", "Seed", "Z"), 1.0, false, PlaySource::Recommended);
+        let src = Counting(Cell::new(0));
+        let b = batch(&st, &src, &Request::default(), 10, &mut Rng::new(9)).unwrap();
+        assert!(src.0.get() <= 5, "one pool, not one call per song: {}", src.0.get());
+        assert_eq!(b.len(), 10);
+        let mut per: HashMap<String, usize> = HashMap::new();
+        for r in &b {
+            *per.entry(r.song.artist_key()).or_default() += 1;
+        }
+        assert!(per.values().all(|c| *c <= 2), "{per:?}");
+    }
+
+    #[test]
     fn batch_has_no_duplicates() {
         let st = Store::open_memory().unwrap();
         let b = batch(&st, &Fake, &Request::default(), 4, &mut Rng::new(5)).unwrap();
         let ids: HashSet<_> = b.iter().map(|r| r.song.id.clone()).collect();
         assert_eq!(ids.len(), b.len());
         assert_eq!(b.len(), 4);
+    }
+
+    #[test]
+    fn moods_are_known_genres() {
+        for m in MOOD_KEYS {
+            assert!(GENRES.iter().any(|g| g.0 == *m), "{m}");
+        }
+        let st = Store::open_memory().unwrap();
+        let r = next(&st, &Fake, &Request { genre: Some("chill".into()), requested: true, ..Default::default() }, &mut Rng::new(3)).unwrap().unwrap();
+        assert_eq!(r.reason, "You asked for: Chill");
     }
 
     #[test]
