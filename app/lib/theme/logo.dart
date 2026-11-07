@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'glass.dart';
 
-/// Harp's mark: a small harp-shaped "H" in white on a red gradient tile.
+/// Harp's mark: a small cursive "h" with a strike through its stem, in white on a red gradient tile.
 class HarpLogo extends StatelessWidget {
   const HarpLogo({super.key, this.size = 40});
   final double size;
@@ -32,21 +32,28 @@ class HarpLogoPainter extends CustomPainter {
           colors: [HarpColors.harpRedLight, HarpColors.harpRedDark],
         ).createShader(Offset.zero & size),
     );
-    final white = Paint()..color = Colors.white;
-    // Two pillars...
-    for (final x in [0.289, 0.633]) {
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(Rect.fromLTWH(s * x, s * 0.230, s * 0.078, s * 0.540), Radius.circular(s * 0.039)),
-        white,
-      );
-    }
-    // ...and five thin strings across, like a harp's.
-    for (final y in [0.344, 0.421, 0.493, 0.565, 0.643]) {
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(Rect.fromLTWH(s * 0.367, s * y, s * 0.266, s * 0.0137), Radius.circular(s * 0.007)),
-        white,
-      );
-    }
+    // A cursive "h" with a strike through its stem (like an h-bar). Coordinates are
+    // in a 1024 box, the same curves scripts/make-icons.sh draws for the app icons.
+    final k = s / 1024;
+    Offset o(double x, double y) => Offset(x * k, y * k);
+    final stem = Path()
+      ..moveTo(340 * k, 320 * k)
+      ..cubicTo(380 * k, 240 * k, 450 * k, 210 * k, 470 * k, 260 * k)
+      ..cubicTo(490 * k, 320 * k, 410 * k, 600 * k, 372 * k, 790 * k);
+    final arch = Path()
+      ..moveTo(410 * k, 598 * k)
+      ..cubicTo(445 * k, 505 * k, 590 * k, 420 * k, 620 * k, 560 * k)
+      ..cubicTo(640 * k, 660 * k, 590 * k, 740 * k, 610 * k, 780 * k)
+      ..cubicTo(625 * k, 810 * k, 680 * k, 780 * k, 720 * k, 730 * k);
+    final pen = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..strokeWidth = 62 * k;
+    canvas.drawPath(stem, pen);
+    canvas.drawPath(arch, pen);
+    canvas.drawLine(o(372, 415), o(560, 415), pen..strokeWidth = 40 * k);
   }
 
   @override

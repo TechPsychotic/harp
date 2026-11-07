@@ -10,14 +10,11 @@ R=246   # corner radius (24%)
 $M -size ${S}x${S} -define gradient:angle=135 gradient:'#ff6b6b-#b3001b' "$T/grad.png"
 $M -size ${S}x${S} xc:none -fill white -draw "roundrectangle 0,0 $((S-1)),$((S-1)) $R,$R" "$T/mask.png"
 $M "$T/grad.png" "$T/mask.png" -alpha off -compose CopyOpacity -composite "$T/tile.png"
-$M "$T/tile.png" -fill white -stroke none \
-  -draw "roundrectangle 296,236 376,788 40,40" \
-  -draw "roundrectangle 648,236 728,788 40,40" \
-  -draw "roundrectangle 376,352 648,366 7,7" \
-  -draw "roundrectangle 376,431 648,445 7,7" \
-  -draw "roundrectangle 376,505 648,519 7,7" \
-  -draw "roundrectangle 376,579 648,593 7,7" \
-  -draw "roundrectangle 376,658 648,672 7,7" \
+# A cursive "h" with a strike through its stem (like an h-bar). Same curves as logo.dart.
+$M "$T/tile.png" -fill none -stroke white -strokewidth 62 \
+  -draw "stroke-linecap round stroke-linejoin round path 'M 340,320 C 380,240 450,210 470,260 C 490,320 410,600 372,790'" \
+  -draw "stroke-linecap round stroke-linejoin round path 'M 410,598 C 445,505 590,420 620,560 C 640,660 590,740 610,780 C 625,810 680,780 720,730'" \
+  -strokewidth 40 -draw "stroke-linecap round path 'M 372,415 L 560,415'" \
   "$T/icon.png"
 mkdir -p app/assets dist/linux
 cp "$T/icon.png" app/assets/icon.png
