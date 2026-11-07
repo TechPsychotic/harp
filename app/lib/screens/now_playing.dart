@@ -197,6 +197,7 @@ void showQueueSheet(BuildContext context, PlayerController player) {
 
           return GlassSurface(
             radius: Radii.sheet,
+            blur: player.settings.fullEffects ? 18 : 0,
             child: ListView(controller: scroll, padding: const EdgeInsets.fromLTRB(12, 14, 12, 32), children: [
               Row(children: [
                 const Expanded(child: Text('Up next', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700))),

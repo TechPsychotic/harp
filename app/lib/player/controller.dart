@@ -17,14 +17,15 @@ class PlayerController extends ChangeNotifier {
   PlayerController(this.settings) {
     viz = Visualizer()
       ..position = (() => position.value)
-      ..enabled = settings.reactiveBackground;
-    unawaited(viz.attach(_player));
+      ..enabled = settings.reactiveBackground && settings.fullEffects;
+    unawaited(viz.attach(_player).then((_) => _applyAudioFx()));
     _subs.addAll([
       _player.stream.position.listen((p) => position.value = p),
       _player.stream.duration.listen((d) => duration.value = d),
       _player.stream.playing.listen((p) {
         playing = p;
         viz.playing = p;
+        settings.animating = p && settings.fullEffects;
         notifyListeners();
       }),
       _player.stream.completed.listen((done) {
@@ -32,7 +33,15 @@ class PlayerController extends ChangeNotifier {
       }),
       _player.stream.error.listen(_onPlayerError),
     ]);
-    settings.addListener(() => viz.enabled = settings.reactiveBackground);
+    String lastFx = '${settings.spatial}|${settings.reactiveBackground}|${settings.fullEffects}';
+    settings.addListener(() {
+      viz.enabled = settings.reactiveBackground && settings.fullEffects;
+      final fx = '${settings.spatial}|${settings.reactiveBackground}|${settings.fullEffects}';
+      if (fx != lastFx) {
+        lastFx = fx;
+        _applyAudioFx();
+      }
+    });
   }
 
   final AppSettings settings;
@@ -78,6 +87,12 @@ class PlayerController extends ChangeNotifier {
 
   bool get currentSuperliked => _currentSuperliked;
   String? get currentReason => current == null ? null : reasons[current!.id];
+
+  /// The loudness analyzer only runs when the animated background is on.
+  Future<void> _applyAudioFx() => viz.applyFilters(
+        spatial: settings.spatial,
+        analyze: settings.reactiveBackground && settings.fullEffects,
+      );
 
   Future<void> init() async {
     queue = await api.queueState();

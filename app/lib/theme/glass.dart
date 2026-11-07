@@ -116,7 +116,7 @@ ThemeData harpTheme(Color accent, Brightness b) {
 /// It repaints at ~20 fps and only while something is playing; when idle it
 /// draws once and stops, so it costs nothing on a paused app.
 class AuroraBackground extends StatefulWidget {
-  const AuroraBackground({super.key, required this.accent, required this.child, this.level, this.active = false});
+  const AuroraBackground({super.key, required this.accent, required this.child, this.level, this.active = false, this.flat = false});
   final Color accent;
   final Widget child;
 
@@ -125,6 +125,9 @@ class AuroraBackground extends StatefulWidget {
 
   /// Animate (a song is playing).
   final bool active;
+
+  /// Plain background color only (fastest).
+  final bool flat;
 
   @override
   State<AuroraBackground> createState() => _AuroraBackgroundState();
@@ -157,7 +160,7 @@ class _AuroraBackgroundState extends State<AuroraBackground> with SingleTickerPr
 
   void _sync() {
     final reduce = WidgetsBinding.instance.platformDispatcher.accessibilityFeatures.disableAnimations;
-    if (widget.active && !reduce) {
+    if (widget.active && !reduce && !widget.flat) {
       if (!_c.isAnimating) _c.repeat();
     } else {
       _c.stop();
@@ -176,11 +179,12 @@ class _AuroraBackgroundState extends State<AuroraBackground> with SingleTickerPr
     final tok = context.tok;
     return Stack(fit: StackFit.expand, children: [
       ColoredBox(color: tok.ink),
-      RepaintBoundary(
-        child: CustomPaint(
-          painter: _AuroraPainter(_t, widget.level, widget.accent, tok.orbAlpha, context.isDark),
+      if (!widget.flat)
+        RepaintBoundary(
+          child: CustomPaint(
+            painter: _AuroraPainter(_t, widget.level, widget.accent, tok.orbAlpha, context.isDark),
+          ),
         ),
-      ),
       widget.child,
     ]);
   }
@@ -307,21 +311,21 @@ class GlassSurface extends StatelessWidget {
     final tok = context.tok;
     final dark = context.isDark;
     final r = BorderRadius.circular(radius);
+    final blurred = blur > 0;
+    final box = DecoratedBox(
+      decoration: BoxDecoration(
+        // Without blur the fill is more opaque so text stays readable.
+        color: (dark ? const Color(0xFF14131E) : Colors.white).withValues(alpha: blurred ? (dark ? 0.62 : 0.72) : (dark ? 0.90 : 0.92)),
+        border: topBorderOnly
+            ? Border(top: BorderSide(color: tok.glassEdge.withValues(alpha: dark ? 0.14 : 0.10)))
+            : Border.all(color: tok.glassEdge.withValues(alpha: dark ? 0.16 : 0.10)),
+      ),
+      child: child,
+    );
     return RepaintBoundary(
       child: ClipRRect(
         borderRadius: r,
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: (dark ? const Color(0xFF14131E) : Colors.white).withValues(alpha: dark ? 0.62 : 0.72),
-              border: topBorderOnly
-                  ? Border(top: BorderSide(color: tok.glassEdge.withValues(alpha: dark ? 0.14 : 0.10)))
-                  : Border.all(color: tok.glassEdge.withValues(alpha: dark ? 0.16 : 0.10)),
-            ),
-            child: child,
-          ),
-        ),
+        child: blurred ? BackdropFilter(filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur), child: box) : box,
       ),
     );
   }

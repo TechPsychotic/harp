@@ -6,6 +6,7 @@ import '../theme/glass.dart';
 import '../theme/logo.dart';
 import '../widgets/cover.dart';
 import '../widgets/shelf.dart';
+import 'import_screen.dart';
 import 'playlist.dart';
 import 'settings_screen.dart';
 
@@ -30,13 +31,21 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _load();
     p.libraryRev.addListener(_reloadLocal);
-    p.settings.addListener(_load);
+    p.settings.addListener(_onSettings);
+  }
+
+  bool _wasOffline = false;
+  void _onSettings() {
+    if (p.settings.offline != _wasOffline) {
+      _wasOffline = p.settings.offline;
+      _load();
+    }
   }
 
   @override
   void dispose() {
     p.libraryRev.removeListener(_reloadLocal);
-    p.settings.removeListener(_load);
+    p.settings.removeListener(_onSettings);
     super.dispose();
   }
 
@@ -213,6 +222,23 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 16),
             ],
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: GlassCard(
+                onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ImportScreen(player: p))),
+                child: Row(children: [
+                  const Icon(Icons.drive_folder_upload_rounded),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      const Text('Bring your playlists over', style: TextStyle(fontWeight: FontWeight.w700)),
+                      Text('From Spotify, YouTube, Apple Music or Amazon Music', style: TextStyle(color: tok.textDim, fontSize: 12.5)),
+                    ]),
+                  ),
+                  const Icon(Icons.chevron_right_rounded),
+                ]),
+              ),
+            ),
             SongShelf(title: 'Downloaded', subtitle: 'Plays without a connection', songs: f.downloads, player: p),
             SongShelf(title: 'Liked songs', songs: f.liked, player: p),
           ],

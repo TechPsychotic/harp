@@ -98,6 +98,14 @@ class _LibraryScreenState extends State<LibraryScreen> with SingleTickerProvider
                 },
                 child: const Row(children: [Icon(Icons.add_rounded), SizedBox(width: 12), Text('New playlist', style: TextStyle(fontWeight: FontWeight.w600))]),
               ),
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: GlassCard(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ImportScreen(player: p))),
+                  child: const Row(children: [Icon(Icons.drive_folder_upload_rounded), SizedBox(width: 12), Expanded(child: Text('Import a playlist (Spotify, YouTube, Apple Music, Amazon…)', style: TextStyle(fontWeight: FontWeight.w600)))]),
+                ),
+              ),
               for (final pl in _playlists)
                 Padding(
                   padding: const EdgeInsets.only(top: 6),

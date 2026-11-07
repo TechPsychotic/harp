@@ -144,8 +144,9 @@ class AuroraScaffold extends StatelessWidget {
       listenable: player,
       builder: (_, _) => AuroraBackground(
         accent: HarpColors.accentFor(player.current?.id),
-        active: player.playing,
-        level: player.settings.reactiveBackground ? player.viz.level : null,
+        active: player.playing && player.settings.fullEffects,
+        flat: player.settings.flatBackground,
+        level: player.settings.reactiveBackground && player.settings.fullEffects ? player.viz.level : null,
         child: child,
       ),
     );

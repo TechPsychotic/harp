@@ -8,8 +8,11 @@ import '../widgets/song_actions.dart';
 import 'playlist.dart' show AuroraScaffold;
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key, required this.player});
+  const SettingsScreen({super.key, required this.player, this.embedded = false});
   final PlayerController player;
+
+  /// Shown as a tab of the main window (no back button, no own background).
+  final bool embedded;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -42,11 +45,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final tok = context.tok;
-    return AuroraScaffold(
-      player: widget.player,
-      child: Scaffold(
-        appBar: AppBar(backgroundColor: Colors.transparent, title: const Text('Settings')),
-        body: ListenableBuilder(
+    final list = ListenableBuilder(
           listenable: s,
           builder: (context, _) => ListView(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 40),
@@ -64,6 +63,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     onSelectionChanged: (v) => s.setTheme(v.first),
                   ),
                 ),
+                ListTile(
+                  title: const Text('Background effects'),
+                  subtitle: Text(effectsLabel(s.effectsPref) + (s.effectsPref == 'auto' && s.effects != 'full' ? '  (now: ${s.effects})' : ''), style: TextStyle(color: tok.textDim)),
+                  trailing: PopupMenuButton<String>(
+                    icon: const Icon(Icons.expand_more_rounded),
+                    initialValue: s.effectsPref,
+                    onSelected: s.setEffects,
+                    itemBuilder: (_) => [for (final e in ['auto', 'full', 'reduced', 'off']) PopupMenuItem(value: e, child: Text(effectsLabel(e)))],
+                  ),
+                ),
                 SwitchListTile(
                   title: const Text('Music-reactive background'),
                   subtitle: Text('The background moves with the loudness of what plays. Turn off to save battery.', style: TextStyle(color: tok.textDim)),
@@ -73,6 +82,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ]),
               _Section('Playback', [
                 _QualityTile(title: 'Streaming quality', value: s.streamQuality, onChanged: s.setStreamQuality),
+                ListTile(
+                  title: const Text('Spatial audio'),
+                  subtitle: Text('${spatialLabel(s.spatial)} · a virtual stereo effect for headphones and speakers. Not Dolby Atmos.', style: TextStyle(color: tok.textDim)),
+                  trailing: PopupMenuButton<String>(
+                    icon: const Icon(Icons.expand_more_rounded),
+                    initialValue: s.spatial,
+                    onSelected: s.setSpatial,
+                    itemBuilder: (_) => [for (final m in ['off', 'wide', 'headphone', 'immersive']) PopupMenuItem(value: m, child: Text(spatialLabel(m)))],
+                  ),
+                ),
               ]),
               _Section('Offline', [
                 SwitchListTile(
@@ -117,8 +136,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ]),
             ],
           ),
-        ),
-      ),
+    );
+    if (widget.embedded) {
+      return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Padding(padding: const EdgeInsets.fromLTRB(16, 20, 16, 4), child: Text('Settings', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700))),
+        Expanded(child: list),
+      ]);
+    }
+    return AuroraScaffold(
+      player: widget.player,
+      child: Scaffold(appBar: AppBar(backgroundColor: Colors.transparent, title: const Text('Settings')), body: list),
     );
   }
 }

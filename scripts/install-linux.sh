@@ -7,8 +7,13 @@ set -eu
 SRC=${1:?usage: install-linux.sh <bundle dir or tar.gz>}
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 D=$HOME/.local/opt/harp
-rm -rf "$D" && mkdir -p "$D" "$HOME/.local/bin" "$HOME/.local/share/applications"
-if [ -d "$SRC" ]; then cp -r "$SRC"/. "$D"/; else tar -xzf "$SRC" -C "$D"; fi
+# Unpack to a temporary folder first and only replace the old install once that worked.
+NEW=$(mktemp -d "$HOME/.local/opt/.harp-new.XXXXXX" 2>/dev/null || { mkdir -p "$HOME/.local/opt" && mktemp -d "$HOME/.local/opt/.harp-new.XXXXXX"; })
+trap 'rm -rf "$NEW"' EXIT
+if [ -d "$SRC" ]; then cp -r "$SRC"/. "$NEW"/; else tar -xzf "$SRC" -C "$NEW"; fi
+[ -x "$NEW/harp" ] || { echo "install-linux: no harp executable in $SRC; leaving the current install alone" >&2; exit 1; }
+mkdir -p "$HOME/.local/bin" "$HOME/.local/share/applications"
+rm -rf "$D" && mv "$NEW" "$D"
 # A bundled libmpv (if you have one extracted next to the app) is picked up via the launcher.
 cat > "$HOME/.local/bin/harp" <<LAUNCH
 #!/bin/sh

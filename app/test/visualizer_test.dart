@@ -1,7 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:harp/player/visualizer.dart';
+import 'package:harp/settings.dart';
 
 void main() {
+  audioChainTests();
+  settingsTests();
   test('reads RMS level from mpv metadata text in several shapes', () {
     expect(Visualizer.parseRmsDb('{"lavfi.astats.Overall.RMS_level":"-23.40","lavfi.astats.Overall.Peak_level":"-9.1"}'), -23.4);
     expect(Visualizer.parseRmsDb("lavfi.astats.Overall.RMS_level=-31.25"), -31.25);
@@ -24,5 +27,32 @@ void main() {
     final a = [for (var t = 0.0; t < 5; t += 0.2) Visualizer.synthetic('abc', t)];
     final b = [for (var t = 0.0; t < 5; t += 0.2) Visualizer.synthetic('zzz', t)];
     expect(a, isNot(b));
+  });
+}
+
+void audioChainTests() {
+  test('filter chain: spatial effect first, analyzer last, both optional', () {
+    expect(Visualizer.filterChain(spatial: 'off', analyze: false), '');
+    expect(Visualizer.filterChain(spatial: 'off', analyze: true), startsWith('@harp:lavfi=[astats'));
+    final both = Visualizer.filterChain(spatial: 'wide', analyze: true);
+    expect(both.indexOf('@fx:'), lessThan(both.indexOf('@harp:')), reason: 'the analyzer hears the processed audio');
+    expect(Visualizer.filterChain(spatial: 'headphone', analyze: false), startsWith('@fx:lavfi=[crossfeed'));
+    expect(Visualizer.spatialFilter('nonsense'), isNull);
+    for (final m in ['wide', 'headphone', 'immersive']) {
+      expect(Visualizer.spatialFilter(m), isNotNull);
+    }
+  });
+}
+
+void settingsTests() {
+  test('effects level: auto follows the governor, explicit choices win', () {
+    final s = AppSettings();
+    expect(s.effects, 'full');
+    expect(s.fullEffects, isTrue);
+    s.effectsPref = 'reduced';
+    expect(s.effects, 'reduced');
+    expect(s.fullEffects, isFalse);
+    s.effectsPref = 'off';
+    expect(s.flatBackground, isTrue);
   });
 }

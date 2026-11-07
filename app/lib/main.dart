@@ -39,6 +39,7 @@ class _HarpAppState extends State<HarpApp> {
     try {
       await bootEngine();
       await _settings.load();
+      _settings.watchPerformance();
       final p = PlayerController(_settings);
       await p.init();
       if (mounted) setState(() => _player = p);

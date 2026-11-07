@@ -27,15 +27,42 @@ class Visualizer {
   double _target = 0;
   Timer? _timer;
 
+  NativePlayer? _np;
+
+  /// mpv audio filters for a spatial mode (virtual effects, not Dolby Atmos).
+  /// All of these were checked against a real libmpv.
+  static String? spatialFilter(String mode) => switch (mode) {
+        'wide' => 'stereowiden=delay=20:feedback=0.3:crossfeed=0.3:drymix=0.8',
+        'headphone' => 'crossfeed=strength=0.35:range=0.5:level_in=0.9:level_out=1',
+        'immersive' => 'stereowiden=delay=24:feedback=0.35:crossfeed=0.35:drymix=0.75,crossfeed=strength=0.2:range=0.5',
+        _ => null,
+      };
+
+  /// The whole `af` value: optional spatial effect, then the loudness analyzer
+  /// (after the effect, so the background follows what you actually hear).
+  static String filterChain({required String spatial, required bool analyze}) {
+    final parts = <String>[];
+    final fx = spatialFilter(spatial);
+    if (fx != null) parts.add('@fx:lavfi=[$fx]');
+    if (analyze) parts.add('@harp:lavfi=[astats=metadata=1:reset=1:length=0.05]');
+    return parts.join(',');
+  }
+
   Future<void> attach(Player player) async {
     try {
-      final np = player.platform as NativePlayer;
-      await np.setProperty('af', '@harp:lavfi=[astats=metadata=1:reset=1:length=0.05]');
-      await np.observeProperty('af-metadata/harp', (s) async => _onMetadata(s));
+      _np = player.platform as NativePlayer;
+      await _np!.observeProperty('af-metadata/harp', (s) async => _onMetadata(s));
     } catch (_) {
       // No filter support: the stand-in pulse is used.
     }
     _timer = Timer.periodic(const Duration(milliseconds: 50), (_) => _tick());
+  }
+
+  /// (Re)applies the audio filters. Safe if the player has no filter support.
+  Future<void> applyFilters({required String spatial, required bool analyze}) async {
+    try {
+      await _np?.setProperty('af', filterChain(spatial: spatial, analyze: analyze));
+    } catch (_) {}
   }
 
   /// Parses mpv's metadata text for the RMS level in dB, e.g. -23.4 (or "-inf" for silence).

@@ -8,6 +8,7 @@ import 'home.dart';
 import 'library.dart';
 import 'now_playing.dart';
 import 'search.dart';
+import 'settings_screen.dart';
 
 /// Adaptive shell: a side rail on wide windows, a docked bar on phones. The
 /// dock (mini player + navigation) is attached to the bottom edge.
@@ -25,11 +26,13 @@ class _ShellState extends State<Shell> {
     HomeScreen(player: widget.player),
     SearchScreen(player: widget.player),
     LibraryScreen(player: widget.player),
+    SettingsScreen(player: widget.player, embedded: true),
   ];
   static const _items = [
     (Icons.home_rounded, 'Home'),
     (Icons.search_rounded, 'Search'),
     (Icons.library_music_rounded, 'Library'),
+    (Icons.tune_rounded, 'Settings'),
   ];
 
   void _openNowPlaying() => Navigator.of(context).push(PageRouteBuilder(
@@ -46,8 +49,9 @@ class _ShellState extends State<Shell> {
         final accent = HarpColors.accentFor(p.current?.id);
         return AuroraBackground(
           accent: accent,
-          active: p.playing,
-          level: p.settings.reactiveBackground ? p.viz.level : null,
+          active: p.playing && p.settings.fullEffects,
+          flat: p.settings.flatBackground,
+          level: p.settings.reactiveBackground && p.settings.fullEffects ? p.viz.level : null,
           child: LayoutBuilder(builder: (context, c) {
             final wide = c.maxWidth >= 760;
             final content = IndexedStack(index: _tab, children: _pages);
@@ -63,7 +67,7 @@ class _ShellState extends State<Shell> {
                           ])
                         : content,
                   ),
-                  _Dock(player: p, onOpen: _openNowPlaying, nav: wide ? null : _NavBar(tab: _tab, onTap: (i) => setState(() => _tab = i))),
+                  _Dock(player: p, blur: p.settings.fullEffects, onOpen: _openNowPlaying, nav: wide ? null : _NavBar(tab: _tab, onTap: (i) => setState(() => _tab = i))),
                 ]),
               ),
             );
@@ -147,8 +151,9 @@ class _NavItem extends StatelessWidget {
 /// The bottom dock: the mini player, then the navigation (on phones). One
 /// frosted surface attached to the bottom edge of the window.
 class _Dock extends StatelessWidget {
-  const _Dock({required this.player, required this.onOpen, this.nav});
+  const _Dock({required this.player, required this.onOpen, this.nav, this.blur = true});
   final PlayerController player;
+  final bool blur;
   final VoidCallback onOpen;
   final Widget? nav;
 
@@ -158,6 +163,7 @@ class _Dock extends StatelessWidget {
     if (s == null && nav == null) return const SizedBox.shrink();
     return GlassSurface(
       topBorderOnly: true,
+      blur: blur ? 18 : 0,
       child: SafeArea(
         top: false,
         child: Column(mainAxisSize: MainAxisSize.min, children: [
