@@ -81,17 +81,15 @@ impl YtDlp {
         parse::songs_from_playlist(&out)
     }
 
-    /// Search YouTube Music; falls back to plain YouTube search.
+    /// Search YouTube. (YouTube Music's search page gives yt-dlp only ids and
+    /// titles in flat mode: no artist, channel or length. Plain `ytsearch` has
+    /// all three, and `tidy` pulls "Artist - Title" apart.)
     pub fn search_songs(&self, query: &str, limit: usize) -> Result<Vec<Song>> {
         let q = query.trim();
         if q.is_empty() {
             return Ok(vec![]);
         }
-        let ytm = format!("https://music.youtube.com/search?q={}", urlencode(q));
-        match self.flat(&ytm, limit) {
-            Ok(v) if !v.is_empty() => Ok(v),
-            _ => self.flat(&format!("ytsearch{limit}:{q}"), limit),
-        }
+        self.flat(&format!("ytsearch{limit}:{q}"), limit)
     }
 
     /// The best audio stream for a video, cached until shortly before it expires.
@@ -142,18 +140,6 @@ impl CandidateSource for YtDlp {
     }
 }
 
-fn urlencode(s: &str) -> String {
-    let mut o = String::new();
-    for b in s.bytes() {
-        match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => o.push(b as char),
-            b' ' => o.push('+'),
-            _ => o.push_str(&format!("%{b:02X}")),
-        }
-    }
-    o
-}
-
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
@@ -165,7 +151,7 @@ mod tests {
         let search = include_str!("../tests/fixtures/search.json").replace('\n', "");
         let info = include_str!("../tests/fixtures/info.json").replace('\n', "");
         let script = format!(
-            "#!/bin/sh\ncase \"$*\" in\n*--version*) echo 2099.01.01;;\n*music.youtube.com/search*) echo 'ERROR: nope' >&2; exit 1;;\n*ytsearch*|*list=RD*) cat <<'EOF'\n{search}\nEOF\n;;\n*watch?v=*) cat <<'EOF'\n{info}\nEOF\n;;\n*) echo 'ERROR: unexpected' >&2; exit 2;;\nesac\n"
+            "#!/bin/sh\ncase \"$*\" in\n*--version*) echo 2099.01.01;;\n*ytsearch*|*list=RD*) cat <<'EOF'\n{search}\nEOF\n;;\n*watch?v=*) cat <<'EOF'\n{info}\nEOF\n;;\n*) echo 'ERROR: unexpected' >&2; exit 2;;\nesac\n"
         );
         std::fs::write(&p, script).unwrap();
         std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
@@ -179,7 +165,7 @@ mod tests {
     }
 
     #[test]
-    fn search_falls_back_to_youtube() {
+    fn search_uses_youtube_search() {
         let y = YtDlp::new(fake(&tmp("search")));
         let v = y.search_songs("daft punk", 5).unwrap();
         assert_eq!(v[0].title, "Get Lucky");
@@ -220,8 +206,4 @@ mod tests {
         assert!(matches!(YtDlp::new(t).version(), Err(Error::Timeout)));
     }
 
-    #[test]
-    fn url_encoding() {
-        assert_eq!(urlencode("a b&c"), "a+b%26c");
-    }
 }

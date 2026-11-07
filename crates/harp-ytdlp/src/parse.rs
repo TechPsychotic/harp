@@ -117,6 +117,20 @@ mod tests {
     }
 
     #[test]
+    fn real_ytsearch_shapes_keep_the_artist() {
+        // Shapes taken from real `yt-dlp --flat-playlist -J ytsearch3:...` output.
+        let json = r#"{"entries":[
+          {"id":"5NV6Rdv1a3I","title":"Daft Punk - Get Lucky (Official Audio) ft. Pharrell Williams, Nile Rodgers","channel":"Daft Punk","channel_id":"UC_kRDKYrUlrbtrSiyu5Tflg","duration":249},
+          {"id":"kTJczUoc26U","title":"The Kid LAROI, Justin Bieber - STAY (Official Video)","channel":"The Kid LAROI.","duration":158},
+          {"id":"AAAAAAAAAAA","title":"Blinding Lights","channel":"The Weeknd - Topic","duration":200}]}"#;
+        let s = songs_from_playlist(json).unwrap();
+        assert_eq!(s[0].artist, "Daft Punk");
+        assert_eq!(s[1].artist, "The Kid LAROI, Justin Bieber");
+        assert_eq!(s[1].title, "STAY");
+        assert_eq!(s[2].artist, "The Weeknd");
+    }
+
+    #[test]
     fn stream_parsed_with_expiry() {
         let st = stream_from_info(INFO).unwrap();
         assert_eq!(st.ext.as_deref(), Some("m4a"));
