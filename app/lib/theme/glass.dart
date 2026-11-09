@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
@@ -203,8 +202,8 @@ ThemeData harpTheme(Color accent, Brightness b) {
 }
 
 /// The page background: plain, with a soft glow of the song's colour at the top.
-/// Static (no animation), so it costs nothing per frame. The old animated aurora
-/// lives on only behind Now Playing (see [ReactiveWaves]).
+/// Static (no animation), so it costs nothing per frame. Now Playing has its own
+/// moving background (see `MusicBackdrop`).
 class AuroraBackground extends StatelessWidget {
   const AuroraBackground({super.key, required this.accent, required this.child, this.level, this.active = false, this.flat = false});
   final Color accent;
@@ -230,85 +229,6 @@ class AuroraBackground extends StatelessWidget {
       child: child,
     );
   }
-}
-
-/// Soft waves along the bottom of Now Playing that rise with the music.
-class ReactiveWaves extends StatefulWidget {
-  const ReactiveWaves({super.key, required this.color, required this.level, required this.active});
-  final Color color;
-  final ValueListenable<double> level;
-  final bool active;
-
-  @override
-  State<ReactiveWaves> createState() => _ReactiveWavesState();
-}
-
-class _ReactiveWavesState extends State<ReactiveWaves> with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(seconds: 60));
-  final ValueNotifier<double> _t = ValueNotifier(0);
-  double _last = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _c.addListener(() {
-      final v = _c.value * 60;
-      if ((v - _last).abs() >= 0.05 || v < _last) {
-        _last = v;
-        _t.value = v;
-      }
-    });
-    _sync();
-  }
-
-  @override
-  void didUpdateWidget(ReactiveWaves old) {
-    super.didUpdateWidget(old);
-    _sync();
-  }
-
-  void _sync() => widget.active ? (_c.isAnimating ? null : _c.repeat()) : _c.stop();
-
-  @override
-  void dispose() {
-    _c.dispose();
-    _t.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) =>
-      RepaintBoundary(child: CustomPaint(painter: _WavesPainter(_t, widget.level, widget.color), size: Size.infinite));
-}
-
-class _WavesPainter extends CustomPainter {
-  _WavesPainter(this.t, this.level, this.color) : super(repaint: Listenable.merge([t, level]));
-  final ValueNotifier<double> t;
-  final ValueListenable<double> level;
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final lv = level.value.clamp(0.0, 1.0);
-    final baseY = size.height * 0.84;
-    for (var layer = 0; layer < 3; layer++) {
-      final amp = (6 + 46 * lv) * (1 - layer * 0.25);
-      final path = Path()..moveTo(0, size.height);
-      const steps = 40;
-      for (var i = 0; i <= steps; i++) {
-        final x = size.width * i / steps;
-        final ph = i / steps * (2.2 + layer) * math.pi + t.value * (1.2 + layer * 0.7);
-        path.lineTo(x, baseY + layer * 10 - amp * (0.55 * math.sin(ph) + 0.45 * math.sin(ph * 1.9 + layer)));
-      }
-      path
-        ..lineTo(size.width, size.height)
-        ..close();
-      canvas.drawPath(path, Paint()..color = color.withValues(alpha: 0.16 - layer * 0.04));
-    }
-  }
-
-  @override
-  bool shouldRepaint(_WavesPainter old) => old.color != color;
 }
 
 /// A grouped, filled section (settings groups, info boxes). No blur.

@@ -1,0 +1,57 @@
+{
+ "result": {
+  "songs": [
+   {
+    "id": 1872590764,
+    "name": "Tum Hi Ho",
+    "artists": [
+     {
+      "name": "Arijit Singh"
+     }
+    ],
+    "duration": 262393
+   },
+   {
+    "id": 1450457894,
+    "name": "Tum Hi Ho",
+    "artists": [
+     {
+      "name": "Arijit Singh"
+     }
+    ],
+    "duration": 262393
+   },
+   {
+    "id": 1872820036,
+    "name": "Tum Hi Ho",
+    "artists": [
+     {
+      "name": "Arijit Singh"
+     }
+    ],
+    "duration": 262393
+   },
+   {
+    "id": 1490807480,
+    "name": "Tum Hi Ho",
+    "artists": [
+     {
+      "name": "Arijit Singh"
+     }
+    ],
+    "duration": 262393
+   },
+   {
+    "id": 1845593538,
+    "name": "Tum Hi Ho",
+    "artists": [
+     {
+      "name": "Arijit Singh"
+     }
+    ],
+    "duration": 262426
+   }
+  ]
+ },
+ "code": 200
+}

@@ -664,6 +664,42 @@ pub fn parse_all(v: &Value) -> Vec<Hit> {
     out
 }
 
+// --- lyrics ---
+
+/// The lyrics page id from a `next` (watch) response: the "Lyrics" tab.
+pub fn lyrics_browse_id(next: &Value) -> Option<String> {
+    next.pointer("/contents/singleColumnMusicWatchNextResultsRenderer/tabbedRenderer/watchNextTabbedResultsRenderer/tabs")?
+        .as_array()?
+        .iter()
+        .filter_map(|t| t.pointer("/tabRenderer/endpoint/browseEndpoint/browseId").and_then(Value::as_str))
+        .find(|id| id.starts_with("MPLY"))
+        .map(String::from)
+}
+
+/// The lyrics text and its credit ("LyricFind", …) from a lyrics page.
+pub fn parse_lyrics(page: &Value) -> Option<(String, String)> {
+    let shelf = page.pointer("/contents/sectionListRenderer/contents/0/musicDescriptionShelfRenderer")?;
+    let text: String = shelf.pointer("/description/runs")?.as_array()?.iter().filter_map(|r| r.get("text").and_then(Value::as_str)).collect();
+    if text.trim().is_empty() {
+        return None;
+    }
+    let credit = shelf
+        .pointer("/footer/runs/0/text")
+        .and_then(Value::as_str)
+        .map(|f| f.trim_start_matches("Source:").trim().to_string())
+        .unwrap_or_default();
+    Some((text, credit))
+}
+
+/// YouTube Music's own lyrics for a song (plain text: they come without timings
+/// here). Often the only source with lyrics in the original script.
+pub fn lyrics(video_id: &str) -> Result<Option<(String, String)>> {
+    let next = post("next", json!({"videoId": video_id}))?;
+    let Some(id) = lyrics_browse_id(&next) else { return Ok(None) };
+    let page = post("browse", json!({"browseId": id}))?;
+    Ok(parse_lyrics(&page))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -873,5 +909,16 @@ mod live {
         assert!(s.iter().any(|x| x.artist.contains("Daft Punk")), "{s:?}");
         let r = radio(&s[0].id, 10).unwrap();
         assert!(!r.is_empty());
+    }
+
+    #[test]
+    fn lyrics_tab_and_page() {
+        let next: Value = serde_json::from_str(include_str!("../tests/fixtures/ytm_next.json")).unwrap();
+        assert_eq!(lyrics_browse_id(&next).as_deref(), Some("MPLYt_dp7y3z76YA5"));
+        let page: Value = serde_json::from_str(include_str!("../tests/fixtures/ytm_lyrics.json")).unwrap();
+        let (text, credit) = parse_lyrics(&page).unwrap();
+        assert!(text.starts_with("हम तेरे बिन"));
+        assert_eq!(credit, "LyricFind");
+        assert!(parse_lyrics(&json!({})).is_none());
     }
 }

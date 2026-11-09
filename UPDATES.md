@@ -8,6 +8,31 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-09 (night, later still): a new player background, more lyrics
+
+**Player**
+- **The star button is gone.** It only liked the song, like the heart. In its place is **Add to
+  playlist**. Superlike ("more like this, sooner") is now a long press on the heart, which turns
+  into a sparkle.
+- **A new music-reactive background** in place of the waves. It's made from the cover's own
+  colours (up to four, picked from the artwork): large soft clouds of light that drift and blend,
+  swell and brighten with the loudness, and move faster when the music has more energy. A beat
+  or drop sends a soft ring of light out from behind the artwork. New songs fade from the old
+  colours to the new. It holds still when paused or with effects reduced, so it costs nothing
+  then. 🧪 renders, rings on beats, stops ticking when paused (and checked by eye on a rendered frame).
+  On Android, loudness is still simulated until the new audio engine (M2), so there the motion
+  follows a beat-like pulse, not the real song.
+
+**Lyrics (M4): three sources instead of one**
+- In order: LRCLIB synced → **NetEase** synced (no key needed; strong for Hindi and other Indian
+  and Asian songs, often already in English letters) → LRCLIB plain → **YouTube Music's own
+  lyrics** (from LyricFind, without timings, often in the original script, which the अ/A switch
+  then spells out in English letters). The source is shown under the lyrics.
+- Songs that had no lyrics before are looked up again once (a one-time database update).
+- ✅ checked live on "Tum Hi Ho": NetEase gave synced lines, YouTube Music the Devanagari text.
+  🧪 parsers tested on saved real responses (credit lines like "作曲 : …" are dropped,
+  instrumentals give nothing, a wrong length or artist doesn't match).
+
 ## 2026-11-09 (night, final): a livelier home, equalizer, speed, backup
 
 **Home**

@@ -119,6 +119,8 @@ CREATE TABLE IF NOT EXISTS downloads(
 const MIGRATIONS: &[&str] = &[
     // 1: playlists can be pinned to the top.
     "ALTER TABLE playlists ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;",
+    // 2: lyrics now come from more sources, so look again for songs that had none.
+    "DELETE FROM lyrics WHERE json LIKE '%\"lines\":[]%';",
 ];
 
 pub(crate) fn migrate(conn: &Connection) -> Result<()> {
@@ -374,12 +376,21 @@ mod tests {
             let c = Connection::open(&path).unwrap();
             c.execute_batch("CREATE TABLE playlists(id INTEGER PRIMARY KEY, name TEXT NOT NULL, created INTEGER NOT NULL DEFAULT 0);").unwrap();
             c.execute("INSERT INTO playlists(name) VALUES('Kept')", []).unwrap();
+            c.execute_batch(
+                r#"CREATE TABLE lyrics(song_id TEXT PRIMARY KEY, json TEXT NOT NULL, at INTEGER NOT NULL DEFAULT 0);
+                   INSERT INTO lyrics(song_id,json) VALUES('none','{"synced":false,"lines":[],"source":""}');
+                   INSERT INTO lyrics(song_id,json) VALUES('some','{"synced":false,"lines":[{"at_ms":0,"text":"hi"}],"source":"LRCLIB"}');"#,
+            )
+            .unwrap();
         }
         let st = Store::open(&path).unwrap();
         let v: i64 = st.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
         assert_eq!(v as usize, MIGRATIONS.len());
         let p = st.playlists().unwrap();
         assert_eq!((p[0].name.as_str(), p[0].pinned), ("Kept", false));
+        // Remembered "no lyrics" is forgotten (more sources now); real lyrics stay.
+        assert!(st.cached_lyrics("none").unwrap().is_none());
+        assert!(st.conn.query_row("SELECT count(*) FROM lyrics WHERE song_id='some'", [], |r| r.get::<_, i64>(0)).unwrap() == 1);
         drop(st);
         // Opening again runs nothing twice.
         assert!(Store::open(&path).is_ok());

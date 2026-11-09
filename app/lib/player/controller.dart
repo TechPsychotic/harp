@@ -148,6 +148,9 @@ class PlayerController extends ChangeNotifier {
   /// The playing song's artwork colour (the app tints itself with it).
   final ValueNotifier<Color> accent = ValueNotifier(HarpColors.harpRed);
 
+  /// A few colours from the playing song's artwork, for the player's background.
+  final ValueNotifier<List<Color>> palette = ValueNotifier(const [HarpColors.harpRed]);
+
   /// Song ids being downloaded right now.
   final ValueNotifier<Set<String>> downloading = ValueNotifier({});
 
@@ -323,6 +326,8 @@ class PlayerController extends ChangeNotifier {
     if (path.isEmpty) return;
     final c = await ArtColor.of(path);
     if (c != null && current?.id == s.id) accent.value = c;
+    final pal = await ArtColor.paletteOf(path);
+    if (pal.isNotEmpty && current?.id == s.id) palette.value = pal;
   }
 
   void _publishNowPlaying(api.SongView s) {
@@ -772,6 +777,7 @@ class PlayerController extends ChangeNotifier {
     _player.dispose();
     position.dispose();
     duration.dispose();
+    palette.dispose();
     libraryRev.dispose();
     downloading.dispose();
     accent.dispose();

@@ -12,6 +12,51 @@ class ArtColor {
 
   static Color? peek(String path) => _cache[path];
 
+  static final Map<String, List<Color>> _palettes = {};
+
+  /// Up to [n] distinct colours of the artwork, most prominent first, for the
+  /// player's moving background. Empty when the image can't be read.
+  static Future<List<Color>> paletteOf(String path, {int n = 4}) async {
+    final hit = _palettes[path];
+    if (hit != null) return hit;
+    try {
+      final bytes = await File(path).readAsBytes();
+      final codec = await ui.instantiateImageCodec(bytes, targetWidth: 32, targetHeight: 32);
+      final frame = await codec.getNextFrame();
+      final data = await frame.image.toByteData(format: ui.ImageByteFormat.rawRgba);
+      frame.image.dispose();
+      if (data == null) return const [];
+      return _palettes[path] = palette(data.buffer.asUint8List(), n: n);
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// [rgba]: raw pixels. Groups pixels by hue (12 slices, plus one for greys),
+  /// weighs each by how much of the picture it covers and how vivid it is, and
+  /// returns each top group's average colour. Exposed for tests.
+  static List<Color> palette(List<int> rgba, {int n = 4}) {
+    final sums = List.generate(13, (_) => [0.0, 0.0, 0.0, 0.0, 0.0]); // r g b count weight
+    for (var i = 0; i + 3 < rgba.length; i += 4) {
+      if (rgba[i + 3] < 128) continue;
+      final hsl = HSLColor.fromColor(Color.fromARGB(255, rgba[i], rgba[i + 1], rgba[i + 2]));
+      final grey = hsl.saturation < 0.18 || hsl.lightness < 0.08 || hsl.lightness > 0.94;
+      final bin = grey ? 12 : (hsl.hue / 30).floor() % 12;
+      final vivid = grey ? 0.15 : 0.35 + hsl.saturation * (1 - (hsl.lightness - 0.5).abs() * 1.4).clamp(0.0, 1.0);
+      final b = sums[bin];
+      b[0] += rgba[i];
+      b[1] += rgba[i + 1];
+      b[2] += rgba[i + 2];
+      b[3] += 1;
+      b[4] += vivid;
+    }
+    final order = [for (var i = 0; i < 13; i++) if (sums[i][3] > 0) i]..sort((a, b) => sums[b][4].compareTo(sums[a][4]));
+    return [
+      for (final i in order.take(n))
+        Color.fromARGB(255, (sums[i][0] / sums[i][3]).round(), (sums[i][1] / sums[i][3]).round(), (sums[i][2] / sums[i][3]).round()),
+    ];
+  }
+
   static Future<Color?> of(String path) async {
     if (_cache.containsKey(path)) return _cache[path];
     try {

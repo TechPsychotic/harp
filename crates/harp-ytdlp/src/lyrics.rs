@@ -1,5 +1,11 @@
-//! Lyrics from LRCLIB (https://lrclib.net): free, no account, no key. Synced
-//! lyrics come as LRC text.
+//! Lyrics from several free, keyless sources, best first:
+//!
+//! 1. **LRCLIB** (https://lrclib.net), synced: the open default.
+//! 2. **NetEase Cloud Music**, synced: strong for Asian and Indian songs (often
+//!    already in English letters for Hindi).
+//! 3. LRCLIB plain text.
+//! 4. **YouTube Music**'s own lyrics (licensed from LyricFind), plain text, often
+//!    in the song's original script.
 
 use crate::{Error, Result};
 use harp_core::lyrics::{from_texts, Lyrics};
@@ -81,8 +87,52 @@ pub fn pick(v: &Value, duration: Option<u32>) -> Option<Lyrics> {
     (!l.is_empty()).then_some(l)
 }
 
-/// Looks lyrics up. `Ok(None)` means none exist (worth remembering); `Err` is a failed request.
-pub fn fetch(title: &str, artist: &str, album: Option<&str>, duration: Option<u32>) -> Result<Option<Lyrics>> {
+/// Looks lyrics up in every source, best first (see the top of this file).
+/// `Ok(None)` means no source has any (worth remembering); `Err` means every
+/// source failed to answer.
+pub fn fetch(video_id: &str, title: &str, artist: &str, album: Option<&str>, duration: Option<u32>) -> Result<Option<Lyrics>> {
+    // Synced lyrics end the search; plain ones are kept in case nothing better turns up.
+    fn note(r: Result<Option<Lyrics>>, plain: &mut Option<Lyrics>, failed: &mut Option<Error>) -> Option<Lyrics> {
+        match r {
+            Ok(Some(l)) if l.synced => return Some(l),
+            Ok(Some(l)) => {
+                plain.get_or_insert(l);
+            }
+            Ok(None) => {}
+            Err(e) => {
+                failed.get_or_insert(e);
+            }
+        }
+        None
+    }
+    let (mut plain, mut failed) = (None, None);
+    if let Some(l) = note(lrclib(title, artist, album, duration), &mut plain, &mut failed) {
+        return Ok(Some(l));
+    }
+    if let Some(l) = note(netease(title, artist, duration), &mut plain, &mut failed) {
+        return Ok(Some(l));
+    }
+    if plain.is_none() && !video_id.is_empty() {
+        let yt = crate::ytmusic::lyrics(video_id).map(|o| {
+            o.map(|(text, credit)| {
+                let src = if credit.is_empty() { "YouTube Music".to_string() } else { format!("YouTube Music ({credit})") };
+                from_texts(None, Some(&text), &src)
+            })
+            .filter(|l| !l.is_empty())
+        });
+        note(yt, &mut plain, &mut failed);
+    }
+    match (plain, failed) {
+        (Some(l), _) => Ok(Some(l)),
+        // Nothing found, but a source couldn't be asked: try again later rather
+        // than remembering "no lyrics".
+        (None, Some(e)) => Err(e),
+        (None, None) => Ok(None),
+    }
+}
+
+/// LRCLIB alone.
+pub fn lrclib(title: &str, artist: &str, album: Option<&str>, duration: Option<u32>) -> Result<Option<Lyrics>> {
     let (t, a) = clean(title, artist);
     // Exact lookup first (needs the length).
     if let Some(d) = duration {
@@ -100,10 +150,91 @@ pub fn fetch(title: &str, artist: &str, album: Option<&str>, duration: Option<u3
     Ok(get(&url)?.and_then(|v| pick(&v, duration)))
 }
 
+fn norm(s: &str) -> String {
+    s.chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase).collect()
+}
+
+/// The NetEase song that matches: same title (or one containing the other),
+/// one of its artists in ours, and a length within 6 s when we know ours.
+pub fn netease_pick(v: &Value, title: &str, artist: &str, duration: Option<u32>) -> Option<i64> {
+    let (t, a) = (norm(title), norm(artist));
+    if t.is_empty() {
+        return None;
+    }
+    let mut best: Option<(i64, i64)> = None;
+    for s in v.pointer("/result/songs")?.as_array()? {
+        let name = norm(s.get("name").and_then(Value::as_str).unwrap_or(""));
+        if name.is_empty() || !(name == t || name.contains(&t) || t.contains(&name)) {
+            continue;
+        }
+        let artist_ok = s.get("artists").and_then(Value::as_array).is_some_and(|l| {
+            l.iter().filter_map(|x| x.get("name").and_then(Value::as_str)).map(norm).any(|n| !n.is_empty() && (a.contains(&n) || n.contains(&a)))
+        });
+        if !artist_ok {
+            continue;
+        }
+        let mut score = if name == t { 100 } else { 50 };
+        if let (Some(want), Some(ms)) = (duration, s.get("duration").and_then(Value::as_i64)) {
+            let d = (want as i64 - ms / 1000).abs();
+            if d > 6 {
+                continue;
+            }
+            score -= d;
+        }
+        let id = s.get("id").and_then(Value::as_i64)?;
+        if best.map_or(true, |(b, _)| score > b) {
+            best = Some((score, id));
+        }
+    }
+    best.map(|(_, id)| id)
+}
+
+/// Synced lyrics from a NetEase lyric response, without the credit lines
+/// ("作词 : …", "作曲 : …") it puts first, and nothing for instrumentals.
+pub fn netease_lrc(v: &Value) -> Option<Lyrics> {
+    let raw = v.pointer("/lrc/lyric").and_then(Value::as_str)?;
+    if raw.contains("纯音乐") {
+        return None;
+    }
+    let cjk = |c: char| ('\u{4E00}'..='\u{9FFF}').contains(&c);
+    let kept: Vec<&str> = raw
+        .lines()
+        .filter(|l| {
+            let text = l.rsplit(']').next().unwrap_or("");
+            !((text.contains(':') || text.contains('：')) && text.chars().any(cjk))
+        })
+        .collect();
+    let l = from_texts(Some(&kept.join("\n")), None, "NetEase");
+    (l.synced && l.lines.iter().any(|x| !x.text.trim().is_empty())).then_some(l)
+}
+
+/// NetEase Cloud Music: search, then the matching song's lyrics.
+pub fn netease(title: &str, artist: &str, duration: Option<u32>) -> Result<Option<Lyrics>> {
+    let (t, a) = clean(title, artist);
+    let url = format!("https://music.163.com/api/search/get?s={}&type=1&limit=8", enc(&format!("{t} {a}")));
+    let Some(v) = get(&url)? else { return Ok(None) };
+    let Some(id) = netease_pick(&v, &t, &a, duration) else { return Ok(None) };
+    Ok(get(&format!("https://music.163.com/api/song/lyric?id={id}&lv=1"))?.and_then(|v| netease_lrc(&v)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn netease_match_and_credits() {
+        let v: Value = serde_json::from_str(include_str!("../tests/fixtures/netease_search.json")).unwrap();
+        assert_eq!(netease_pick(&v, "Tum Hi Ho", "Arijit Singh", Some(262)), Some(1872590764));
+        assert_eq!(netease_pick(&v, "Tum Hi Ho", "Arijit Singh", Some(200)), None, "length too far");
+        assert_eq!(netease_pick(&v, "Tum Hi Ho", "Someone Else", None), None);
+        let l = netease_lrc(&serde_json::from_str(include_str!("../tests/fixtures/netease_lyric.json")).unwrap()).unwrap();
+        assert!(l.synced);
+        assert_eq!(l.source, "NetEase");
+        assert!(l.lines.iter().all(|x| !x.text.contains("作曲")), "credit lines dropped");
+        assert_eq!(l.lines.iter().find(|x| !x.text.is_empty()).unwrap().text, "Hum tere bin ab reh nahi sakte");
+        assert!(netease_lrc(&json!({"lrc": {"lyric": "[00:00.00]纯音乐，请欣赏"}})).is_none());
+    }
 
     #[test]
     fn prefers_synced_and_a_matching_length() {
@@ -140,7 +271,12 @@ mod tests {
     #[test]
     #[ignore]
     fn live_lyrics() {
-        let l = fetch("Get Lucky", "Daft Punk", Some("Random Access Memories"), Some(248)).unwrap().unwrap();
+        let l = fetch("", "Get Lucky", "Daft Punk", Some("Random Access Memories"), Some(248)).unwrap().unwrap();
         assert!(l.synced && l.lines.len() > 20);
+        // Each source on its own, on a Hindi song.
+        let n = netease("Tum Hi Ho", "Arijit Singh", Some(262)).unwrap().unwrap();
+        assert!(n.synced && n.lines.len() > 10, "netease");
+        let (text, _) = crate::ytmusic::lyrics("Umqb9KENgmk").unwrap().unwrap();
+        assert!(text.contains("तुम ही हो"), "youtube music");
     }
 }

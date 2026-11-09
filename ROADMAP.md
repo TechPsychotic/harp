@@ -69,7 +69,7 @@ the idea and the code. `UPDATES.md` is the dated log of changes; this file is th
 
 **Problems (23): 5 fixed and checked, 17 fixed but waiting for your confirmation, 1 partly fixed.**
 
-### 1b. Features you asked for (43)
+### 1b. Features you asked for (45)
 
 | # | Feature | Status | Notes |
 |---|---|---|---|
@@ -115,9 +115,11 @@ the idea and the code. `UPDATES.md` is the dated log of changes; this file is th
 | F41 | Refresh button only on the laptop | ✅ | Phones pull down to refresh; desktop keeps the button. |
 | F42 | "Harp" with an animated logo instead of "Listen Now" | ✅ | The logo writes itself in, and its strike line quivers like a plucked string with the music (still when paused or with effects off). |
 | F43 | Share a song | 🟡 | Share sheet on Android, link copied on desktop (a YouTube Music link anyone can open). |
+| F44 | The star button in the player was pointless | ✅ | It is now **Add to playlist**. Superlike moved to a long press on the heart (the heart turns into a sparkle). |
+| F45 | A better music-reactive player background | 🟡 | New moving background made from the cover's own colours: soft clouds of light that drift, swell with loudness and move faster with energy; beats send a ring of light out from behind the artwork. Still when paused or with effects reduced. 🧪 renders and stops ticking when paused. Feel on the phone not confirmed (Android's loudness is still simulated until M2). |
 | F33 | The same for Amazon Music | ⛔ | No public API for listeners (Amazon's web API is invite-only), and shared playlist pages are a JavaScript app with no songs in the page (checked). Workarounds: paste the list, or a CSV from a converter such as TuneMyMusic (already imports). |
 
-**Features (43): 26 done and checked, 13 done but waiting for your confirmation, 3 in progress,
+**Features (45): 27 done and checked, 14 done but waiting for your confirmation, 3 in progress,
 1 not possible (Amazon Music); plus parts that are not possible (Dolby Atmos, Apple Music
 account access without a paid developer key).**
 
@@ -178,7 +180,11 @@ Goal: control over how it sounds. *(Needs M2 for Android.)*
 ### M4 · Lyrics
 Goal: lyrics as good as Apple Music's: word-by-word where they exist, line-synced otherwise.
 - ☑ Line-synced lyrics from LRCLIB, tap a line to seek, cached for offline.
-- ☐ A lyrics-source layer in Rust that tries several sources in order and caches the best:
+- ◐ A lyrics-source layer in Rust that tries several sources in order and caches the best.
+  **Done:** LRCLIB synced → **NetEase** synced (keyless; strong for Indian and Asian songs) →
+  LRCLIB plain → **YouTube Music's own lyrics** (LyricFind, plain, often in the original script,
+  which the Hinglish switch then spells out). Checked live on a Hindi song; 🧪 on saved real
+  responses. Songs remembered as "no lyrics" are looked up again once. Still to do:
   - **NetEase** (keyless): word-by-word "YRC" format, strong for Asian catalogues.
   - **LyricsPlus** (the open YouLy+ backend, `ibratabian17/lyricsplus`): word-synced lyrics
     gathered from Apple Music, Musixmatch and others.
@@ -303,7 +309,7 @@ Goal: lyrics as good as Apple Music's: word-by-word where they exist, line-synce
   artists, not songs or moods, has no time decay, and its starter genres lean Western and Indian.
 - **Python on Android is heavy** (size, start-up, arm64 only). A native extractor (talking to
   YouTube's player API directly, like NewPipe) would remove it, but is a large project.
-- **Lyrics come from one free source** (LRCLIB), which will miss many regional songs.
+- ~~**Lyrics come from one free source** (LRCLIB), which will miss many regional songs.~~ Now three (LRCLIB, NetEase, YouTube Music).
 
 ---
 

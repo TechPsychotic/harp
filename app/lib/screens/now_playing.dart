@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../player/controller.dart';
 import '../src/rust/api/engine.dart' as api;
 import '../theme/glass.dart';
+import '../theme/music_backdrop.dart';
 import '../widgets/cover.dart';
 import '../widgets/lyrics_pane.dart';
 import '../widgets/song_actions.dart';
@@ -58,9 +59,20 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
               body: s == null
                   ? const Center(child: Text('Nothing playing'))
                   : Stack(children: [
-                      Positioned.fill(child: _Backdrop(song: s, accent: accent, blurArt: !player.settings.flatBackground)),
-                      if (player.settings.fullEffects && player.settings.reactiveBackground)
-                        Positioned.fill(child: ReactiveWaves(color: Colors.white, level: player.viz.level, active: player.playing)),
+                      Positioned.fill(
+                        child: player.settings.flatBackground
+                            ? _Backdrop(song: s, accent: accent, blurArt: false)
+                            : ValueListenableBuilder<List<Color>>(
+                                valueListenable: player.palette,
+                                builder: (context, colors, _) => MusicBackdrop(
+                                  colors: colors,
+                                  level: player.viz.level,
+                                  // Moves only while playing with full effects; otherwise a still picture.
+                                  active: player.playing && player.settings.fullEffects && player.settings.reactiveBackground,
+                                  origin: MediaQuery.sizeOf(context).width > 820 ? const Alignment(-0.45, 0) : const Alignment(0, -0.35),
+                                ),
+                              ),
+                      ),
                       SafeArea(
                         child: GestureDetector(
                           // Swipe down to close, like a music app's player.
@@ -180,10 +192,23 @@ class _Controls extends StatelessWidget {
             ),
           ]),
         ),
-        IconButton(
-          tooltip: 'Like',
-          icon: Icon(s.liked ? Icons.favorite_rounded : Icons.favorite_border_rounded, color: Colors.white, size: 26),
-          onPressed: player.toggleLike,
+        // Tap to like; hold to superlike (counts four times, and seeds picks first).
+        // (No tooltip: on phones a tooltip also takes the long press.)
+        InkResponse(
+          radius: 24,
+          onTap: player.toggleLike,
+          onLongPress: () {
+            player.superlike();
+            toast(context, 'Superliked: more like this, sooner');
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Icon(
+              player.currentSuperliked ? Icons.auto_awesome_rounded : (s.liked ? Icons.favorite_rounded : Icons.favorite_border_rounded),
+              color: Colors.white,
+              size: 26,
+            ),
+          ),
         ),
       ]),
       if (player.currentReason != null)
@@ -250,7 +275,7 @@ class _Controls extends StatelessWidget {
           style: IconButton.styleFrom(backgroundColor: lyricsOn ? Colors.white24 : Colors.transparent),
           onPressed: onLyrics,
         ),
-        IconButton(tooltip: 'Superlike: more like this, sooner', icon: Icon(Icons.auto_awesome_rounded, color: player.currentSuperliked ? Colors.white : dim), onPressed: player.superlike),
+        IconButton(tooltip: 'Add to playlist', icon: const Icon(Icons.playlist_add_rounded, color: dim), onPressed: () => addToPlaylistDialog(context, player, [s])),
         ValueListenableBuilder<Set<String>>(
           valueListenable: player.downloading,
           builder: (context, busy, _) => IconButton(

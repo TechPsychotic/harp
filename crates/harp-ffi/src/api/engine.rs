@@ -1096,7 +1096,7 @@ pub fn lyrics_for(s: SongView, allow_network: bool) -> Result<Option<LyricsView>
     if !allow_network {
         return Ok(None);
     }
-    match lrc::fetch(&s.title, &s.artist, s.album.as_deref(), s.duration_secs) {
+    match lrc::fetch(&s.id, &s.title, &s.artist, s.album.as_deref(), s.duration_secs) {
         Ok(found) => {
             let l = found.unwrap_or_default();
             let _ = en.store.lock().unwrap().save_lyrics(&s.id, &l);
