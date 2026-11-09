@@ -1,50 +1,56 @@
 #!/bin/bash
-# Builds Harp's Android APK on this laptop without overheating it.
+# Builds Harp's Android APK on this laptop without running it out of memory.
 #
-# This laptop has frozen under heavy builds (CPU package near 97 °C, a kernel fault
-# logged), usually when more than one build was running. So this script:
-#   1. waits until the machine is quiet (load average under 3) and the CPU has cooled;
-#   2. runs the build at low priority in its own cgroup with a memory cap;
-#   3. FREEZES the whole build if the CPU reaches 90 °C (or memory runs low) and
-#      resumes it once it is back under 78 °C, instead of letting the machine crash.
+# This laptop has frozen under heavy builds, usually with several running at once
+# (a Gradle daemon alone holds 3-4 GB). So this script:
+#   1. waits until enough RAM is free for the build (default 6 GB available);
+#   2. runs the build at low priority in its own cgroup with a hard memory cap, so if
+#      anything goes wrong the kernel stops *this build* instead of freezing the system;
+#   3. FREEZES the whole build when the machine starts to thrash (memory pressure high
+#      or free memory low) and resumes it when things settle.
+# CPU temperature is deliberately ignored.
 # Usage: scripts/safe-build-apk.sh [max-wait-minutes]   (default 30)
 set -u
 cd "$(dirname "$0")/../app"
 export PATH="$HOME/development/flutter/bin:$PATH" ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}"
 UNIT=harp-build-$$
 MAXWAIT=${1:-30}
-HOT=90 COOL=78 START_BELOW=72
+NEED_MB=${HARP_NEED_MB:-6000}      # available memory needed to start
+CAP_GB=${HARP_CAP_GB:-6}           # the build may not use more than this (RAM)
+FREEZE_BELOW_MB=1500               # freeze if available memory falls under this...
+THAW_ABOVE_MB=2800                 # ...and resume above this
+PSI_FREEZE=25                      # or if tasks spend this % of the last 10 s stalled on memory
 LOG=${HARP_BUILD_LOG:-$HOME/harp-local-build.log}
 
-temp() { local m=0 t; for z in /sys/class/thermal/thermal_zone*/temp; do t=$(( $(cat "$z" 2>/dev/null || echo 0) / 1000 )); [ "$t" -gt "$m" ] && m=$t; done; echo "$m"; }
 avail_mb() { awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo; }
-# Idle Gradle daemons linger for hours, so "quiet" means low load, not "no Gradle process".
-load1() { awk '{printf "%d", $1 * 10}' /proc/loadavg; }   # load average x10
+# "some" memory pressure, avg10, as a whole number: share of time tasks waited for memory
+psi() { awk '/^some/ {split($2,a,"="); printf "%d", a[2]}' /proc/pressure/memory 2>/dev/null || echo 0; }
 
-echo "waiting for a quiet, cool machine (up to ${MAXWAIT} min)..." | tee "$LOG"
+echo "waiting for ${NEED_MB} MB of free memory (up to ${MAXWAIT} min)..." | tee "$LOG"
 deadline=$(( $(date +%s) + MAXWAIT*60 ))
 while :; do
-  l=$(load1); t=$(temp); a=$(avail_mb)
-  if [ "$l" -lt 30 ] && [ "$t" -lt "$START_BELOW" ] && [ "$a" -gt 4000 ]; then break; fi
-  [ "$(date +%s)" -gt "$deadline" ] && { echo "gave up waiting: load $((l/10)).$((l%10)), ${t}°C, ${a} MB free" | tee -a "$LOG"; exit 3; }
+  a=$(avail_mb); p=$(psi)
+  if [ "$a" -ge "$NEED_MB" ] && [ "$p" -lt 5 ]; then break; fi
+  [ "$(date +%s)" -gt "$deadline" ] && { echo "gave up waiting: ${a} MB available, memory pressure ${p}%" | tee -a "$LOG"; exit 3; }
   sleep 10
 done
-echo "starting at $(temp)°C, $(avail_mb) MB free" | tee -a "$LOG"
+echo "starting with $(avail_mb) MB available" | tee -a "$LOG"
 
-systemd-run --user --scope --quiet --unit="$UNIT" -p MemoryMax=9G -p MemorySwapMax=2G \
+systemd-run --user --scope --quiet --unit="$UNIT" \
+  -p MemoryHigh=$((CAP_GB-1))G -p MemoryMax=${CAP_GB}G -p MemorySwapMax=1G \
   nice -n 15 ionice -c3 flutter build apk --release --target-platform android-arm64 >>"$LOG" 2>&1 &
 BUILD=$!
 sleep 3
-frozen=0
+frozen=0 low=999999
 while kill -0 "$BUILD" 2>/dev/null; do
-  t=$(temp); a=$(avail_mb)
-  if [ "$frozen" -eq 0 ] && { [ "$t" -ge "$HOT" ] || [ "$a" -lt 900 ]; }; then
-    systemctl --user freeze "$UNIT.scope" 2>/dev/null && frozen=1 && echo "[$(date +%T)] FROZEN the build: ${t}°C, ${a} MB free" | tee -a "$LOG"
-  elif [ "$frozen" -eq 1 ] && [ "$t" -le "$COOL" ] && [ "$a" -gt 2000 ]; then
-    systemctl --user thaw "$UNIT.scope" 2>/dev/null && frozen=0 && echo "[$(date +%T)] resumed at ${t}°C" | tee -a "$LOG"
+  a=$(avail_mb); p=$(psi); [ "$a" -lt "$low" ] && low=$a
+  if [ "$frozen" -eq 0 ] && { [ "$a" -lt "$FREEZE_BELOW_MB" ] || [ "$p" -ge "$PSI_FREEZE" ]; }; then
+    systemctl --user freeze "$UNIT.scope" 2>/dev/null && frozen=1 && echo "[$(date +%T)] FROZEN the build: ${a} MB available, memory pressure ${p}%" | tee -a "$LOG"
+  elif [ "$frozen" -eq 1 ] && [ "$a" -ge "$THAW_ABOVE_MB" ] && [ "$p" -lt 5 ]; then
+    systemctl --user thaw "$UNIT.scope" 2>/dev/null && frozen=0 && echo "[$(date +%T)] resumed: ${a} MB available" | tee -a "$LOG"
   fi
-  sleep 3
+  sleep 2
 done
 wait "$BUILD"; rc=$?
-echo "build exited with $rc (peak check ended at $(temp)°C)" | tee -a "$LOG"
+echo "build exited with $rc (lowest available memory during the build: ${low} MB)" | tee -a "$LOG"
 exit "$rc"
