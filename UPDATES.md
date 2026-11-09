@@ -8,6 +8,21 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-09 (night, research): milestone map; a hanging test fixed
+
+- **Milestone map** in `ROADMAP.md` (M1–M8): reliability on the phone; a new audio engine with real
+  DSP on every platform; sound (equalizer, spatial, loudness, gapless, speed); lyrics (word-by-word
+  from several sources); library and discovery; platform integration; together and sync; release.
+- **Why spatial audio hung on Android, found:** the Android libmpv in the APK has no
+  `stereowiden`, `crossfeed`, `sofalizer` or `astats` filters (only `lavfi` and `equalizer`), so
+  asking for them stalls playback. The plan (M2) is `mpv_audio_kit`, whose libmpv carries FFmpeg's
+  audio effects on Android, with a custom libmpv or Android's `DynamicsProcessing` as plan B.
+- Equalizer presets (Bass, Vocal, Treble, Loudness) verified in libmpv on desktop, together with
+  spatial effects and the loudness reader.
+- **Fixed: a test that could hang forever.** The Spotify sign-in test raced three fake browsers; if
+  the right one was served first, the other two waited forever. It is now deterministic (passes
+  5/5). This is what made earlier "slow" test runs time out, not compile time as I first thought.
+
 ## 2026-11-09 (night, last): a fallback yt-dlp inside the APK
 
 - **The APK now carries yt-dlp 2026.10.26** (verified against yt-dlp's published SHA-256). The

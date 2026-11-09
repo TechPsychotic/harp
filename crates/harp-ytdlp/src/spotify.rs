@@ -445,46 +445,35 @@ mod tests {
         assert_eq!(dec("a%20b+c%2Fd"), "a b c/d");
     }
 
+    /// Sends one request to the sign-in listener and returns its answer.
+    fn request(port: u16, target: &str) -> String {
+        let mut s = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+        write!(s, "GET {target} HTTP/1.1\r\nHost: x\r\n\r\n").unwrap();
+        let mut r = String::new();
+        let _ = s.read_to_string(&mut r);
+        r
+    }
+
     #[test]
     fn callback_accepts_the_right_state_and_ignores_the_wrong_one() {
+        // The listener waits in the background; requests are sent one at a time, each
+        // answered before the next (no race between them).
         let cb = Callback::listen_on(0).unwrap();
         let port = cb.listener.local_addr().unwrap().port();
-        let hit = |q: &str| {
-            let q = q.to_string();
-            std::thread::spawn(move || {
-                let mut s = TcpStream::connect(("127.0.0.1", port)).unwrap();
-                write!(s, "GET /callback?{q} HTTP/1.1\r\nHost: x\r\n\r\n").unwrap();
-                let mut r = String::new();
-                let _ = s.read_to_string(&mut r);
-                r
-            })
-        };
-        let wrong = hit("code=EVIL&state=WRONG");
-        let favicon = {
-            std::thread::spawn(move || {
-                let mut s = TcpStream::connect(("127.0.0.1", port)).unwrap();
-                write!(s, "GET /favicon.ico HTTP/1.1\r\n\r\n").unwrap();
-                let mut r = String::new();
-                let _ = s.read_to_string(&mut r);
-            })
-        };
-        let right = hit("code=GOOD%2Fcode&state=STATE");
-        let code = cb.wait_for_code("STATE", Duration::from_secs(10)).unwrap();
-        assert_eq!(code, "GOOD/code");
-        assert!(right.join().unwrap().contains("Connected"));
-        assert!(wrong.join().unwrap().contains("Wrong sign-in"));
-        favicon.join().unwrap();
+        let waiter = std::thread::spawn(move || cb.wait_for_code("STATE", Duration::from_secs(20)));
+        assert!(request(port, "/callback?code=EVIL&state=WRONG").contains("Wrong sign-in"));
+        assert!(request(port, "/favicon.ico").contains("404"));
+        assert!(request(port, "/callback?code=GOOD%2Fcode&state=STATE").contains("Connected"));
+        assert_eq!(waiter.join().unwrap().unwrap(), "GOOD/code");
+
         // The user pressing "cancel" at Spotify is reported, not hung on.
         let cb2 = Callback::listen_on(0).unwrap();
         let p2 = cb2.listener.local_addr().unwrap().port();
-        let t = std::thread::spawn(move || {
-            let mut s = TcpStream::connect(("127.0.0.1", p2)).unwrap();
-            write!(s, "GET /callback?error=access_denied&state=S HTTP/1.1\r\n\r\n").unwrap();
-            let mut r = String::new();
-            let _ = s.read_to_string(&mut r);
-        });
-        assert!(cb2.wait_for_code("S", Duration::from_secs(10)).unwrap_err().to_string().contains("cancelled"));
-        t.join().unwrap();
+        let w2 = std::thread::spawn(move || cb2.wait_for_code("S", Duration::from_secs(20)));
+        assert!(request(p2, "/callback?error=access_denied&state=S").contains("Not connected"));
+        assert!(w2.join().unwrap().unwrap_err().to_string().contains("cancelled"));
+
         assert!(Callback::listen_on(0).unwrap().wait_for_code("S", Duration::from_millis(300)).unwrap_err().to_string().contains("timed out"));
         // Cancel from another thread ends the wait at once.
         let cb3 = Callback::listen_on(0).unwrap();

@@ -111,28 +111,115 @@ account access without a paid developer key).**
 
 ---
 
-## 2. What comes next (in order)
+## 2. Milestone map
 
-**P0: make what exists reliable on your phone**
-1. Confirm on the phone: no crash, notification controls, screen-off playback, yt-dlp streaming
-   (B7, B11, B12, B15, B16). If anything fails, the crash report and frame times give data.
-2. Try the Spotify account connection with a real account (F31) and an Apple Music link (F32).
-3. Review the redesign on the phone and the laptop, and adjust (F26).
-4. Run `scripts/ci-local.sh --install` after changes; use GitHub Actions only for releases.
+Each milestone has a goal, its tasks (☐ to do, ☑ done), what "done" means, and what it depends
+on. They are in order; later ones can overlap once their dependencies are met.
 
-**P1: the experience**
-6. Redesign, second pass (F26): swipe-down to close Now Playing, motion between mini player and
-   Now Playing, an Apple-style "Browse" of charts and new releases.
-7. Measure and fix lag on the phone with frame-time numbers (B3).
-8. Gapless playback and crossfade (in the original roadmap, not done).
-9. ~~Persist the whole queue across restarts~~ done (2026-11-09).
-10. Word-by-word lyrics (F25).
+### M1 · Rock-solid on your phone *(now)*
+Goal: what exists works every day on Android and Linux, with no guessing.
+- ☐ You confirm: no crash, notification controls, screen-off playback, yt-dlp streaming, the
+  redesign, search history, Spotify connection, Apple Music links (B7, B11, B12, B15, B16, F26, F31, F32).
+- ☑ Crash reports (Settings › About), frame-time readout (Settings › Performance).
+- ☑ Fallback yt-dlp inside the APK; queue and position survive restarts.
+- ☐ Fix whatever the crash report and frame times show.
+- **Done when:** a week of daily use on the phone without a crash, a stall, or a missing control.
 
-**P2: depth**
-11. Android spatial audio through Android's own Spatializer / Virtualizer (F19).
-12. A real spectrum for the reactive background on desktop, and a real signal on Android (F14).
-13. Podcast features: resume position, playback speed, episode lists, new-episode checks.
-14. Release work: signed APK, F-Droid metadata, Flathub / AppImage, Windows installer, macOS DMG.
+### M2 · A new audio engine with real DSP on every platform
+Goal: equalizer, spatial audio, a real spectrum and gapless playback **on Android too**.
+
+Why: Android's libmpv (from `media_kit`) was built without most audio filters. Checked in the
+APK: it has `lavfi` and `equalizer`, but no `stereowiden`, `crossfeed`, `sofalizer` or `astats`.
+That is why spatial audio hung the Android player, and why Android's background only imitates
+the music.
+
+- ☐ **Spike: `mpv_audio_kit`** (BSD-3 package, bundles LGPL libmpv with FFmpeg 8.1). Its docs list
+  86 FFmpeg effects on Android (arm64, armv7, x86_64) and desktop, including an 18-band graphic
+  EQ, compressor, loudness normalisation, bass/treble, **stereo width, headphone crossfeed**, raw
+  lavfi filters, **gapless** playback (playlist prefetch), a **live FFT spectrum**, raw PCM and
+  media-session controls. Check: whether `sofalizer` is in its FFmpeg build, that it coexists
+  with our `audio_service` session (or replaces it), APK size (+7.7–8.3 MB per ABI vs about 6 MB
+  today), Android 7+ (ours is 9+).
+- ☐ Replace `media_kit` behind our `PlayerController` (the rest of the app does not change).
+- ☐ **Plan B** if the spike fails: build our own libmpv for Android with FFmpeg's audio filters
+  enabled (zevro's script already cross-builds FFmpeg with the NDK), or use Android's
+  `DynamicsProcessing` effect (API 28+: multi-band EQ, compressor, limiter; what the open-source
+  Equalizer314 uses on the global session) for the equalizer only.
+- **Done when:** the same equalizer and spatial settings work on Android and desktop, the reactive
+  background follows a real spectrum on both, and songs change without a gap.
+
+### M3 · Sound
+Goal: control over how it sounds. *(Needs M2 for Android.)*
+- ☐ Equalizer: presets (Flat, Bass, Vocal, Treble, Loudness: chains checked in libmpv ✅), then a
+  10-band custom EQ, then per-headphone correction (AutoEQ profiles).
+- ☐ Spatial audio: Wide stage and Headphone crossfeed on Android (M2); a true **HRTF binaural** mode
+  with a bundled HRTF data set (FFmpeg `sofalizer`, or Steam Audio / OpenAL Soft, both of which
+  support HRTF on Android).
+- ☐ Loudness normalisation (songs at even volume), crossfade, gapless (M2).
+- ☐ Playback speed (podcasts); resume position for long tracks and episodes.
+- ☑ Sleep timer.
+- **Done when:** every sound option works the same on phone and laptop.
+- ⛔ Dolby Atmos stays impossible (stereo sources, licensed decoder).
+
+### M4 · Lyrics
+Goal: lyrics as good as Apple Music's: word-by-word where they exist, line-synced otherwise.
+- ☑ Line-synced lyrics from LRCLIB, tap a line to seek, cached for offline.
+- ☐ A lyrics-source layer in Rust that tries several sources in order and caches the best:
+  - **NetEase** (keyless): word-by-word "YRC" format, strong for Asian catalogues.
+  - **LyricsPlus** (the open YouLy+ backend, `ibratabian17/lyricsplus`): word-synced lyrics
+    gathered from Apple Music, Musixmatch and others.
+  - **Musixmatch** word sync ("richsync"), as the SyncLyrics library does: needs a token, so last.
+  - LRCLIB stays the open default.
+- ☐ Parsers for TTML (word timings, background vocals, duet sides) and YRC, with tests on saved
+  real responses.
+- ☐ Word-by-word highlighting (Apple-style sweep), duet alignment, bigger full-screen lyrics,
+  a manual "find lyrics" and a timing-offset nudge.
+- ☐ Later: translation / romanisation lines where sources provide them.
+- **Done when:** popular songs show word-by-word lyrics; others fall back to lines; nothing breaks
+  offline. Check each source's terms before shipping it.
+
+### M5 · Library and discovery
+- ☐ Albums and artists in the library; follow artists; new releases from followed artists.
+- ☐ Sort and filter everywhere (recent, title, artist); playlist folders and custom covers.
+- ☐ Backup and restore of the whole library to one file (pairs with M7 sync).
+- ☐ Local files as a source (your own music on the device).
+- ☐ Browse: charts by country, genres, new releases.
+- ☐ A smarter taste model: song-level signals, time decay, time-of-day and mood, wider starter
+  genres; recommendations from downloads when offline.
+- **Done when:** the Library tab can replace another music app's library for you.
+
+### M6 · Platform integration
+- ☐ Android: Android Auto browse tree (the media service is there already), home-screen widget,
+  Now Bar / lock-screen check, Wear OS controls.
+- ☐ Desktop: tray icon, global media keys, a mini-player window, Discord rich presence.
+- ☐ Casting (Chromecast / DLNA).
+- ☐ Windows and macOS: run them for real (built, never run).
+
+### M7 · Together and sync
+- ☐ Peer-to-peer library sync between your own devices on the same network (no servers).
+- ☐ Share a song or playlist as a link / card / QR code.
+- ☐ Listening rooms with a shared queue.
+
+### M8 · Release
+- ☐ A real signing key for APKs; versioning and an in-app update check.
+- ☐ F-Droid metadata, GitHub Releases (Actions only here), Flathub / AppImage, Windows installer,
+  macOS DMG.
+- ☐ Accessibility pass (screen readers, text size, contrast) and translations.
+- ☐ iOS: decide how yt-dlp could run there (see open questions).
+
+### Research notes (sources)
+- mpv_audio_kit (Flutter, BSD-3, libmpv with FFmpeg audio effects on Android and desktop):
+  https://pub.dev/packages/mpv_audio_kit
+- Android `DynamicsProcessing` (API 28+): https://developer.android.com/reference/android/media/audiofx/DynamicsProcessing
+  · Equalizer314 (GPL-3 app using it): https://f-droid.org/en/packages/com.bearinmind.equalizer314/
+- Android spatial audio and head tracking (Android 13+, system-level):
+  https://source.android.com/docs/core/audio/spatial
+- Steam Audio (HRTF, SOFA files, Android libraries): https://valvesoftware.github.io/steam-audio/doc/capi/getting-started.html
+  · OpenAL Soft fork with Android HRTF: https://github.com/6779660/OpenAL-MOB
+- Word-synced lyrics: YouLy+ / LyricsPlus (https://github.com/ibratabian17/youlyplus),
+  SyncLyrics (Musixmatch, LRCLIB, NetEase: https://synclyrics.js.org/),
+  NetEase YRC format (https://docs.lyricify.app/en/lyrics/guide/),
+  TTML tools (https://awesome.ecosyste.ms/projects/github.com%2Famll-dev%2Famll-ttml-tool).
 
 ---
 
