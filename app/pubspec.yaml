@@ -48,6 +48,7 @@ dependencies:
   crypto: ^3.0.8
   url_launcher: ^6.3.3
   audio_session: ^0.2.4
+  mpv_audio_kit: ^0.6.4
 
 dev_dependencies:
   flutter_test:

@@ -8,6 +8,19 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-09 (M2 step 1): testing the new audio engine
+
+The Android audio engine is under way (roadmap M2). This build adds **a self-check, nothing else
+changes**: Settings › About › **Test the new audio engine**. It plays the current song (or your last
+one) through `mpv_audio_kit` for about 30 seconds, tries each effect, and shows a report with a
+**Copy** button. Please run it on the phone and send me the report.
+
+- **On the laptop it already passes:** equalizer, stereo widen, headphone crossfeed, both volume
+  levellers (even FFmpeg's `loudnorm`, which stalls the current player) and the live spectrum.
+- **True 3D (`sofalizer`) is not included** in its FFmpeg build, so the "Virtual 3D" mode will need
+  another route later; Wide stage and Crossfeed are fine.
+- The APK grows by about 8 MB (the engine's library) for now; the old one goes once we switch.
+
 ## 2026-11-09 (latest): background fix, lyrics position, your own music files, restore adds
 
 **Fixed**

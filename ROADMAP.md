@@ -153,7 +153,13 @@ APK: it has `lavfi` and `equalizer`, but no `stereowiden`, `crossfeed`, `sofaliz
 That is why spatial audio hung the Android player, and why Android's background only imitates
 the music.
 
-- ☐ **Spike: `mpv_audio_kit`** (BSD-3 package, bundles LGPL libmpv with FFmpeg 8.1). Its docs list
+- ◐ **Spike: `mpv_audio_kit` 0.6.4** (in progress). **Laptop: ✅** equalizer, stereo widen,
+  crossfeed, `dynaudnorm` and even `loudnorm` all play without stalling; the live FFT spectrum works;
+  **`sofalizer` is not in its FFmpeg build** (so true HRTF needs another route). Its native library
+  downloads from the package's GitHub releases, checked against pinned SHA-256s. It ships
+  `libmpv_audio_kit.so` (no clash with media_kit's `libmpv.so`) and declares its own Media3 service
+  (inactive unless its session is turned on). **Phone:** Settings › About › Test the new audio engine.
+  Original notes: (BSD-3 package, bundles LGPL libmpv with FFmpeg 8.1). Its docs list
   86 FFmpeg effects on Android (arm64, armv7, x86_64) and desktop, including an 18-band graphic
   EQ, compressor, loudness normalisation, bass/treble, **stereo width, headphone crossfeed**, raw
   lavfi filters, **gapless** playback (playlist prefetch), a **live FFT spectrum**, raw PCM and

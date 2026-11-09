@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -6,6 +7,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
 
 import '../native.dart';
+import '../player/engine_probe.dart';
 import 'spotify_screen.dart';
 import '../player/controller.dart';
 import '../settings.dart';
@@ -48,6 +50,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final d = (await api.downloads()).fold<int>(0, (a, e) => a + e.bytes.toInt());
     final c = await api.cacheBytes();
     if (mounted) setState(() { _thumbBytes = t.toInt(); _downloadBytes = d; _cacheBytes = c.toInt(); });
+  }
+
+  Future<void> _probe(BuildContext context) async {
+    final p = widget.player;
+    final song = p.current ?? p.resumeOffer;
+    if (song == null) {
+      toast(context, 'Play a song first, then run the test');
+      return;
+    }
+    if (p.playing) await p.togglePlay();
+    final lines = ValueNotifier<List<String>>(['Testing with “${song.title}”…']);
+    var done = false;
+    if (!context.mounted) return;
+    unawaited(showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('New audio engine'),
+        content: SizedBox(
+          width: 420,
+          child: ValueListenableBuilder<List<String>>(
+            valueListenable: lines,
+            builder: (_, l, _) => SingleChildScrollView(child: SelectableText(l.join('\n'), style: const TextStyle(fontSize: 13, height: 1.4))),
+          ),
+        ),
+        actions: [
+          ValueListenableBuilder<List<String>>(
+            valueListenable: lines,
+            builder: (_, l, _) => TextButton(
+              onPressed: done ? () => Clipboard.setData(ClipboardData(text: '${Platform.operatingSystem}\n${l.join('\n')}')).then((_) { if (ctx.mounted) toast(ctx, 'Copied'); }) : null,
+              child: const Text('Copy'),
+            ),
+          ),
+          ValueListenableBuilder<List<String>>(
+            valueListenable: lines,
+            builder: (_, _, _) => TextButton(onPressed: done ? () => Navigator.pop(ctx) : null, child: const Text('Close')),
+          ),
+        ],
+      ),
+    ));
+    await EngineProbe.run(song.id, quality: p.settings.streamQuality, log: (s) => lines.value = [...lines.value, s]);
+    done = true;
+    lines.value = [...lines.value, '', 'Copy this and send it to me.'];
   }
 
   Future<void> _backup(BuildContext context) async {
@@ -292,6 +337,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _Section('About', [
                 ListTile(title: const Text('Harp'), subtitle: Text('No accounts, no servers. Your taste stays on this device.', style: TextStyle(color: tok.textDim))),
                 ListTile(title: const Text('yt-dlp'), subtitle: Text(_ytdlp, style: TextStyle(color: tok.textDim))),
+                ListTile(
+                  leading: const Icon(Icons.science_rounded),
+                  title: const Text('Test the new audio engine'),
+                  subtitle: Text('About 30 seconds: plays the current song (or your last one) through the engine that will bring the equalizer and spatial audio to Android, and reports what works. Pauses normal playback.', style: TextStyle(color: tok.textDim)),
+                  onTap: () => _probe(context),
+                ),
                 if (Platform.isAndroid)
                   ListTile(
                     title: const Text('Last crash report'),
