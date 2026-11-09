@@ -205,14 +205,14 @@ class PlayerController extends ChangeNotifier {
   bool get currentSuperliked => _currentSuperliked;
   String? get currentReason => current == null ? null : reasons[current!.id];
 
-  String _fxKey() => '${settings.spatial}|${settings.eq}|${settings.reactiveBackground}|${settings.fullEffects}';
+  String _fxKey() => '${settings.spatial}|${settings.eq}|${settings.normalize}|${settings.reactiveBackground}|${settings.fullEffects}';
 
   /// The audio filter chain. Changing it mid-song makes libmpv rebuild the audio
   /// pipeline, which on some systems leaves playback stalled, so after a change
   /// the song is reopened at the same position (and resumes by itself).
   Future<void> _applyAudioFx({bool reopen = false}) async {
     if (!fxSupported) return;
-    await viz.applyFilters(spatial: settings.spatial, analyze: settings.reactiveBackground && settings.fullEffects, eq: settings.eq);
+    await viz.applyFilters(spatial: settings.spatial, analyze: settings.reactiveBackground && settings.fullEffects, eq: settings.eq, normalize: settings.normalize);
     if (reopen && current != null && !_loading) {
       await _reopenAt(position.value);
     }

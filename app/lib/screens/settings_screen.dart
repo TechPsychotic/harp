@@ -159,6 +159,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     itemBuilder: (_) => [for (final m in ['flat', 'bass', 'vocal', 'treble', 'loudness']) PopupMenuItem(value: m, child: Text(eqLabel(m)))],
                   ),
                 ),
+                SwitchListTile(
+                  title: const Text('Even volume'),
+                  subtitle: Text(
+                    PlayerController.fxSupported ? 'Quiet songs come up and loud ones down, so you don’t reach for the volume between songs.' : 'Coming to Android with the new audio engine (roadmap M2).',
+                    style: TextStyle(color: tok.textDim),
+                  ),
+                  value: s.normalize,
+                  onChanged: PlayerController.fxSupported ? s.setNormalize : null,
+                ),
                 ListTile(
                   title: const Text('Playback speed'),
                   subtitle: Text(s.speed == 1 ? 'Normal' : '${s.speed}× · the pitch stays the same', style: TextStyle(color: tok.textDim)),

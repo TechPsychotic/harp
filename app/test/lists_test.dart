@@ -22,6 +22,10 @@ void main() {
     expect(chain, startsWith('@eq:lavfi=[volume=-5dB,equalizer=f=60:t=q:w=1:g=6.0'));
     expect(chain.indexOf('@eq'), lessThan(chain.indexOf('@fx')));
     expect(chain.indexOf('@fx'), lessThan(chain.indexOf('@harp')));
+    final all = Visualizer.filterChain(spatial: 'wide', analyze: true, eq: 'bass', normalize: true);
+    expect(all, startsWith('@norm:lavfi=[dynaudnorm'), reason: 'levelling comes first');
+    expect(all.indexOf('@norm'), lessThan(all.indexOf('@eq')));
+    expect(Visualizer.filterChain(spatial: 'off', analyze: false), isNot(contains('@norm')));
     for (final p in ['bass', 'vocal', 'treble', 'loudness']) {
       expect(Visualizer.eqFilter(p), startsWith('volume=-'), reason: '$p leaves headroom');
     }

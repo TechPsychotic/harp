@@ -1429,3 +1429,61 @@ fn this_year() -> u32 {
     // Days since 1970 to a year is close enough for "this year or last".
     (1970 + now_secs() / 31_556_952) as u32
 }
+
+// --- browse: moods, genres, charts ---
+
+#[derive(Clone, Debug)]
+pub struct BrowseTileView {
+    pub title: String,
+    pub params: String,
+    /// ARGB
+    pub color: u32,
+}
+
+#[derive(Clone, Debug)]
+pub struct BrowseGroupView {
+    pub title: String,
+    pub tiles: Vec<BrowseTileView>,
+}
+
+#[derive(Clone, Debug)]
+pub struct SectionView {
+    pub title: String,
+    pub items: Vec<CollectionView>,
+}
+
+fn sections(v: Vec<ytmusic::Section>) -> Vec<SectionView> {
+    v.into_iter().map(|s| SectionView { title: s.title, items: s.items.into_iter().map(collection_view).collect() }).collect()
+}
+
+/// Moods and genres to browse (`country`: ISO code like "IN").
+pub fn browse_explore(country: String) -> Result<Vec<BrowseGroupView>, String> {
+    let v = ytmusic::explore(&country).map_err(e)?;
+    Ok(v.into_iter()
+        .map(|(title, tiles)| BrowseGroupView {
+            title,
+            tiles: tiles.into_iter().map(|t| BrowseTileView { title: t.title, params: t.params, color: t.color }).collect(),
+        })
+        .collect())
+}
+
+/// One mood or genre: rows of playlists.
+pub fn browse_category(params: String, country: String) -> Result<Vec<SectionView>, String> {
+    Ok(sections(ytmusic::category(&params, &country).map_err(e)?))
+}
+
+/// The charts for a country.
+pub fn browse_charts(country: String) -> Result<Vec<SectionView>, String> {
+    Ok(sections(ytmusic::charts(&country).map_err(e)?))
+}
+
+/// Looks lyrics up again under a title and artist you typed (for songs whose
+/// names are messy), and keeps what it finds for this song.
+pub fn lyrics_find(s: SongView, title: String, artist: String) -> Result<Option<LyricsView>, String> {
+    let en = eng()?;
+    let found = lrc::fetch(&s.id, &title, &artist, None, s.duration_secs).map_err(e)?;
+    Ok(found.map(|l| {
+        let _ = en.store.lock().unwrap().save_lyrics(&s.id, &l);
+        lyrics_view(l)
+    }))
+}

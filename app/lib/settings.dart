@@ -39,6 +39,9 @@ class AppSettings extends ChangeNotifier {
   /// Equalizer preset: "flat", "bass", "vocal", "treble" or "loudness".
   String eq = 'flat';
 
+  /// Even out the volume between songs (desktop for now).
+  bool normalize = false;
+
   /// Playback speed (1 = normal). Pitch stays the same.
   double speed = 1;
 
@@ -101,6 +104,7 @@ class AppSettings extends ChangeNotifier {
     prefetchOnMobile = await get('prefetch_mobile') == '1';
     lyricsScript = await get('lyrics_script') ?? 'both';
     eq = await get('eq') ?? 'flat';
+    normalize = await get('normalize') == '1';
     speed = double.tryParse(await get('speed') ?? '') ?? 1;
     notifyListeners();
   }
@@ -149,6 +153,12 @@ class AppSettings extends ChangeNotifier {
     eq = v;
     notifyListeners();
     await _save('eq', v);
+  }
+
+  Future<void> setNormalize(bool v) async {
+    normalize = v;
+    notifyListeners();
+    await _save('normalize', v ? '1' : '0');
   }
 
   Future<void> setSpeed(double v) async {

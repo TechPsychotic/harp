@@ -7,9 +7,9 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `cached_view`, `collection_view`, `e`, `eng`, `export_songs`, `home_artists`, `import_view`, `lyrics_view`, `queue_view`, `request`, `serde_json_string`, `song_from_json`, `song`, `spotify_embed_url`, `spotify_token`, `this_year`, `view`, `views`, `youtube_list_id`
+// These functions are ignored because they are not marked as `pub`: `cached_view`, `collection_view`, `e`, `eng`, `export_songs`, `home_artists`, `import_view`, `lyrics_view`, `queue_view`, `request`, `sections`, `serde_json_string`, `song_from_json`, `song`, `spotify_embed_url`, `spotify_token`, `this_year`, `view`, `views`, `youtube_list_id`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Engine`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// Starts the engine: opens the database, makes sure yt-dlp is installed.
 /// Safe to call again (does nothing the second time).
@@ -383,6 +383,35 @@ Future<List<CollectionView>> newReleases({
   offline: offline,
 );
 
+/// Moods and genres to browse (`country`: ISO code like "IN").
+Future<List<BrowseGroupView>> browseExplore({required String country}) =>
+    RustLib.instance.api.crateApiEngineBrowseExplore(country: country);
+
+/// One mood or genre: rows of playlists.
+Future<List<SectionView>> browseCategory({
+  required String params,
+  required String country,
+}) => RustLib.instance.api.crateApiEngineBrowseCategory(
+  params: params,
+  country: country,
+);
+
+/// The charts for a country.
+Future<List<SectionView>> browseCharts({required String country}) =>
+    RustLib.instance.api.crateApiEngineBrowseCharts(country: country);
+
+/// Looks lyrics up again under a title and artist you typed (for songs whose
+/// names are messy), and keeps what it finds for this song.
+Future<LyricsView?> lyricsFind({
+  required SongView s,
+  required String title,
+  required String artist,
+}) => RustLib.instance.api.crateApiEngineLyricsFind(
+  s: s,
+  title: title,
+  artist: artist,
+);
+
 /// What a backup file holds.
 class BackupInfoView {
   final int liked;
@@ -406,6 +435,50 @@ class BackupInfoView {
           liked == other.liked &&
           playlists == other.playlists &&
           plays == other.plays;
+}
+
+class BrowseGroupView {
+  final String title;
+  final List<BrowseTileView> tiles;
+
+  const BrowseGroupView({required this.title, required this.tiles});
+
+  @override
+  int get hashCode => title.hashCode ^ tiles.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BrowseGroupView &&
+          runtimeType == other.runtimeType &&
+          title == other.title &&
+          tiles == other.tiles;
+}
+
+class BrowseTileView {
+  final String title;
+  final String params;
+
+  /// ARGB
+  final int color;
+
+  const BrowseTileView({
+    required this.title,
+    required this.params,
+    required this.color,
+  });
+
+  @override
+  int get hashCode => title.hashCode ^ params.hashCode ^ color.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BrowseTileView &&
+          runtimeType == other.runtimeType &&
+          title == other.title &&
+          params == other.params &&
+          color == other.color;
 }
 
 class CollectionDetail {
@@ -876,6 +949,24 @@ class SearchHitView {
           kind == other.kind &&
           song == other.song &&
           collection == other.collection;
+}
+
+class SectionView {
+  final String title;
+  final List<CollectionView> items;
+
+  const SectionView({required this.title, required this.items});
+
+  @override
+  int get hashCode => title.hashCode ^ items.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SectionView &&
+          runtimeType == other.runtimeType &&
+          title == other.title &&
+          items == other.items;
 }
 
 class SongView {

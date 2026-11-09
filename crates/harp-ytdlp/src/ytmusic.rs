@@ -16,12 +16,18 @@ const UA: &str = "Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firef
 /// The "Songs" filter of YouTube Music's search page.
 const SONGS_FILTER: &str = "EgWKAQIIAWoKEAkQBRAKEAMQBA%3D%3D";
 
-fn context() -> Value {
-    json!({"client": {"clientName": "WEB_REMIX", "clientVersion": "1.20241127.01.00", "hl": "en", "gl": "US"}})
+fn context(gl: &str) -> Value {
+    json!({"client": {"clientName": "WEB_REMIX", "clientVersion": "1.20241127.01.00", "hl": "en", "gl": gl}})
 }
 
-fn post(endpoint: &str, mut body: Value) -> Result<Value> {
-    body["context"] = context();
+fn post(endpoint: &str, body: Value) -> Result<Value> {
+    post_in(endpoint, body, "US")
+}
+
+/// `gl`: the country whose charts and suggestions to get (ISO code, "IN", "US", …).
+fn post_in(endpoint: &str, mut body: Value, gl: &str) -> Result<Value> {
+    let gl = if gl.len() == 2 && gl.chars().all(|c| c.is_ascii_alphabetic()) { gl.to_ascii_uppercase() } else { "US".into() };
+    body["context"] = context(&gl);
     let agent: ureq::Agent = ureq::Agent::config_builder()
         .timeout_global(Some(Duration::from_secs(20)))
         .build()
@@ -684,6 +690,100 @@ pub fn latest_releases(related: &[Collection], this_year: u32, n: usize) -> Vec<
     v.into_iter().take(n).map(|(_, _, c)| c.clone()).collect()
 }
 
+// --- browse: moods, genres and charts ---
+
+/// A mood or genre button on the explore page.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Tile {
+    pub title: String,
+    /// Pass to [`category`].
+    pub params: String,
+    /// The button's colour stripe (ARGB).
+    pub color: u32,
+}
+
+/// A row of playlists, albums or artists with a heading.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Section {
+    pub title: String,
+    pub items: Vec<Collection>,
+}
+
+/// The explore page: groups ("Moods & moments", "Genres") of tiles.
+pub fn parse_explore(v: &Value) -> Vec<(String, Vec<Tile>)> {
+    let mut grids = vec![];
+    find_all(v, "gridRenderer", &mut grids);
+    grids
+        .into_iter()
+        .filter_map(|g| {
+            let title = g.pointer("/header/gridHeaderRenderer/title/runs/0/text").and_then(Value::as_str).unwrap_or("").to_string();
+            let tiles: Vec<Tile> = g
+                .get("items")?
+                .as_array()?
+                .iter()
+                .filter_map(|i| {
+                    let b = i.get("musicNavigationButtonRenderer")?;
+                    Some(Tile {
+                        title: b.pointer("/buttonText/runs/0/text").and_then(Value::as_str)?.to_string(),
+                        params: b.pointer("/clickCommand/browseEndpoint/params").and_then(Value::as_str)?.to_string(),
+                        color: b.pointer("/solid/leftStripeColor").and_then(Value::as_u64).unwrap_or(0xFF808080) as u32,
+                    })
+                })
+                .collect();
+            (!tiles.is_empty()).then_some((title, tiles))
+        })
+        .collect()
+}
+
+/// A card (album, playlist, artist) in a carousel: two-row cards and list rows.
+fn card(c: &Value) -> Option<Collection> {
+    if let Some(r) = c.get("musicTwoRowItemRenderer") {
+        let id = r.pointer("/navigationEndpoint/browseEndpoint/browseId").and_then(Value::as_str)?;
+        let kind = kind_of_id(id)?;
+        let title = r.pointer("/title/runs/0/text").and_then(Value::as_str)?.to_string();
+        let subtitle = r.pointer("/subtitle/runs").and_then(Value::as_array).map(|x| x.iter().filter_map(text).collect::<String>()).unwrap_or_default();
+        return Some(Collection { id: id.into(), title, subtitle, thumbnail: thumb(r), kind: kind.into() });
+    }
+    let r = c.get("musicResponsiveListItemRenderer")?;
+    let id = r.pointer("/navigationEndpoint/browseEndpoint/browseId").and_then(Value::as_str)?;
+    let kind = kind_of_id(id)?;
+    let col = |n: usize| {
+        r.pointer(&format!("/flexColumns/{n}/musicResponsiveListItemFlexColumnRenderer/text/runs"))
+            .and_then(Value::as_array)
+            .map(|x| x.iter().filter_map(text).collect::<String>())
+    };
+    Some(Collection { id: id.into(), title: col(0)?, subtitle: col(1).unwrap_or_default(), thumbnail: thumb(r), kind: kind.into() })
+}
+
+/// Every carousel on a page, as sections (empty ones and video-only ones left out).
+pub fn parse_sections(v: &Value) -> Vec<Section> {
+    let mut shelves = vec![];
+    find_all(v, "musicCarouselShelfRenderer", &mut shelves);
+    shelves
+        .into_iter()
+        .filter_map(|sh| {
+            let title = sh.pointer("/header/musicCarouselShelfBasicHeaderRenderer/title/runs/0/text").and_then(Value::as_str).unwrap_or("").to_string();
+            let items: Vec<Collection> = sh.get("contents")?.as_array()?.iter().filter_map(card).collect();
+            (!items.is_empty()).then_some(Section { title, items })
+        })
+        .collect()
+}
+
+/// Moods and genres to browse.
+pub fn explore(gl: &str) -> Result<Vec<(String, Vec<Tile>)>> {
+    Ok(parse_explore(&post_in("browse", json!({"browseId": "FEmusic_moods_and_genres"}), gl)?))
+}
+
+/// One mood or genre: rows of playlists.
+pub fn category(params: &str, gl: &str) -> Result<Vec<Section>> {
+    Ok(parse_sections(&post_in("browse", json!({"browseId": "FEmusic_moods_and_genres_category", "params": params}), gl)?))
+}
+
+/// The charts for a country: top songs / videos playlists, by language, top artists.
+pub fn charts(gl: &str) -> Result<Vec<Section>> {
+    Ok(parse_sections(&post_in("browse", json!({"browseId": "FEmusic_charts"}), gl)?))
+}
+
 // --- lyrics ---
 
 /// The lyrics page id from a `next` (watch) response: the "Lyrics" tab.
@@ -921,6 +1021,25 @@ mod tests {
         assert!(latest_releases(&related, 2030, 3).is_empty(), "nothing recent");
     }
 
+
+    #[test]
+    fn explore_category_and_charts() {
+        let ex = parse_explore(&fixture(include_str!("../tests/fixtures/ytm_explore.json")));
+        assert_eq!(ex.iter().map(|g| g.0.as_str()).collect::<Vec<_>>(), ["Moods & moments", "Genres"]);
+        assert_eq!(ex[0].1[0].title, "Chill");
+        assert!(ex[0].1[0].params.starts_with("ggMPO"));
+        assert_eq!(ex[0].1[0].color, 4288988671);
+        assert!(ex[1].1.len() > 30);
+        let cat = parse_sections(&fixture(include_str!("../tests/fixtures/ytm_category.json")));
+        assert_eq!(cat[0].title, "Coffee shop blends");
+        assert_eq!((cat[0].items[0].title.as_str(), cat[0].items[0].kind.as_str()), ("Coffee Shop Blend", "playlist"));
+        let ch = parse_sections(&fixture(include_str!("../tests/fixtures/ytm_charts.json")));
+        let titles: Vec<&str> = ch.iter().map(|s| s.title.as_str()).collect();
+        assert!(titles.contains(&"Video charts") && titles.contains(&"Top artists"), "{titles:?}");
+        let artists = ch.iter().find(|s| s.title == "Top artists").unwrap();
+        assert!(artists.items.iter().all(|a| a.kind == "artist" && !a.title.is_empty()));
+    }
+
 }
 
 /// Live check against the real service. Run with
@@ -964,5 +1083,19 @@ mod live {
         let new = latest_releases(&related, 2026, 3);
         eprintln!("{:?}", new.iter().map(|c| (&c.title, &c.subtitle)).collect::<Vec<_>>());
         assert!(!new.is_empty());
+    }
+
+    /// `cargo test -p harp-ytdlp -- --ignored live_browse`
+    #[test]
+    #[ignore]
+    fn live_browse() {
+        let ex = explore("IN").unwrap();
+        let chill = &ex[0].1[0];
+        let cat = category(&chill.params, "IN").unwrap();
+        let ch = charts("IN").unwrap();
+        eprintln!("{} groups; {}: {} rows; charts: {:?}", ex.len(), chill.title, cat.len(), ch.iter().map(|s| (&s.title, s.items.len())).collect::<Vec<_>>());
+        assert!(!cat.is_empty() && !ch.is_empty());
+        let (_, songs) = open(&cat[0].items[0].id).unwrap();
+        assert!(!songs.is_empty(), "a category playlist opens");
     }
 }

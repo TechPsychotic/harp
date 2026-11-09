@@ -9,6 +9,7 @@ import '../widgets/cover.dart';
 import '../widgets/shelf.dart';
 import '../widgets/song_actions.dart';
 import '../widgets/song_tile.dart';
+import 'browse.dart';
 import 'collection.dart';
 
 class SearchScreen extends StatefulWidget {
@@ -234,18 +235,19 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Widget _historyView(HarpTokens tok) {
-    if (_history.isEmpty) {
-      return EmptyState(icon: Icons.search_rounded, text: _offline ? 'Offline: search your downloaded songs' : 'Find artists, songs, albums and podcasts');
+    if (_history.isEmpty && _offline) {
+      return const EmptyState(icon: Icons.search_rounded, text: 'Offline: search your downloaded songs');
     }
     return ListView(padding: const EdgeInsets.only(top: 4, bottom: 16), children: [
-      Padding(
+      if (_history.isNotEmpty) Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
         child: Row(children: [
           const Expanded(child: Text('Recently Searched', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700))),
           TextButton(onPressed: () async { await api.searchHistoryClear(); _loadHistory(); }, child: const Text('Clear')),
         ]),
       ),
-      for (final q in _history) ...[
+      // A few recent searches, then moods, genres and charts to browse.
+      for (final q in _history.take(6)) ...[
         ListTile(
           leading: Icon(Icons.history_rounded, color: tok.textDim),
           title: Text(q),
@@ -257,6 +259,7 @@ class _SearchScreenState extends State<SearchScreen> {
         ),
         const Divider(indent: 56),
       ],
+      BrowseGrid(player: p),
     ]);
   }
 }

@@ -55,6 +55,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   BigInt dco_decode_box_autoadd_u_64(dynamic raw);
 
   @protected
+  BrowseGroupView dco_decode_browse_group_view(dynamic raw);
+
+  @protected
+  BrowseTileView dco_decode_browse_tile_view(dynamic raw);
+
+  @protected
   CollectionDetail dco_decode_collection_detail(dynamic raw);
 
   @protected
@@ -88,6 +94,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<String> dco_decode_list_String(dynamic raw);
 
   @protected
+  List<BrowseGroupView> dco_decode_list_browse_group_view(dynamic raw);
+
+  @protected
+  List<BrowseTileView> dco_decode_list_browse_tile_view(dynamic raw);
+
+  @protected
   List<CollectionView> dco_decode_list_collection_view(dynamic raw);
 
   @protected
@@ -116,6 +128,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<SearchHitView> dco_decode_list_search_hit_view(dynamic raw);
+
+  @protected
+  List<SectionView> dco_decode_list_section_view(dynamic raw);
 
   @protected
   List<SongView> dco_decode_list_song_view(dynamic raw);
@@ -167,6 +182,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   SearchHitView dco_decode_search_hit_view(dynamic raw);
+
+  @protected
+  SectionView dco_decode_section_view(dynamic raw);
 
   @protected
   SongView dco_decode_song_view(dynamic raw);
@@ -232,6 +250,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   BigInt sse_decode_box_autoadd_u_64(SseDeserializer deserializer);
 
   @protected
+  BrowseGroupView sse_decode_browse_group_view(SseDeserializer deserializer);
+
+  @protected
+  BrowseTileView sse_decode_browse_tile_view(SseDeserializer deserializer);
+
+  @protected
   CollectionDetail sse_decode_collection_detail(SseDeserializer deserializer);
 
   @protected
@@ -265,6 +289,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<String> sse_decode_list_String(SseDeserializer deserializer);
+
+  @protected
+  List<BrowseGroupView> sse_decode_list_browse_group_view(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<BrowseTileView> sse_decode_list_browse_tile_view(
+    SseDeserializer deserializer,
+  );
 
   @protected
   List<CollectionView> sse_decode_list_collection_view(
@@ -311,6 +345,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<SearchHitView> sse_decode_list_search_hit_view(
     SseDeserializer deserializer,
   );
+
+  @protected
+  List<SectionView> sse_decode_list_section_view(SseDeserializer deserializer);
 
   @protected
   List<SongView> sse_decode_list_song_view(SseDeserializer deserializer);
@@ -370,6 +407,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   SearchHitView sse_decode_search_hit_view(SseDeserializer deserializer);
+
+  @protected
+  SectionView sse_decode_section_view(SseDeserializer deserializer);
 
   @protected
   SongView sse_decode_song_view(SseDeserializer deserializer);
@@ -452,6 +492,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_box_autoadd_u_64(BigInt self, SseSerializer serializer);
 
   @protected
+  void sse_encode_browse_group_view(
+    BrowseGroupView self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_browse_tile_view(
+    BrowseTileView self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_collection_detail(
     CollectionDetail self,
     SseSerializer serializer,
@@ -495,6 +547,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_browse_group_view(
+    List<BrowseGroupView> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_browse_tile_view(
+    List<BrowseTileView> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_collection_view(
@@ -550,6 +614,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_search_hit_view(
     List<SearchHitView> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_section_view(
+    List<SectionView> self,
     SseSerializer serializer,
   );
 
@@ -618,6 +688,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_search_hit_view(SearchHitView self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_section_view(SectionView self, SseSerializer serializer);
 
   @protected
   void sse_encode_song_view(SongView self, SseSerializer serializer);

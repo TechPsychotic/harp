@@ -173,7 +173,8 @@ Goal: control over how it sounds. *(Needs M2 for Android.)*
 - ☐ Spatial audio: Wide stage and Headphone crossfeed on Android (M2); a true **HRTF binaural** mode
   with a bundled HRTF data set (FFmpeg `sofalizer`, or Steam Audio / OpenAL Soft, both of which
   support HRTF on Android).
-- ☐ Loudness normalisation (songs at even volume), crossfade, gapless (M2).
+- ◐ **Even volume** on desktop (a slow leveller, `dynaudnorm`; FFmpeg's `loudnorm` stalls
+  libmpv, checked). Android waits for M2. Crossfade and gapless: M2.
 - ☑ Playback speed, 0.75–2× with the pitch kept (Now Playing and Settings); resume position for
   long tracks and episodes (10 min or more, each remembered on its own).
 - ☑ Sleep timer.
@@ -202,8 +203,8 @@ Goal: lyrics as good as Apple Music's: word-by-word where they exist, line-synce
     and Unison directly. Its TTML handling is a good reference for our parser.
 - ☐ Parsers for TTML (word timings, background vocals, duet sides) and YRC, with tests on saved
   real responses.
-- ☐ Word-by-word highlighting (Apple-style sweep), duet alignment, bigger full-screen lyrics,
-  a manual "find lyrics" and a timing-offset nudge.
+- ◐ **Find lyrics by name** and a **timing nudge** (±0.5 s, saved per song) are in. Still to do:
+  word-by-word highlighting (Apple-style sweep), duet alignment, bigger full-screen lyrics.
 - ☐ Later: translation / romanisation lines where sources provide them.
 - **Done when:** popular songs show word-by-word lyrics; others fall back to lines; nothing breaks
   offline. Check each source's terms before shipping it.
@@ -219,7 +220,8 @@ Goal: lyrics as good as Apple Music's: word-by-word where they exist, line-synce
 - ☑ Backup and restore of the whole library to one file (Settings › Backup; 🧪). A restore is
   checked, then swapped in on the next start, keeping the old library aside.
 - ☐ Local files as a source (your own music on the device).
-- ☐ Browse: charts by country, genres, new releases.
+- ☑ Browse (Search tab): **Charts** for your country (from the device's region) and every
+  YouTube Music **mood and genre** as a tile, each opening rows of playlists. Checked live; 🧪.
 - ☐ A smarter taste model: song-level signals, time decay, time-of-day and mood, wider starter
   genres; recommendations from downloads when offline.
 - **Done when:** the Library tab can replace another music app's library for you.

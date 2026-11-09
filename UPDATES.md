@@ -8,6 +8,29 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-09 (late): browse charts and genres, lyrics tools, even volume
+
+**Browse (M5)**
+- The Search tab now shows a few recent searches, then **Browse**:
+  - **Charts** for your country (picked from your device's region): top songs and videos, charts
+    by language, and the top artists.
+  - Every YouTube Music **mood and genre** as a coloured tile: 12 moods and 38 genres, each
+    opening rows of playlists.
+- ✅ checked live (India: 13 rows for "Chill"; the charts with 40 top artists), and a playlist from
+  a mood opens and plays. 🧪 on saved real pages.
+
+**Lyrics (M4)**
+- **Wrong lyrics, or none? Search by name.** The ⚙ button at the top of the lyrics (or the button
+  under "No lyrics found") lets you type the title and artist; what it finds is kept for that song.
+- **Timing nudge:** if the lines run ahead of or behind the singing, move them by half a second at
+  a time. Remembered per song.
+
+**Sound (M3), desktop**
+- **Even volume** (Settings › Playback): quiet songs come up and loud ones down. It uses a slow
+  volume leveller. I first tried FFmpeg's standard loudness filter, but it **stalls playback**
+  in libmpv (checked), so it isn't used. ✅ the leveller plays together with the equalizer,
+  spatial audio and the loudness reader. Android waits for the new audio engine (M2).
+
 ## 2026-11-09 (night, last batch): playlists, top result, following artists
 
 **Asked for**

@@ -23,6 +23,9 @@ class _LyricsPaneState extends State<LyricsPane> {
   final _scroll = ScrollController();
   List<GlobalKey> _keys = [];
 
+  /// Lyrics timing nudge for this song, ms. Positive: show each line later.
+  int _offset = 0;
+
   /// Each line in English letters ("" where the line is already in them).
   List<String> _roman = [];
   bool get _hasRoman => _roman.any((r) => r.isNotEmpty);
@@ -43,16 +46,59 @@ class _LyricsPaneState extends State<LyricsPane> {
     }
   }
 
+  void _setLyrics(api.LyricsView? l) {
+    _lyrics = l;
+    _keys = List.generate(l?.lines.length ?? 0, (_) => GlobalKey());
+    _roman = l == null ? [] : api.romanizeLines(lines: [for (final x in l.lines) x.text]);
+    _active = -1;
+  }
+
+  /// Look the lyrics up under a title and artist you type (for messy names,
+  /// or when the wrong song's lyrics showed).
+  Future<void> _search() async {
+    final t = TextEditingController(text: widget.song.title), a = TextEditingController(text: widget.song.artist);
+    final go = await showDialog<bool>(
+      context: context,
+      useRootNavigator: true,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Find lyrics'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(controller: t, decoration: const InputDecoration(labelText: 'Song title')),
+          TextField(controller: a, decoration: const InputDecoration(labelText: 'Artist')),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Search')),
+        ],
+      ),
+    );
+    if (go != true || !mounted) return;
+    setState(() { _loading = true; _error = null; });
+    try {
+      final l = await api.lyricsFor(s: widget.song, allowNetwork: false); // what we had, in case nothing better turns up
+      final found = await api.lyricsFind(s: widget.song, title: t.text.trim(), artist: a.text.trim());
+      if (!mounted) return;
+      setState(() { _setLyrics(found ?? l); _loading = false; });
+      if (found == null) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No lyrics found under that name')));
+    } catch (e) {
+      if (mounted) setState(() { _error = 'Lyrics are unavailable right now.'; _loading = false; });
+    }
+  }
+
+  void _nudge(int ms) {
+    setState(() { _offset = ms == 0 ? 0 : _offset + ms; _active = -1; });
+    api.settingSet(key: 'lyr_off:${widget.song.id}', value: _offset == 0 ? '' : '$_offset');
+  }
+
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     final id = widget.song.id;
+    _offset = int.tryParse(await api.settingGet(key: 'lyr_off:$id') ?? '') ?? 0;
     try {
       final l = await api.lyricsFor(s: widget.song, allowNetwork: !widget.player.settings.offline);
       if (!mounted || id != widget.song.id) return;
       setState(() {
-        _lyrics = l;
-        _keys = List.generate(l?.lines.length ?? 0, (_) => GlobalKey());
-        _roman = l == null ? [] : api.romanizeLines(lines: [for (final x in l.lines) x.text]);
+        _setLyrics(l);
         _loading = false;
       });
     } catch (e) {
@@ -99,14 +145,20 @@ class _LyricsPaneState extends State<LyricsPane> {
     if (_error != null) return Center(child: Text(_error!, style: TextStyle(color: tok.textDim)));
     final l = _lyrics;
     if (l == null || l.lines.isEmpty) {
-      return Center(child: Text('No lyrics found for this song.', style: TextStyle(color: tok.textDim)));
+      return Center(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text('No lyrics found for this song.', style: TextStyle(color: tok.textDim)),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(onPressed: _search, icon: const Icon(Icons.search_rounded), label: const Text('Search by name')),
+        ]),
+      );
     }
     final settings = widget.player.settings;
     final mode = _hasRoman ? settings.lyricsScript : 'original';
     final list = ValueListenableBuilder<Duration>(
       valueListenable: widget.player.position,
       builder: (context, pos, _) {
-        final idx = l.synced ? _indexAt(pos.inMilliseconds) : -1;
+        final idx = l.synced ? _indexAt(pos.inMilliseconds - _offset) : -1;
         if (l.synced) _follow(idx);
         return ListView.builder(
           controller: _scroll,
@@ -123,7 +175,7 @@ class _LyricsPaneState extends State<LyricsPane> {
             return InkWell(
               key: _keys[i],
               borderRadius: BorderRadius.circular(Radii.control),
-              onTap: l.synced ? () => widget.player.seekTo(Duration(milliseconds: line.atMs)) : null,
+              onTap: l.synced ? () => widget.player.seekTo(Duration(milliseconds: (line.atMs + _offset).clamp(0, 1 << 31))) : null,
               child: AnimatedDefaultTextStyle(
                 duration: const Duration(milliseconds: 250),
                 style: TextStyle(
@@ -140,9 +192,30 @@ class _LyricsPaneState extends State<LyricsPane> {
         );
       },
     );
-    if (!_hasRoman) return list;
+    final tools = Positioned(
+      top: 4,
+      left: 4,
+      child: Row(children: [
+        PopupMenuButton<int>(
+          tooltip: 'Lyrics options',
+          icon: Icon(Icons.tune_rounded, color: tok.textDim),
+          onSelected: (v) => v == 1 ? _search() : _nudge(v == 2 ? -500 : (v == 3 ? 500 : 0)),
+          itemBuilder: (_) => [
+            const PopupMenuItem(value: 1, child: Text('Wrong lyrics? Search by name')),
+            if (l.synced) ...[
+              const PopupMenuItem(value: 2, child: Text('Lines come too late (−0.5 s)')),
+              const PopupMenuItem(value: 3, child: Text('Lines come too early (+0.5 s)')),
+              if (_offset != 0) const PopupMenuItem(value: 0, child: Text('Reset timing')),
+            ],
+          ],
+        ),
+        if (_offset != 0) Text('${_offset > 0 ? '+' : '−'}${(_offset.abs() / 1000).toStringAsFixed(1)} s', style: TextStyle(color: tok.textDim, fontSize: 12)),
+      ]),
+    );
+    if (!_hasRoman) return Stack(children: [list, tools]);
     return Stack(children: [
       list,
+      tools,
       Positioned(
         top: 4,
         right: 8,

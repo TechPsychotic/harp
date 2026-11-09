@@ -53,8 +53,14 @@ class Visualizer {
     };
   }
 
-  static String filterChain({required String spatial, required bool analyze, String eq = 'flat'}) {
+  /// Evens out the volume between songs (and within them, gently): a slow
+  /// leveller. (FFmpeg's `loudnorm` would be the textbook choice, but it stalls
+  /// libmpv's playback: checked.)
+  static const normalizeFilter = 'dynaudnorm=f=500:g=31:p=0.9:m=8';
+
+  static String filterChain({required String spatial, required bool analyze, String eq = 'flat', bool normalize = false}) {
     final parts = <String>[];
+    if (normalize) parts.add('@norm:lavfi=[$normalizeFilter]');
     final e = eqFilter(eq);
     if (e != null) parts.add('@eq:lavfi=[$e]');
     final fx = spatialFilter(spatial);
@@ -75,9 +81,9 @@ class Visualizer {
   }
 
   /// (Re)applies the audio filters. Safe if the player has no filter support.
-  Future<void> applyFilters({required String spatial, required bool analyze, String eq = 'flat'}) async {
+  Future<void> applyFilters({required String spatial, required bool analyze, String eq = 'flat', bool normalize = false}) async {
     try {
-      await _np?.setProperty('af', filterChain(spatial: spatial, analyze: analyze, eq: eq));
+      await _np?.setProperty('af', filterChain(spatial: spatial, analyze: analyze, eq: eq, normalize: normalize));
     } catch (_) {}
   }
 
