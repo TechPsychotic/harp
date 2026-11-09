@@ -14,6 +14,12 @@ import 'package:mpv_audio_kit/mpv_audio_kit.dart' as mak;
 class Visualizer {
   final ValueNotifier<double> level = ValueNotifier(0);
 
+  /// The live spectrum in [bandCount] bands, low to high, each 0..1 (eased,
+  /// and settling to zero when paused). Empty until the engine sends any.
+  final ValueNotifier<List<double>> bands = ValueNotifier(const []);
+  static const bandCount = 24;
+  List<double> _bandTarget = const [];
+
   /// True once real levels arrived from the engine.
   bool get isReal => _real;
 
@@ -127,6 +133,23 @@ class Visualizer {
     _real = true;
     _lastReal = DateTime.now();
     _target = levelFromBands(f.bands);
+    _bandTarget = squeeze(f.bands, bandCount);
+  }
+
+  /// Averages a spectrum down to [n] bands.
+  static List<double> squeeze(List<double> src, int n) {
+    if (src.isEmpty) return const [];
+    return [
+      for (var i = 0; i < n; i++)
+        () {
+          final a = i * src.length ~/ n, b = math.max(a + 1, (i + 1) * src.length ~/ n);
+          var sum = 0.0;
+          for (var j = a; j < b; j++) {
+            sum += src[j];
+          }
+          return (sum / (b - a)).clamp(0.0, 1.0);
+        }(),
+    ];
   }
 
   /// A pulse that feels like a beat: tempo and strength come from the song id.
@@ -152,6 +175,20 @@ class Visualizer {
     } else {
       target = synthetic(songSeed, position().inMilliseconds / 1000);
     }
+    // Bands ease the same way (settle to zero when paused or without a spectrum).
+    final live = _enabled && playing && DateTime.now().difference(_lastReal) < const Duration(milliseconds: 1500);
+    final goal = live ? _bandTarget : const <double>[];
+    final now = bands.value;
+    if (goal.isNotEmpty || now.any((v) => v > 0.005)) {
+      bands.value = [
+        for (var i = 0; i < bandCount; i++)
+          () {
+            final c = i < now.length ? now[i] : 0.0;
+            final t = i < goal.length ? goal[i] : 0.0;
+            return t > c ? c + (t - c) * 0.55 : c + (t - c) * 0.12;
+          }(),
+      ];
+    }
     final cur = level.value;
     // Quick attack, slower release: feels like a meter.
     final next = target > cur ? cur + (target - cur) * 0.6 : cur + (target - cur) * 0.14;
@@ -164,5 +201,6 @@ class Visualizer {
     _timer?.cancel();
     _fft?.cancel();
     level.dispose();
+    bands.dispose();
   }
 }

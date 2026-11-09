@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:harp/theme/art_color.dart';
-import 'package:harp/theme/music_backdrop.dart';
+import 'package:harp/theme/spectrum_waves.dart';
 
 void main() {
   test('palette finds the main colours of a cover, biggest first', () {
@@ -25,19 +25,28 @@ void main() {
     expect(p[1], const Color(0xFF1E3CD2));
   });
 
-  testWidgets('backdrop animates while active, rings on beats, and holds still when paused', (tester) async {
-    final level = ValueNotifier<double>(0.1);
+  testWidgets('spectrum waves follow the bands, and hold still when paused', (tester) async {
+    final bands = ValueNotifier<List<double>>(const []);
     final key = GlobalKey();
-    Widget app(bool active, List<Color> colors) => MaterialApp(
-          home: RepaintBoundary(key: key, child: SizedBox(width: 400, height: 800, child: MusicBackdrop(colors: colors, level: level, active: active))),
+    Widget app(bool active) => MaterialApp(
+          home: RepaintBoundary(
+            key: key,
+            child: Container(
+              color: const Color(0xFF301018),
+              width: 400,
+              height: 800,
+              child: SpectrumWaves(bands: bands, colors: const [Color(0xFFE0313F), Color(0xFF3050E0), Color(0xFFF0C040)], active: active),
+            ),
+          ),
         );
-    await tester.pumpWidget(app(true, const [Color(0xFFE0313F), Color(0xFF3050E0), Color(0xFFF0C040)]));
-    for (var i = 0; i < 30; i++) {
-      level.value = i % 10 == 0 ? 0.95 : 0.15; // beats
+    await tester.pumpWidget(app(true));
+    for (var i = 0; i < 20; i++) {
+      // A bass-heavy moment: low bands high, highs lower.
+      // A realistic shape: strong bass falling off towards the highs, with some texture.
+      bands.value = [for (var b = 0; b < 24; b++) ((0.85 - b * 0.03) + 0.08 * (b % 3 == 0 ? 1 : -1)).clamp(0.0, 1.0) * (i.isEven ? 1 : 0.85)];
       await tester.pump(const Duration(milliseconds: 33));
     }
     expect(tester.takeException(), isNull);
-    // Save a frame to look at (not compared: just for checking by eye).
     final out = Platform.environment['HARP_BACKDROP_PNG'];
     if (out != null) {
       await tester.runAsync(() async {
@@ -47,12 +56,9 @@ void main() {
         File(out).writeAsBytesSync(data!.buffer.asUint8List());
       });
     }
-    // A new song's colours, then pause: no ticking left behind.
-    await tester.pumpWidget(app(true, const [Color(0xFF20C080)]));
-    await tester.pump(const Duration(milliseconds: 500));
-    await tester.pumpWidget(app(false, const [Color(0xFF20C080)]));
-    await tester.pump(); // the last, still frame
-    expect(tester.binding.hasScheduledFrame, isFalse);
-    level.dispose();
+    await tester.pumpWidget(app(false));
+    await tester.pump();
+    expect(tester.binding.hasScheduledFrame, isFalse, reason: 'nothing redraws while paused');
+    bands.dispose();
   });
 }

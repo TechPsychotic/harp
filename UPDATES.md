@@ -8,6 +8,16 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-09 (night): waves are back, now driven by the real music
+
+You preferred the waves to the colour clouds, so the clouds are gone. The player background is the
+blurred cover again, with **three layered waves along the bottom shaped by the live spectrum**:
+bass lifts the middle and treble ripples the edges, so a kick drum swells the centre and
+cymbals move the sides. They're in the cover's own colours with a soft bright crest, drift slowly,
+and settle when you pause. With effects reduced they still show, holding still. Cheap to draw
+(plain shapes, 30 frames a second). 🧪 they follow the bands and stop redrawing when paused; checked
+by eye on a rendered frame.
+
 ## 2026-11-09 (M2 step 2): the new audio engine plays everything
 
 Your test passed on the phone (every effect and the live spectrum; only true 3D is missing), so

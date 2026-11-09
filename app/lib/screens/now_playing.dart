@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import '../player/controller.dart';
 import '../src/rust/api/engine.dart' as api;
 import '../theme/glass.dart';
-import '../theme/music_backdrop.dart';
+import '../theme/spectrum_waves.dart';
 import '../widgets/cover.dart';
 import '../widgets/lyrics_pane.dart';
 import '../widgets/song_actions.dart';
@@ -59,20 +59,19 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
               body: s == null
                   ? const Center(child: Text('Nothing playing'))
                   : Stack(children: [
-                      Positioned.fill(
-                        child: player.settings.flatBackground
-                            ? _Backdrop(song: s, accent: accent, blurArt: false)
-                            : ValueListenableBuilder<List<Color>>(
-                                valueListenable: player.palette,
-                                builder: (context, colors, _) => MusicBackdrop(
-                                  colors: colors,
-                                  level: player.viz.level,
-                                  // Moves only while playing with full effects; otherwise a still picture.
-                                  active: player.playing && player.settings.fullEffects && player.settings.reactiveBackground,
-                                  origin: MediaQuery.sizeOf(context).width > 820 ? const Alignment(-0.45, 0) : const Alignment(0, -0.35),
-                                ),
-                              ),
-                      ),
+                      Positioned.fill(child: _Backdrop(song: s, accent: accent, blurArt: !player.settings.flatBackground)),
+                      // Waves shaped by the live spectrum; still (but shown) with effects reduced.
+                      if (player.settings.reactiveBackground && !player.settings.flatBackground)
+                        Positioned.fill(
+                          child: ValueListenableBuilder<List<Color>>(
+                            valueListenable: player.palette,
+                            builder: (context, colors, _) => SpectrumWaves(
+                              bands: player.viz.bands,
+                              colors: colors,
+                              active: player.playing && player.settings.fullEffects,
+                            ),
+                          ),
+                        ),
                       SafeArea(
                         child: GestureDetector(
                           // Swipe down to close, like a music app's player.
