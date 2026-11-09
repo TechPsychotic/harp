@@ -27,7 +27,7 @@ mkdir -p "$CACHE" "$OUT" "$ASSETS"
 fetch() { # file url sum
 	if [ ! -f "$CACHE/$1" ] || ! echo "$3  $CACHE/$1" | sha256sum -c --status; then
 		echo "downloading $2"
-		curl -fsSL --retry 5 -o "$CACHE/$1.part" "$2" && mv "$CACHE/$1.part" "$CACHE/$1"
+		curl -fsSL --retry 8 --retry-delay 4 --retry-all-errors -o "$CACHE/$1.part" "$2" && mv "$CACHE/$1.part" "$CACHE/$1"
 	fi
 	echo "$3  $CACHE/$1" | sha256sum -c --status || { echo "$1 does not match its pinned SHA-256" >&2; rm -f "$CACHE/$1"; exit 1; }
 }
