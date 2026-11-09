@@ -27,6 +27,7 @@ void main() {
 
   testWidgets('spectrum waves follow the bands, and hold still when paused', (tester) async {
     final bands = ValueNotifier<List<double>>(const []);
+    final level = ValueNotifier<double>(0.7);
     final key = GlobalKey();
     Widget app(bool active) => MaterialApp(
           home: RepaintBoundary(
@@ -35,7 +36,7 @@ void main() {
               color: const Color(0xFF301018),
               width: 400,
               height: 800,
-              child: SpectrumWaves(bands: bands, colors: const [Color(0xFFE0313F), Color(0xFF3050E0), Color(0xFFF0C040)], active: active),
+              child: SpectrumWaves(bands: bands, level: level, color: Colors.white, active: active),
             ),
           ),
         );
@@ -60,5 +61,6 @@ void main() {
     await tester.pump();
     expect(tester.binding.hasScheduledFrame, isFalse, reason: 'nothing redraws while paused');
     bands.dispose();
+    level.dispose();
   });
 }

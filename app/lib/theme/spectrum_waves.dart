@@ -4,21 +4,22 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
-/// Waves along the bottom of Now Playing, shaped by the music's live spectrum:
-/// bass lifts the middle, treble the sides, so a kick drum swells the centre
-/// and cymbals ripple the edges. Three layers in the cover's colours drift
-/// slowly over each other, each with a soft bright crest.
+/// Soft waves along the bottom of Now Playing that rise with the music (its
+/// real loudness, from the engine's spectrum) and roll gently.
 ///
 /// When [active] is false (paused, or effects turned down) the waves hold
 /// still at a low, calm shape and nothing is redrawn.
 class SpectrumWaves extends StatefulWidget {
-  const SpectrumWaves({super.key, required this.bands, required this.colors, required this.active});
+  const SpectrumWaves({super.key, required this.bands, required this.level, required this.color, required this.active});
 
   /// Spectrum bands, low to high, 0..1 (may be empty).
   final ValueListenable<List<double>> bands;
 
-  /// Colours from the artwork (at least one).
-  final List<Color> colors;
+  /// Loudness, 0..1.
+  final ValueListenable<double> level;
+
+  /// The waves' colour (white on dark, a deep tint of the cover on light).
+  final Color color;
   final bool active;
 
   @override
@@ -69,22 +70,22 @@ class _SpectrumWavesState extends State<SpectrumWaves> with SingleTickerProvider
   @override
   Widget build(BuildContext context) => RepaintBoundary(
         child: CustomPaint(
-          painter: _WavesPainter(phase: _phase, bands: widget.bands, colors: widget.colors, active: widget.active),
+          painter: _WavesPainter(phase: _phase, bands: widget.bands, level: widget.level, color: widget.color, active: widget.active),
           size: Size.infinite,
         ),
       );
 }
 
 class _WavesPainter extends CustomPainter {
-  _WavesPainter({required this.phase, required this.bands, required this.colors, required this.active}) : super(repaint: phase);
+  _WavesPainter({required this.phase, required this.bands, required this.level, required this.color, required this.active})
+      : super(repaint: phase);
   final ValueNotifier<double> phase;
   final ValueListenable<List<double>> bands;
-  final List<Color> colors;
+  final ValueListenable<double> level;
+  final Color color;
   final bool active;
 
-  /// The spectrum at position x (0..1 across the screen): mirrored, so the
-  /// lowest band sits in the middle and the highest at both edges.
-  /// Neighbouring bands blended a few times, so the waves roll instead of stepping.
+  /// Neighbouring bands blended a few times, so the shape rolls instead of stepping.
   static List<double> smooth(List<double> b) {
     var v = b;
     for (var k = 0; k < 3; k++) {
@@ -95,75 +96,43 @@ class _WavesPainter extends CustomPainter {
     return v;
   }
 
+  /// The spectrum at x (0..1 across): mirrored, lowest band in the middle.
   static double at(List<double> b, double x) {
     if (b.isEmpty) return 0;
-    final d = (x - 0.5).abs() * 2; // 0 middle .. 1 edge
+    final d = (x - 0.5).abs() * 2;
     final f = d * (b.length - 1);
     final i = f.floor().clamp(0, b.length - 1);
     final j = math.min(i + 1, b.length - 1);
     final t = f - i;
-    // Highs are naturally quieter: lift them a little so the edges move too.
     return (b[i] * (1 - t) + b[j] * t) * (1 + 0.6 * d);
   }
 
-  Color _layerColor(int i) {
-    final c = colors.isEmpty ? Colors.white : colors[i % colors.length];
-    final hsl = HSLColor.fromColor(c);
-    return hsl.withLightness(hsl.lightness.clamp(0.55, 0.75)).withSaturation(hsl.saturation.clamp(0.0, 0.8)).toColor();
-  }
-
+  /// The original soft waves (three translucent layers of rolling sine
+  /// shapes), now lifted by the song's real loudness, with the spectrum
+  /// adding a little extra where the energy is.
   @override
   void paint(Canvas canvas, Size size) {
+    final lv = active ? level.value.clamp(0.0, 1.0) : 0.0;
     final b = active ? smooth(bands.value) : const <double>[];
     final t = phase.value;
-    final w = size.width, h = size.height;
-    const n = 48;
-    for (var layer = 2; layer >= 0; layer--) {
-      // Back layers sit higher and reach further, front ones lower: depth.
-      final base = h * (0.86 - layer * 0.045);
-      final reach = h * 0.20 * (1 + layer * 0.2); // how high the music can lift it
-      final pts = <Offset>[];
-      for (var i = 0; i <= n; i++) {
-        final x = i / n;
-        final s = at(b, x);
-        // A slow swell that drifts sideways, different per layer, plus the music.
-        final drift = math.sin(x * (2.2 + layer * 0.9) * math.pi + t * (0.6 + layer * 0.35) + layer * 1.7);
-        final y = base - h * 0.012 * (1 + drift) - reach * s * (0.8 + 0.2 * drift);
-        pts.add(Offset(x * w, y));
+    final baseY = size.height * 0.84;
+    for (var layer = 0; layer < 3; layer++) {
+      final amp = (6 + 46 * lv) * (1 - layer * 0.25);
+      final path = Path()..moveTo(0, size.height);
+      const steps = 40;
+      for (var i = 0; i <= steps; i++) {
+        final x = i / steps;
+        final ph = x * (2.2 + layer) * math.pi + t * (1.2 + layer * 0.7);
+        final shape = 0.75 + 0.5 * at(b, x); // the spectrum's touch: subtle
+        path.lineTo(size.width * x, baseY + layer * 10 - amp * shape * (0.55 * math.sin(ph) + 0.45 * math.sin(ph * 1.9 + layer)));
       }
-      // A smooth curve through the points (midpoint quadratics).
-      final crest = Path()..moveTo(pts.first.dx, pts.first.dy);
-      for (var i = 1; i < pts.length; i++) {
-        final m = Offset((pts[i - 1].dx + pts[i].dx) / 2, (pts[i - 1].dy + pts[i].dy) / 2);
-        crest.quadraticBezierTo(pts[i - 1].dx, pts[i - 1].dy, m.dx, m.dy);
-      }
-      crest.lineTo(pts.last.dx, pts.last.dy);
-      final fill = Path.from(crest)
-        ..lineTo(w, h)
-        ..lineTo(0, h)
+      path
+        ..lineTo(size.width, size.height)
         ..close();
-      final c = _layerColor(layer);
-      final top = pts.map((p) => p.dy).reduce(math.min);
-      canvas.drawPath(
-        fill,
-        Paint()
-          ..shader = LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [c.withValues(alpha: 0.34 - layer * 0.08), c.withValues(alpha: 0.10)],
-          ).createShader(Rect.fromLTRB(0, top, w, h)),
-      );
-      // The bright crest line.
-      canvas.drawPath(
-        crest,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = layer == 0 ? 2 : 1.2
-          ..color = Color.lerp(c, Colors.white, 0.4)!.withValues(alpha: 0.55 - layer * 0.15),
-      );
+      canvas.drawPath(path, Paint()..color = color.withValues(alpha: 0.16 - layer * 0.04));
     }
   }
 
   @override
-  bool shouldRepaint(_WavesPainter old) => old.colors != colors || old.active != active || old.bands != bands;
+  bool shouldRepaint(_WavesPainter old) => old.color != color || old.active != active || old.bands != bands || old.level != level;
 }

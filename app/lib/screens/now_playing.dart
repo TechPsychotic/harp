@@ -48,14 +48,14 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     return ValueListenableBuilder<Color>(
       valueListenable: player.accent,
       builder: (context, accent, _) => Theme(
-        // Always the dark look here, like music apps' players.
-        data: harpTheme(accent, Brightness.dark),
+        // Follows the app's light / dark setting.
+        data: harpTheme(accent, Theme.of(context).brightness),
         child: ListenableBuilder(
           listenable: player,
           builder: (context, _) {
             final s = player.current;
             return Scaffold(
-              backgroundColor: Colors.black,
+              backgroundColor: context.tok.ink,
               body: s == null
                   ? const Center(child: Text('Nothing playing'))
                   : Stack(children: [
@@ -63,13 +63,11 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                       // Waves shaped by the live spectrum; still (but shown) with effects reduced.
                       if (player.settings.reactiveBackground && !player.settings.flatBackground)
                         Positioned.fill(
-                          child: ValueListenableBuilder<List<Color>>(
-                            valueListenable: player.palette,
-                            builder: (context, colors, _) => SpectrumWaves(
-                              bands: player.viz.bands,
-                              colors: colors,
-                              active: player.playing && player.settings.fullEffects,
-                            ),
+                          child: SpectrumWaves(
+                            bands: player.viz.bands,
+                            level: player.viz.level,
+                            color: Theme.of(context).brightness == Brightness.dark ? Colors.white : HSLColor.fromColor(accent).withLightness(0.32).toColor(),
+                            active: player.playing && player.settings.fullEffects,
                           ),
                         ),
                       SafeArea(
@@ -90,6 +88,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
   }
 
   Widget _body(BuildContext context, api.SongView s, BoxConstraints c) {
+    final fg = _fg(context);
     final wide = c.maxWidth > 820;
     final artSide = wide ? 380.0 : (c.maxWidth - 48).clamp(200, 420).toDouble();
     final art = _lyrics
@@ -118,11 +117,9 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
           );
     final controls = _Controls(player: player, song: s, lyricsOn: _lyrics, onLyrics: () => setState(() => _lyrics = !_lyrics), onArtist: () => _openArtist(s));
     final top = Row(children: [
-      IconButton(icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 32, color: Colors.white), onPressed: () => Navigator.of(context).pop()),
+      IconButton(icon: Icon(Icons.keyboard_arrow_down_rounded, size: 32, color: fg), onPressed: () => Navigator.of(context).pop()),
       const Spacer(),
-      Container(width: 36, height: 5, decoration: BoxDecoration(color: Colors.white38, borderRadius: BorderRadius.circular(3))),
-      const Spacer(),
-      IconButton(icon: const Icon(Icons.more_horiz_rounded, color: Colors.white), onPressed: () => showSongSheet(context, player, s)),
+      IconButton(icon: Icon(Icons.more_horiz_rounded, color: fg), onPressed: () => showSongSheet(context, player, s)),
     ]);
     if (wide) {
       return Column(children: [
@@ -138,8 +135,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
   }
 }
 
-/// A deep wash of the artwork's colour with the artwork itself blurred behind.
-/// Drawn once per song (it does not animate).
+/// A wash of the artwork's colour with the artwork itself blurred behind:
+/// deep in dark mode, pale in light mode. Drawn once per song (no animation).
 class _Backdrop extends StatelessWidget {
   const _Backdrop({required this.song, required this.accent, required this.blurArt});
   final api.SongView song;
@@ -148,25 +145,37 @@ class _Backdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
     final hsl = HSLColor.fromColor(accent);
-    final topC = hsl.withLightness((hsl.lightness * 0.55).clamp(0.12, 0.34)).toColor();
-    final bottom = hsl.withLightness(0.06).toColor();
+    final topC = dark ? hsl.withLightness((hsl.lightness * 0.55).clamp(0.12, 0.34)).toColor() : hsl.withLightness(0.86).withSaturation((hsl.saturation * 0.7).clamp(0.0, 0.6)).toColor();
+    final bottom = dark ? hsl.withLightness(0.06).toColor() : hsl.withLightness(0.96).withSaturation((hsl.saturation * 0.4).clamp(0.0, 0.3)).toColor();
     return RepaintBoundary(
       child: Stack(fit: StackFit.expand, children: [
         DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [topC, bottom]))),
         if (blurArt)
           Opacity(
-            opacity: 0.45,
+            opacity: dark ? 0.45 : 0.30,
             child: ImageFiltered(
               imageFilter: ImageFilter.blur(sigmaX: 60, sigmaY: 60, tileMode: TileMode.decal),
               child: FittedBox(fit: BoxFit.cover, child: Cover(url: song.thumbnail, seed: song.id, size: 200, radius: 0)),
             ),
           ),
-        const DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.transparent, Colors.black45]))),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Colors.transparent, dark ? Colors.black45 : Colors.white54],
+            ),
+          ),
+        ),
       ]),
     );
   }
 }
+
+/// Text and icon colour on the player: white on dark, near-black on light.
+Color _fg(BuildContext context) => Theme.of(context).brightness == Brightness.dark ? Colors.white : const Color(0xFF16161C);
 
 class _Controls extends StatelessWidget {
   const _Controls({required this.player, required this.song, required this.lyricsOn, required this.onLyrics, required this.onArtist});
@@ -179,15 +188,16 @@ class _Controls extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = song;
-    const dim = Color(0xB3FFFFFF);
+    final fg = _fg(context);
+    final dim = fg.withValues(alpha: 0.7);
     return Column(mainAxisSize: MainAxisSize.min, children: [
       Row(children: [
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(s.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: Colors.white)),
+            Text(s.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: fg)),
             GestureDetector(
               onTap: onArtist,
-              child: Text(s.artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 18, color: dim)),
+              child: Text(s.artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 18, color: dim)),
             ),
           ]),
         ),
@@ -204,7 +214,7 @@ class _Controls extends StatelessWidget {
             padding: const EdgeInsets.all(10),
             child: Icon(
               player.currentSuperliked ? Icons.auto_awesome_rounded : (s.liked ? Icons.favorite_rounded : Icons.favorite_border_rounded),
-              color: Colors.white,
+              color: fg,
               size: 26,
             ),
           ),
@@ -216,9 +226,9 @@ class _Controls extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.only(top: 4),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
-              const Icon(Icons.auto_awesome_rounded, size: 13, color: dim),
+              Icon(Icons.auto_awesome_rounded, size: 13, color: dim),
               const SizedBox(width: 6),
-              Flexible(child: Text(player.currentReason!, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12.5, color: dim))),
+              Flexible(child: Text(player.currentReason!, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: dim))),
             ]),
           ),
         ),
@@ -232,16 +242,16 @@ class _Controls extends StatelessWidget {
             return Column(children: [
               SliderTheme(
                 data: SliderTheme.of(context).copyWith(
-                  activeTrackColor: Colors.white,
-                  inactiveTrackColor: Colors.white24,
-                  thumbColor: Colors.white,
+                  activeTrackColor: fg,
+                  inactiveTrackColor: fg.withValues(alpha: 0.16),
+                  thumbColor: fg,
                   overlayShape: SliderComponentShape.noOverlay,
                 ),
                 child: Slider(value: f, onChanged: dur == Duration.zero ? null : player.seekFraction),
               ),
               Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                Text(_fmt(pos), style: const TextStyle(color: dim, fontSize: 12)),
-                Text(dur == Duration.zero ? '' : '-${_fmt(dur - pos)}', style: const TextStyle(color: dim, fontSize: 12)),
+                Text(_fmt(pos), style: TextStyle(color: dim, fontSize: 12)),
+                Text(dur == Duration.zero ? '' : '-${_fmt(dur - pos)}', style: TextStyle(color: dim, fontSize: 12)),
               ]),
             ]);
           },
@@ -249,32 +259,32 @@ class _Controls extends StatelessWidget {
       ),
       const SizedBox(height: 10),
       Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-        GlassIconButton(icon: Icons.fast_rewind_rounded, size: 64, color: Colors.white, onPressed: player.previous),
+        GlassIconButton(icon: Icons.fast_rewind_rounded, size: 64, color: fg, onPressed: player.previous),
         player.loading
-            ? const SizedBox(width: 84, height: 84, child: Padding(padding: EdgeInsets.all(26), child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white)))
-            : GlassIconButton(icon: player.playing ? Icons.pause_rounded : Icons.play_arrow_rounded, size: 84, color: Colors.white, onPressed: player.togglePlay),
-        GlassIconButton(icon: Icons.fast_forward_rounded, size: 64, color: Colors.white, onPressed: player.next),
+            ? SizedBox(width: 84, height: 84, child: Padding(padding: EdgeInsets.all(26), child: CircularProgressIndicator(strokeWidth: 3, color: fg)))
+            : GlassIconButton(icon: player.playing ? Icons.pause_rounded : Icons.play_arrow_rounded, size: 84, color: fg, onPressed: player.togglePlay),
+        GlassIconButton(icon: Icons.fast_forward_rounded, size: 64, color: fg, onPressed: player.next),
       ]),
       if (player.error != null)
         Padding(padding: const EdgeInsets.only(top: 6), child: Text(player.error!, textAlign: TextAlign.center, maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFFFF8A8A), fontSize: 13))),
       if (player.skippedRecently != null) ...[
         const SizedBox(height: 8),
-        Text('Skipped “${player.skippedRecently!.title}”. Why?', style: const TextStyle(color: dim, fontSize: 12.5)),
+        Text('Skipped “${player.skippedRecently!.title}”. Why?', style: TextStyle(color: dim, fontSize: 12.5)),
         const SizedBox(height: 6),
         Wrap(alignment: WrapAlignment.center, spacing: 6, runSpacing: 6, children: [
           for (final (k, l) in const [('wrong_genre', 'Wrong genre'), ('not_artist', 'Not this artist'), ('not_mood', 'Not the mood'), ('overplayed', 'Overplayed')])
-            ActionChip(label: Text(l), onPressed: () => player.tagSkip(k), backgroundColor: Colors.white12, side: BorderSide.none, labelStyle: const TextStyle(color: Colors.white, fontSize: 12.5)),
+            ActionChip(label: Text(l), onPressed: () => player.tagSkip(k), backgroundColor: fg.withValues(alpha: 0.10), side: BorderSide.none, labelStyle: TextStyle(color: fg, fontSize: 12.5)),
         ]),
       ],
       const SizedBox(height: 10),
       Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
         IconButton(
           tooltip: 'Lyrics',
-          icon: Icon(Icons.lyrics_rounded, color: lyricsOn ? Colors.white : dim),
-          style: IconButton.styleFrom(backgroundColor: lyricsOn ? Colors.white24 : Colors.transparent),
+          icon: Icon(Icons.lyrics_rounded, color: lyricsOn ? fg : dim),
+          style: IconButton.styleFrom(backgroundColor: lyricsOn ? fg.withValues(alpha: 0.16) : Colors.transparent),
           onPressed: onLyrics,
         ),
-        IconButton(tooltip: 'Add to playlist', icon: const Icon(Icons.playlist_add_rounded, color: dim), onPressed: () => addToPlaylistDialog(context, player, [s])),
+        IconButton(tooltip: 'Add to playlist', icon: Icon(Icons.playlist_add_rounded, color: dim), onPressed: () => addToPlaylistDialog(context, player, [s])),
         ValueListenableBuilder<Set<String>>(
           valueListenable: player.downloading,
           builder: (context, busy, _) => IconButton(
@@ -298,7 +308,7 @@ class _Controls extends StatelessWidget {
             final sp = player.settings.speed;
             return TextButton(
               onPressed: () => showSpeedSheet(context, player),
-              style: TextButton.styleFrom(foregroundColor: sp == 1 ? dim : Colors.white, backgroundColor: sp == 1 ? Colors.transparent : Colors.white24, minimumSize: const Size(44, 40)),
+              style: TextButton.styleFrom(foregroundColor: sp == 1 ? dim : fg, backgroundColor: sp == 1 ? Colors.transparent : fg.withValues(alpha: 0.16), minimumSize: Size(44, 40)),
               child: Text(speedLabel(sp), style: const TextStyle(fontWeight: FontWeight.w700)),
             );
           },
@@ -309,11 +319,11 @@ class _Controls extends StatelessWidget {
               : player.sleepAt != null
                   ? 'Sleep in ${player.sleepAt!.difference(DateTime.now()).inMinutes + 1} min'
                   : 'Sleep timer',
-          icon: Icon(Icons.bedtime_rounded, color: player.sleepAt != null || player.sleepAfterSong ? Colors.white : dim),
-          style: IconButton.styleFrom(backgroundColor: player.sleepAt != null || player.sleepAfterSong ? Colors.white24 : Colors.transparent),
+          icon: Icon(Icons.bedtime_rounded, color: player.sleepAt != null || player.sleepAfterSong ? fg : dim),
+          style: IconButton.styleFrom(backgroundColor: player.sleepAt != null || player.sleepAfterSong ? fg.withValues(alpha: 0.16) : Colors.transparent),
           onPressed: () => showSleepSheet(context, player),
         ),
-        IconButton(tooltip: 'Queue', icon: const Icon(Icons.format_list_bulleted_rounded, color: dim), onPressed: () => showQueueSheet(context, player)),
+        IconButton(tooltip: 'Queue', icon: Icon(Icons.format_list_bulleted_rounded, color: dim), onPressed: () => showQueueSheet(context, player)),
       ]),
     ]);
   }

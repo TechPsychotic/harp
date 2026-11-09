@@ -450,7 +450,9 @@ class PlayerController extends ChangeNotifier {
           return;
         }
       }
-      await _player.open(mak.Media(st.url, start: resume, httpHeaders: st.local ? null : {for (final (k, v) in st.headers) k: v}));
+      // play: true — this engine doesn't start a newly opened song by itself
+      // (the old one did), which left skips and autoplay paused.
+      await _player.open(mak.Media(st.url, start: resume, httpHeaders: st.local ? null : {for (final (k, v) in st.headers) k: v}), play: true);
       if (gen != _loadGen) {
         superseded = true;
         return;

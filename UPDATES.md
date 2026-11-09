@@ -8,6 +8,19 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-09 (night, fixes): skips play again, light-mode player, the original waves
+
+- **Fixed: skipping (and autoplay) left the next song paused.** The new engine doesn't start a
+  newly opened song unless told to; the old one did. Now it's told to. ✅ reproduced and checked on
+  the laptop's engine (without the fix the next song loads paused; with it, it plays).
+- **The player follows light mode.** In light mode it's a pale wash of the cover's colour with dark
+  text and controls; in dark mode, as before.
+- **The original waves are back** (the soft translucent ones you liked better). The difference: they
+  now rise with the song's real loudness, with the spectrum adding a subtle lift where the energy
+  is. White in dark mode, a deep tint of the cover in light mode.
+- **The little bar at the top of the player is gone.** It looked like a handle but did nothing.
+  Swipe down on the player (or the ⌄ button) still closes it.
+
 ## 2026-11-09 (night): waves are back, now driven by the real music
 
 You preferred the waves to the colour clouds, so the clouds are gone. The player background is the
