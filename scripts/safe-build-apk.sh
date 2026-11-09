@@ -1,5 +1,6 @@
 #!/bin/bash
-# Builds Harp's Android APK on this laptop without running it out of memory.
+# Builds Harp (the Android APK, or the Linux app) on this laptop without running it out
+# of memory.
 #
 # This laptop has frozen under heavy builds, usually with several running at once
 # (a Gradle daemon alone holds 3-4 GB). So this script:
@@ -9,12 +10,18 @@
 #   3. FREEZES the whole build when the machine starts to thrash (memory pressure high
 #      or free memory low) and resumes it when things settle.
 # CPU temperature is deliberately ignored.
-# Usage: scripts/safe-build-apk.sh [max-wait-minutes]   (default 30)
+# Usage: scripts/safe-build-apk.sh [max-wait-minutes] [apk|linux]   (defaults: 30, apk)
 set -u
 cd "$(dirname "$0")/../app"
 export PATH="$HOME/development/flutter/bin:$PATH" ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}"
+# libmpv for the Linux build, if it was extracted locally (no root needed).
+if [ -d "$HOME/.local/mpv/usr/lib64/pkgconfig" ]; then
+  export PKG_CONFIG_PATH="$HOME/.local/mpv/usr/lib64/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+  export LD_LIBRARY_PATH="$HOME/.local/mpv/usr/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+fi
 UNIT=harp-build-$$
 MAXWAIT=${1:-30}
+TARGET=${2:-apk}
 NEED_MB=${HARP_NEED_MB:-6000}      # available memory needed to start
 CAP_GB=${HARP_CAP_GB:-6}           # the build may not use more than this (RAM)
 FREEZE_BELOW_MB=1500               # freeze if available memory falls under this...
@@ -38,7 +45,7 @@ echo "starting with $(avail_mb) MB available" | tee -a "$LOG"
 
 systemd-run --user --scope --quiet --unit="$UNIT" \
   -p MemoryHigh=$((CAP_GB-1))G -p MemoryMax=${CAP_GB}G -p MemorySwapMax=1G \
-  nice -n 15 ionice -c3 flutter build apk --release --target-platform android-arm64 >>"$LOG" 2>&1 &
+  nice -n 15 ionice -c3 bash -c 'if [ "$0" = linux ]; then flutter build linux --release; else flutter build apk --release --target-platform android-arm64; fi' "$TARGET" >>"$LOG" 2>&1 &
 BUILD=$!
 sleep 3
 frozen=0 low=999999

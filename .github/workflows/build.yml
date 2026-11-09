@@ -1,10 +1,10 @@
 name: build
 
+# Day-to-day CI runs on the laptop (scripts/ci-local.sh). GitHub Actions only builds
+# releases (v* tags) and runs when started by hand, to spend as few minutes as possible.
 on:
   push:
-    branches: [main]
     tags: ["v*"]
-  pull_request:
   workflow_dispatch:
 
 concurrency:

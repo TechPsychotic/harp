@@ -8,6 +8,17 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-09 (evening): CI moves to the laptop
+
+- **`scripts/ci-local.sh`** runs Harp's CI here: Rust tests, Flutter analysis and tests, then the
+  Linux app and the APK one after the other through the memory-guarded builder, then checks the
+  APK (notification icon, bundled Python / QuickJS / Rust core, media service). `--install`
+  installs the Linux build and copies the APK to `~/Downloads/Harp/`.
+- **GitHub Actions now runs only for release tags (`v*`) or when started by hand**, so ordinary
+  pushes use no Actions minutes.
+- The guarded builder (`scripts/safe-build-apk.sh`) also builds the Linux app now
+  (`scripts/safe-build-apk.sh 30 linux`).
+
 ## 2026-11-09 (latest): redesign, search the way music apps do it, Spotify and Apple Music import
 
 **Search**

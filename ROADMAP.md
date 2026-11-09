@@ -61,7 +61,7 @@ the idea and the code. `UPDATES.md` is the dated log of changes; this file is th
 | B16 | No Spotify-style controls in the notification | 🟡 | Same cause as B15. Not confirmed. |
 | B17 | Two settings entries (Home header + tab) | ✅ | The Home gear is gone. |
 | B19 | Search history saved every keystroke | ✅ | History is saved only when you press search / enter or open a result (song, album, artist, podcast), like Spotify. Typing still searches as you go, but saves nothing. |
-| B18 | Android builds failing on GitHub | 🟡 | GitHub's release downloads returned 504 for hours. CI now caches and retries; local building works (✅). CI not yet green again. |
+| B18 | Android builds failing on GitHub | 🟡 | GitHub's release downloads returned 504 for hours. Day-to-day CI now runs on the laptop (`scripts/ci-local.sh`, ✅); GitHub Actions only for releases or by hand, with caches and retries. |
 
 **Problems (19): 5 fixed and checked, 13 fixed but waiting for your confirmation, 1 partly fixed.**
 
@@ -118,7 +118,7 @@ account access without a paid developer key).**
    (B7, B11, B12, B15, B16). If anything fails, the crash report and frame times give data.
 2. Try the Spotify account connection with a real account (F31) and an Apple Music link (F32).
 3. Review the redesign on the phone and the laptop, and adjust (F26).
-4. Get CI green again (B18) so every commit produces an APK.
+4. Run `scripts/ci-local.sh --install` after changes; use GitHub Actions only for releases.
 
 **P1: the experience**
 6. Redesign, second pass (F26): swipe-down to close Now Playing, motion between mini player and
