@@ -108,6 +108,10 @@ CREATE TABLE IF NOT EXISTS playlist_items(
   id INTEGER PRIMARY KEY, playlist_id INTEGER NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
   pos INTEGER NOT NULL, song_id TEXT NOT NULL, song_json TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS playlist_items_pl ON playlist_items(playlist_id, pos);
+CREATE TABLE IF NOT EXISTS saved(
+  id TEXT PRIMARY KEY, kind TEXT NOT NULL, title TEXT NOT NULL,
+  subtitle TEXT NOT NULL DEFAULT '', thumbnail TEXT NOT NULL DEFAULT '',
+  at INTEGER NOT NULL DEFAULT (strftime('%s','now')));
 CREATE TABLE IF NOT EXISTS downloads(
   song_id TEXT PRIMARY KEY, song_json TEXT NOT NULL, path TEXT NOT NULL,
   bytes INTEGER NOT NULL, quality TEXT NOT NULL,
@@ -121,6 +125,8 @@ const MIGRATIONS: &[&str] = &[
     "ALTER TABLE playlists ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;",
     // 2: lyrics now come from more sources, so look again for songs that had none.
     "DELETE FROM lyrics WHERE json LIKE '%\"lines\":[]%';",
+    // 3: playlists that download new songs by themselves.
+    "ALTER TABLE playlists ADD COLUMN autodl INTEGER NOT NULL DEFAULT 0;",
 ];
 
 pub(crate) fn migrate(conn: &Connection) -> Result<()> {

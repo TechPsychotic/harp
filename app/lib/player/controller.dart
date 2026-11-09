@@ -145,6 +145,9 @@ class PlayerController extends ChangeNotifier {
   /// Bumped when likes, playlists or downloads change, so screens reload.
   final ValueNotifier<int> libraryRev = ValueNotifier(0);
 
+  /// Bumped when you follow an artist or save an album (pages showing those reload).
+  final ValueNotifier<int> savedRev = ValueNotifier(0);
+
   /// The playing song's artwork colour (the app tints itself with it).
   final ValueNotifier<Color> accent = ValueNotifier(HarpColors.harpRed);
 

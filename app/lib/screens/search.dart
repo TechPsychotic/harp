@@ -7,6 +7,7 @@ import '../src/rust/api/engine.dart' as api;
 import '../theme/glass.dart';
 import '../widgets/cover.dart';
 import '../widgets/shelf.dart';
+import '../widgets/song_actions.dart';
 import '../widgets/song_tile.dart';
 import 'collection.dart';
 
@@ -221,7 +222,7 @@ class _SearchScreenState extends State<SearchScreen> {
     final artists = of('artist'), albums = of('album'), podcasts = of('podcast');
     return ListView(padding: const EdgeInsets.only(top: 6, bottom: 16), children: [
       const SectionHeader('Top Result'),
-      Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: _TopResult(hit: top, onPlay: _playSong, onOpen: _open)),
+      Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: _TopResult(hit: top, player: p, onPlay: _playSong, onOpen: _open)),
       if (songs.isNotEmpty) ...[
         SectionHeader('Songs', action: 'See All', onAction: () { setState(() { _kind = 'songs'; }); _run(_ctl.text); }),
         for (final (s, kind) in songs.take(5)) SongTile(song: s, player: p, subtitle: kind == 'episode' ? 'Episode' : null, onPlay: () => _playSong(s)),
@@ -261,8 +262,9 @@ class _SearchScreenState extends State<SearchScreen> {
 }
 
 class _TopResult extends StatelessWidget {
-  const _TopResult({required this.hit, required this.onPlay, required this.onOpen});
+  const _TopResult({required this.hit, required this.player, required this.onPlay, required this.onOpen});
   final api.SearchHitView hit;
+  final PlayerController player;
   final void Function(api.SongView) onPlay;
   final void Function(api.CollectionView) onOpen;
 
@@ -273,8 +275,11 @@ class _TopResult extends StatelessWidget {
     final title = s?.title ?? c?.title ?? '';
     final kind = switch (hit.kind) { 'song' => 'Song', 'episode' => 'Episode', 'artist' => 'Artist', 'album' => 'Album', 'podcast' => 'Podcast', _ => '' };
     final sub = s != null ? '$kind · ${s.artist}' : (c!.kind == 'artist' ? kind : '$kind · ${c.subtitle}');
-    return GlassCard(
-      padding: const EdgeInsets.all(14),
+    // Hold (or ⋮) for Play next, Add to queue, Add to playlist… without playing it.
+    return GestureDetector(
+      onLongPress: s == null ? null : () => showSongSheet(context, player, s),
+      child: GlassCard(
+      padding: const EdgeInsets.fromLTRB(14, 14, 4, 14),
       onTap: () => s != null ? onPlay(s) : onOpen(c!),
       child: Row(children: [
         Cover(url: s?.thumbnail ?? c!.thumbnail, seed: s?.id ?? c!.id, size: 92, radius: Radii.tile, round: c?.kind == 'artist'),
@@ -286,8 +291,12 @@ class _TopResult extends StatelessWidget {
             Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: tok.textDim, fontSize: 14)),
           ]),
         ),
-        if (s != null) Icon(Icons.play_circle_fill_rounded, size: 44, color: Theme.of(context).colorScheme.primary),
+        if (s != null) ...[
+          Icon(Icons.play_circle_fill_rounded, size: 44, color: Theme.of(context).colorScheme.primary),
+          SongMenu(song: s, player: player),
+        ],
       ]),
+      ),
     );
   }
 }

@@ -4,8 +4,10 @@ import '../player/controller.dart';
 import '../src/rust/api/engine.dart' as api;
 import '../theme/glass.dart';
 import '../widgets/playlist_art.dart';
+import '../widgets/shelf.dart';
 import '../widgets/song_actions.dart';
 import '../widgets/song_tile.dart';
+import 'collection.dart';
 import 'import_screen.dart';
 import 'playlist.dart';
 
@@ -20,7 +22,7 @@ class LibraryScreen extends StatefulWidget {
 
 class _LibraryScreenState extends State<LibraryScreen> {
   List<api.PlaylistView> _playlists = [];
-  int _liked = 0, _downloads = 0;
+  int _liked = 0, _downloads = 0, _artists = 0, _albums = 0;
 
   /// Playlists: "recent" or "name". Pinned ones stay on top either way.
   String _plSort = 'recent';
@@ -40,15 +42,20 @@ class _LibraryScreenState extends State<LibraryScreen> {
     super.initState();
     _load();
     p.libraryRev.addListener(_load);
+    p.savedRev.addListener(_load);
   }
 
   @override
   void dispose() {
     p.libraryRev.removeListener(_load);
+    p.savedRev.removeListener(_load);
     super.dispose();
   }
 
   Future<void> _load() async {
+    final ar = await api.savedCollections(kind: 'artist');
+    final al = await api.savedCollections(kind: 'other');
+    if (mounted) setState(() { _artists = ar.length; _albums = al.length; });
     final pl = await api.playlists();
     final l = await api.likedSongs();
     final d = await api.downloads();
@@ -91,6 +98,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
       PageTitle('Library', actions: [IconButton(tooltip: 'New playlist', icon: Icon(Icons.add_rounded, color: accent), onPressed: _newPlaylist)]),
       row(Icons.favorite_rounded, 'Liked Songs', '$_liked', () => _push(SongListScreen(player: p, kind: 'liked'))),
       row(Icons.arrow_circle_down_rounded, 'Downloaded', '$_downloads', () => _push(SongListScreen(player: p, kind: 'downloads'))),
+      row(Icons.mic_external_on_rounded, 'Artists', '$_artists', () => _push(SavedScreen(player: p, kind: 'artist'))),
+      row(Icons.album_rounded, 'Albums & Podcasts', '$_albums', () => _push(SavedScreen(player: p, kind: 'other'))),
       row(Icons.history_rounded, 'Recently Played', null, () => _push(SongListScreen(player: p, kind: 'history'))),
       row(Icons.swap_horiz_rounded, 'Bring Your Music Over', null, () => _push(ImportScreen(player: p))),
       SectionHeader(
@@ -107,6 +116,70 @@ class _LibraryScreenState extends State<LibraryScreen> {
       else
         for (final pl in _shownPlaylists) _PlaylistRow(pl: pl, onTap: () => _push(PlaylistScreen(player: p, playlist: pl)), onPin: () => _pin(pl)),
     ]);
+  }
+}
+
+/// Artists you follow, or albums, playlists and podcasts you saved, as a grid.
+class SavedScreen extends StatefulWidget {
+  const SavedScreen({super.key, required this.player, required this.kind});
+  final PlayerController player;
+
+  /// "artist" or "other"
+  final String kind;
+
+  @override
+  State<SavedScreen> createState() => _SavedScreenState();
+}
+
+class _SavedScreenState extends State<SavedScreen> {
+  List<api.CollectionView>? _items;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+    widget.player.savedRev.addListener(_load);
+  }
+
+  @override
+  void dispose() {
+    widget.player.savedRev.removeListener(_load);
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final v = await api.savedCollections(kind: widget.kind);
+    if (mounted) setState(() => _items = v);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final artists = widget.kind == 'artist';
+    final items = _items;
+    return Scaffold(
+      appBar: AppBar(title: Text(artists ? 'Artists' : 'Albums & Podcasts')),
+      body: items == null
+          ? const Center(child: CircularProgressIndicator())
+          : items.isEmpty
+              ? EmptyState(
+                  icon: artists ? Icons.mic_external_on_rounded : Icons.album_rounded,
+                  text: artists ? 'Follow an artist from their page to see them here' : 'Save an album, playlist or podcast (the + at the top of its page)',
+                )
+              : LayoutBuilder(builder: (context, c) {
+                  final per = (c.maxWidth / 170).floor().clamp(2, 8);
+                  final side = (c.maxWidth - 32 - (per - 1) * 14) / per;
+                  return GridView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: per, mainAxisSpacing: 16, crossAxisSpacing: 14, mainAxisExtent: side + 52),
+                    itemCount: items.length,
+                    itemBuilder: (_, i) => CollectionCard(
+                      c: items[i],
+                      size: side,
+                      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CollectionScreen(player: widget.player, info: items[i]))),
+                    ),
+                  );
+                }),
+    );
   }
 }
 

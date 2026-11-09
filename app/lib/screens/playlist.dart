@@ -20,6 +20,7 @@ class PlaylistScreen extends StatefulWidget {
 class _PlaylistScreenState extends State<PlaylistScreen> {
   List<api.SongView> _songs = [];
   late String _name = widget.playlist.name;
+  late bool _autoDl = widget.playlist.autoDownload;
   bool _loaded = false;
 
   PlayerController get p => widget.player;
@@ -41,7 +42,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   Future<void> _load() async {
     final s = await api.playlistSongs(id: id);
     ThumbCache.precache(s.map((x) => x.thumbnail));
-    if (mounted) setState(() { _songs = s; _loaded = true; });
+    final me = (await api.playlists()).where((x) => x.id == id).firstOrNull;
+    if (mounted) setState(() { _songs = s; _loaded = true; _autoDl = me?.autoDownload ?? _autoDl; });
   }
 
   Future<void> _menu(String v) async {
@@ -59,12 +61,19 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         final file = await api.playlistExport(id: id, format: f);
         if (!mounted) return;
         await saveExport(context, file);
+      case 'nodl':
+        await api.playlistAutoDownload(id: id, on_: false);
+        setState(() => _autoDl = false);
+        if (mounted) toast(context, 'New songs won’t be downloaded');
       case 'download':
+        // From now on, songs added to this playlist are downloaded too.
+        await api.playlistAutoDownload(id: id, on_: true);
+        setState(() => _autoDl = true);
         var n = 0;
         for (final s in _songs.where((s) => !s.downloaded)) {
           if (await p.download(s) == null) n++;
         }
-        if (mounted) toast(context, 'Downloaded $n songs');
+        if (mounted) toast(context, 'Downloaded $n songs. New songs here will download too.');
       case 'delete':
         final ok = await showDialog<bool>(
           context: context,
@@ -94,11 +103,13 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_horiz_rounded),
             onSelected: _menu,
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'export', child: ListTile(leading: Icon(Icons.ios_share_rounded), title: Text('Export…'), dense: true)),
-              PopupMenuItem(value: 'download', child: ListTile(leading: Icon(Icons.download_rounded), title: Text('Download All'), dense: true)),
-              PopupMenuItem(value: 'rename', child: ListTile(leading: Icon(Icons.edit_rounded), title: Text('Rename'), dense: true)),
-              PopupMenuItem(value: 'delete', child: ListTile(leading: Icon(Icons.delete_outline_rounded, color: Colors.redAccent), title: Text('Delete Playlist'), dense: true)),
+            itemBuilder: (_) => [
+              const PopupMenuItem(value: 'export', child: ListTile(leading: Icon(Icons.ios_share_rounded), title: Text('Export…'), dense: true)),
+              const PopupMenuItem(value: 'download', child: ListTile(leading: Icon(Icons.download_rounded), title: Text('Download All'), dense: true)),
+              if (_autoDl)
+                const PopupMenuItem(value: 'nodl', child: ListTile(leading: Icon(Icons.file_download_off_rounded), title: Text('Stop downloading new songs'), dense: true)),
+              const PopupMenuItem(value: 'rename', child: ListTile(leading: Icon(Icons.edit_rounded), title: Text('Rename'), dense: true)),
+              const PopupMenuItem(value: 'delete', child: ListTile(leading: Icon(Icons.delete_outline_rounded, color: Colors.redAccent), title: Text('Delete Playlist'), dense: true)),
             ],
           ),
         ],
@@ -112,7 +123,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                   _Mosaic(songs: _songs, size: 230),
                   const SizedBox(height: 16),
                   Text(_name, textAlign: TextAlign.center, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: -0.4)),
-                  Text('${_songs.length} songs', style: TextStyle(color: tok.textDim, fontSize: 14)),
+                  Text('${_songs.length} songs${_autoDl ? ' · new songs download automatically' : ''}', style: TextStyle(color: tok.textDim, fontSize: 14)),
                   const SizedBox(height: 16),
                   if (_songs.isNotEmpty)
                     Padding(

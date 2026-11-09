@@ -8,6 +8,26 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-09 (night, last batch): playlists, top result, following artists
+
+**Asked for**
+- **New songs go on top of a playlist** (a batch you add at once keeps its order). 🧪
+- **Downloaded playlists stay downloaded.** Choosing "Download All" on a playlist also turns on
+  auto-download: songs you add later download by themselves. The playlist says so under its name,
+  and its menu has "Stop downloading new songs".
+- **Search's top result** now has the ⋮ menu (and a long press): Play next, Add to queue, Add to
+  playlist, Download, Share, without playing it first.
+
+**Next milestone (M5): following artists**
+- **Follow artists** with the button on their page, and **save albums, playlists and podcasts**
+  with the + at the top of theirs. They're in Library › Artists and Library › Albums & Podcasts. 🧪
+- **New Releases** on Listen Now: the newest albums and singles (this year and last) from the
+  artists you follow, newest first, mixed so one artist doesn't fill the shelf. Refreshed every
+  12 hours or when you pull to refresh. ✅ checked live on an artist page.
+
+**Fixed (my mistake):** the previous update overwrote a saved test response that another test
+used, so one Rust test was failing. It never reached a build; it's restored and all tests pass.
+
 ## 2026-11-09 (night, later still): a new player background, more lyrics
 
 **Player**

@@ -69,7 +69,7 @@ the idea and the code. `UPDATES.md` is the dated log of changes; this file is th
 
 **Problems (23): 5 fixed and checked, 17 fixed but waiting for your confirmation, 1 partly fixed.**
 
-### 1b. Features you asked for (45)
+### 1b. Features you asked for (48)
 
 | # | Feature | Status | Notes |
 |---|---|---|---|
@@ -117,9 +117,12 @@ the idea and the code. `UPDATES.md` is the dated log of changes; this file is th
 | F43 | Share a song | 🟡 | Share sheet on Android, link copied on desktop (a YouTube Music link anyone can open). |
 | F44 | The star button in the player was pointless | ✅ | It is now **Add to playlist**. Superlike moved to a long press on the heart (the heart turns into a sparkle). |
 | F45 | A better music-reactive player background | 🟡 | New moving background made from the cover's own colours: soft clouds of light that drift, swell with loudness and move faster with energy; beats send a ring of light out from behind the artwork. Still when paused or with effects reduced. 🧪 renders and stops ticking when paused. Feel on the phone not confirmed (Android's loudness is still simulated until M2). |
+| F46 | New songs go on top of a playlist | ✅ | Added songs appear first (a batch keeps its order). 🧪 |
+| F47 | Playlists you downloaded keep downloading new songs | 🟡 | "Download All" now also turns on auto-download for that playlist (shown under its name; "Stop downloading new songs" in its menu). Songs added later download by themselves. |
+| F48 | Search's top result can't be queued or added to a playlist | ✅ | It has a ⋮ menu and a long press, like every other song. |
 | F33 | The same for Amazon Music | ⛔ | No public API for listeners (Amazon's web API is invite-only), and shared playlist pages are a JavaScript app with no songs in the page (checked). Workarounds: paste the list, or a CSV from a converter such as TuneMyMusic (already imports). |
 
-**Features (45): 27 done and checked, 14 done but waiting for your confirmation, 3 in progress,
+**Features (48): 29 done and checked, 15 done but waiting for your confirmation, 3 in progress,
 1 not possible (Amazon Music); plus parts that are not possible (Dolby Atmos, Apple Music
 account access without a paid developer key).**
 
@@ -206,8 +209,10 @@ Goal: lyrics as good as Apple Music's: word-by-word where they exist, line-synce
   offline. Check each source's terms before shipping it.
 
 ### M5 · Library and discovery
-- ◐ Your most played artists and their albums on Listen Now. Still to do: albums and artists in
-  the library; follow artists; new releases from followed artists.
+- ☑ Your most played artists and their albums on Listen Now; **follow artists** (button on their
+  page) and **save albums, playlists and podcasts** (Library › Artists, Albums & Podcasts);
+  **New Releases** on Listen Now from the artists you follow (this year and last, newest first,
+  checked live; 🧪 on a saved artist page).
 - ◐ Sort: Liked and Downloaded (recent, title, artist), Library playlists (recent, name; pinned
   stay on top), remembered. Playlist covers are automatic mosaics. Still to do: filter, folders,
   custom covers.

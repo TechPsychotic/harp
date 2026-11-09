@@ -664,6 +664,26 @@ pub fn parse_all(v: &Value) -> Vec<Hit> {
     out
 }
 
+/// The year in a release's subtitle ("Single • 2026", "2025").
+pub fn release_year(subtitle: &str) -> Option<u32> {
+    subtitle.split(['•', '·']).map(str::trim).filter_map(|p| p.parse::<u32>().ok()).find(|y| (1900..=2200).contains(y))
+}
+
+/// An artist's newest albums and singles (from their page's "related"
+/// items): released this year or last, newest first, at most `n`.
+pub fn latest_releases(related: &[Collection], this_year: u32, n: usize) -> Vec<Collection> {
+    let mut v: Vec<(u32, usize, &Collection)> = related
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| c.kind == "album")
+        .filter_map(|(i, c)| release_year(&c.subtitle).map(|y| (y, i, c)))
+        .filter(|(y, _, _)| *y + 1 >= this_year)
+        .collect();
+    // Newest year first; within a year, the page's own order (it lists newest first).
+    v.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+    v.into_iter().take(n).map(|(_, _, c)| c.clone()).collect()
+}
+
 // --- lyrics ---
 
 /// The lyrics page id from a `next` (watch) response: the "Lyrics" tab.
@@ -878,6 +898,29 @@ mod tests {
         assert!(parse_search(&json!({"contents": [1, 2, {"a": null}]})).is_empty());
         assert!(parse_radio(&json!("nope")).is_empty());
     }
+
+    #[test]
+    fn lyrics_tab_and_page() {
+        let next: Value = serde_json::from_str(include_str!("../tests/fixtures/ytm_next_lyrics.json")).unwrap();
+        assert_eq!(lyrics_browse_id(&next).as_deref(), Some("MPLYt_dp7y3z76YA5"));
+        let page: Value = serde_json::from_str(include_str!("../tests/fixtures/ytm_lyrics.json")).unwrap();
+        let (text, credit) = parse_lyrics(&page).unwrap();
+        assert!(text.starts_with("हम तेरे बिन"));
+        assert_eq!(credit, "LyricFind");
+        assert!(parse_lyrics(&json!({})).is_none());
+    }
+
+    #[test]
+    fn new_releases_from_an_artist_page() {
+        let (_, _, related, _) = parse_artist(&fixture(include_str!("../tests/fixtures/ytm_artist.json")), "UCDxKh1gFWeYsqePvgVzmPoQ");
+        assert_eq!(release_year("Single • 2026"), Some(2026));
+        assert_eq!(release_year("4 min 38 sec • Someone"), None);
+        let new = latest_releases(&related, 2026, 3);
+        assert_eq!(new.len(), 3);
+        assert!(new.iter().all(|c| c.kind == "album" && release_year(&c.subtitle) == Some(2026)));
+        assert!(latest_releases(&related, 2030, 3).is_empty(), "nothing recent");
+    }
+
 }
 
 /// Live check against the real service. Run with
@@ -911,14 +954,15 @@ mod live {
         assert!(!r.is_empty());
     }
 
+
+
+    /// `cargo test -p harp-ytdlp -- --ignored live_new_releases`
     #[test]
-    fn lyrics_tab_and_page() {
-        let next: Value = serde_json::from_str(include_str!("../tests/fixtures/ytm_next.json")).unwrap();
-        assert_eq!(lyrics_browse_id(&next).as_deref(), Some("MPLYt_dp7y3z76YA5"));
-        let page: Value = serde_json::from_str(include_str!("../tests/fixtures/ytm_lyrics.json")).unwrap();
-        let (text, credit) = parse_lyrics(&page).unwrap();
-        assert!(text.starts_with("हम तेरे बिन"));
-        assert_eq!(credit, "LyricFind");
-        assert!(parse_lyrics(&json!({})).is_none());
+    #[ignore]
+    fn live_new_releases() {
+        let (_, _, related) = open_artist("UCDxKh1gFWeYsqePvgVzmPoQ").unwrap();
+        let new = latest_releases(&related, 2026, 3);
+        eprintln!("{:?}", new.iter().map(|c| (&c.title, &c.subtitle)).collect::<Vec<_>>());
+        assert!(!new.is_empty());
     }
 }

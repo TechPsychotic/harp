@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -26,6 +27,7 @@ class _HomeScreenState extends State<HomeScreen> {
   api.HomeFeed? _feed;
   List<(String, String)> _moods = [];
   api.TasteStats? _stats;
+  List<api.CollectionView> _releases = [];
   bool _refreshing = false;
   bool _wasOffline = false;
 
@@ -39,6 +41,15 @@ class _HomeScreenState extends State<HomeScreen> {
     p.libraryRev.addListener(_reloadLocal);
     p.settings.addListener(_onSettings);
     p.addListener(_onPlayer);
+    p.savedRev.addListener(_loadReleases);
+  }
+
+  /// New albums and singles from artists you follow (kept for 12 hours).
+  Future<void> _loadReleases({bool refresh = false}) async {
+    try {
+      final r = await api.newReleases(refresh: refresh, offline: p.settings.offline);
+      if (mounted) setState(() => _releases = r);
+    } catch (_) {}
   }
 
   @override
@@ -46,6 +57,7 @@ class _HomeScreenState extends State<HomeScreen> {
     p.libraryRev.removeListener(_reloadLocal);
     p.settings.removeListener(_onSettings);
     p.removeListener(_onPlayer);
+    p.savedRev.removeListener(_loadReleases);
     super.dispose();
   }
 
@@ -76,6 +88,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final stats = await api.tasteStats();
     if (mounted) setState(() { _moods = moods; _stats = stats; });
     _apply(await api.homeFeed(refresh: false, offline: true));
+    unawaited(_loadReleases());
     if (!p.settings.offline) {
       if (mounted) setState(() => _refreshing = true);
       try {
@@ -94,6 +107,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _forceRefresh() async {
     if (p.settings.offline) return;
     setState(() => _refreshing = true);
+    unawaited(_loadReleases(refresh: true));
     try {
       _apply(await api.homeFeed(refresh: true, offline: false));
     } catch (_) {} finally {
@@ -170,6 +184,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ],
+            CollectionShelf(title: 'New Releases', items: _releases, onOpen: _open),
             if (!offline) CollectionShelf(title: 'Your Artists', items: f.artists, size: 120, onOpen: _open),
             SongShelf(title: 'More for You', songs: picks.skip(6).toList(), player: p),
             if (!offline) CollectionShelf(title: 'Albums for You', items: f.albums, onOpen: _open),

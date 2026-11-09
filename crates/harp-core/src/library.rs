@@ -11,8 +11,21 @@ pub struct PlaylistInfo {
     pub name: String,
     pub count: u32,
     pub pinned: bool,
+    /// New songs get downloaded (set by "Download All").
+    pub auto_download: bool,
     /// Artwork of the first (up to) four songs, for a cover mosaic.
     pub covers: Vec<String>,
+}
+
+/// An artist you follow, or an album, playlist or podcast you saved to the library.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Saved {
+    pub id: String,
+    /// "artist", "album", "playlist" or "podcast"
+    pub kind: String,
+    pub title: String,
+    pub subtitle: String,
+    pub thumbnail: String,
 }
 
 #[derive(Clone, Debug)]
@@ -49,11 +62,11 @@ impl Store {
 
     pub fn playlists(&self) -> Result<Vec<PlaylistInfo>> {
         let mut st = self.conn.prepare(
-            "SELECT p.id, p.name, (SELECT COUNT(*) FROM playlist_items i WHERE i.playlist_id=p.id), p.pinned
+            "SELECT p.id, p.name, (SELECT COUNT(*) FROM playlist_items i WHERE i.playlist_id=p.id), p.pinned, p.autodl
              FROM playlists p ORDER BY p.pinned DESC, p.created DESC, p.id DESC",
         )?;
         let rows = st.query_map([], |r| {
-            Ok(PlaylistInfo { id: r.get(0)?, name: r.get(1)?, count: r.get(2)?, pinned: r.get::<_, i64>(3)? != 0, covers: vec![] })
+            Ok(PlaylistInfo { id: r.get(0)?, name: r.get(1)?, count: r.get(2)?, pinned: r.get::<_, i64>(3)? != 0, auto_download: r.get::<_, i64>(4)? != 0, covers: vec![] })
         })?;
         let mut out: Vec<PlaylistInfo> = rows.collect::<std::result::Result<_, _>>()?;
         let mut cov = self.conn.prepare("SELECT song_json FROM playlist_items WHERE playlist_id=? ORDER BY pos LIMIT 4")?;
@@ -89,30 +102,40 @@ impl Store {
     }
 
     /// Appends songs; a song already in the playlist is skipped. Returns how many were added.
+    /// Adds songs at the **top** of the playlist (newest first, like a feed),
+    /// keeping the order they're given in. Songs already in it are skipped.
+    /// Returns how many were added.
     pub fn add_to_playlist(&self, id: i64, songs: &[Song]) -> Result<u32> {
-        let mut pos: i64 = self.conn.query_row(
-            "SELECT COALESCE(MAX(pos)+1, 0) FROM playlist_items WHERE playlist_id=?",
-            [id],
-            |r| r.get(0),
-        )?;
-        let mut added = 0;
+        let mut fresh: Vec<&Song> = Vec::new();
         for s in songs {
             let dup = self.conn.query_row(
                 "SELECT 1 FROM playlist_items WHERE playlist_id=? AND song_id=?",
                 params![id, s.id],
                 |_| Ok(()),
             );
-            if dup.is_ok() {
-                continue;
+            if dup.is_err() && !fresh.iter().any(|f| f.id == s.id) {
+                fresh.push(s);
             }
-            self.conn.execute(
-                "INSERT INTO playlist_items(playlist_id,pos,song_id,song_json) VALUES(?,?,?,?)",
-                params![id, pos, s.id, crate::model::to_json(s)],
-            )?;
-            pos += 1;
-            added += 1;
         }
-        Ok(added)
+        if fresh.is_empty() {
+            return Ok(0);
+        }
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute("UPDATE playlist_items SET pos = pos + ? WHERE playlist_id=?", params![fresh.len() as i64, id])?;
+        for (i, s) in fresh.iter().enumerate() {
+            tx.execute(
+                "INSERT INTO playlist_items(playlist_id,pos,song_id,song_json) VALUES(?,?,?,?)",
+                params![id, i as i64, s.id, crate::model::to_json(s)],
+            )?;
+        }
+        tx.commit()?;
+        Ok(fresh.len() as u32)
+    }
+
+    /// "Download All" was chosen: songs added later get downloaded too.
+    pub fn set_playlist_auto_download(&self, id: i64, on: bool) -> Result<()> {
+        self.conn.execute("UPDATE playlists SET autodl=? WHERE id=?", params![on as i64, id])?;
+        Ok(())
     }
 
     fn renumber(&self, id: i64) -> Result<()> {
@@ -202,6 +225,36 @@ impl Store {
         Ok(())
     }
 
+    // --- followed artists and saved albums ---
+
+    /// Follows / saves (`on`) or forgets an artist, album, playlist or podcast.
+    pub fn set_saved(&self, item: &Saved, on: bool) -> Result<()> {
+        if on {
+            self.conn.execute(
+                "INSERT INTO saved(id,kind,title,subtitle,thumbnail) VALUES(?,?,?,?,?)
+                 ON CONFLICT(id) DO UPDATE SET title=excluded.title, subtitle=excluded.subtitle,
+                 thumbnail=CASE WHEN excluded.thumbnail='' THEN saved.thumbnail ELSE excluded.thumbnail END",
+                params![item.id, item.kind, item.title, item.subtitle, item.thumbnail],
+            )?;
+        } else {
+            self.conn.execute("DELETE FROM saved WHERE id=?", [&item.id])?;
+        }
+        Ok(())
+    }
+
+    pub fn is_saved(&self, id: &str) -> Result<bool> {
+        Ok(self.conn.query_row("SELECT count(*) FROM saved WHERE id=?", [id], |r| r.get::<_, i64>(0))? > 0)
+    }
+
+    /// Saved items of these kinds (all kinds when empty), newest first.
+    pub fn saved(&self, kinds: &[&str]) -> Result<Vec<Saved>> {
+        let mut st = self.conn.prepare("SELECT id,kind,title,subtitle,thumbnail FROM saved ORDER BY at DESC, rowid DESC")?;
+        let rows = st.query_map([], |r| {
+            Ok(Saved { id: r.get(0)?, kind: r.get(1)?, title: r.get(2)?, subtitle: r.get(3)?, thumbnail: r.get(4)? })
+        })?;
+        Ok(rows.filter_map(|r| r.ok()).filter(|s| kinds.is_empty() || kinds.contains(&s.kind.as_str())).collect())
+    }
+
     // --- downloads ---
 
     pub fn record_download(&self, song: &Song, path: &str, bytes: u64, quality: &str) -> Result<()> {
@@ -253,6 +306,21 @@ mod tests {
     }
 
     #[test]
+    fn follow_and_save() {
+        let st = Store::open_memory().unwrap();
+        let item = |id: &str, kind: &str, thumb: &str| Saved { id: id.into(), kind: kind.into(), title: id.to_uppercase(), subtitle: String::new(), thumbnail: thumb.into() };
+        st.set_saved(&item("UCa", "artist", "a.jpg"), true).unwrap();
+        st.set_saved(&item("MPb", "album", ""), true).unwrap();
+        st.set_saved(&item("UCa", "artist", ""), true).unwrap(); // again, without a picture
+        assert!(st.is_saved("UCa").unwrap());
+        assert_eq!(st.saved(&["artist"]).unwrap()[0].thumbnail, "a.jpg", "a missing picture doesn't wipe the old one");
+        assert_eq!(st.saved(&[]).unwrap().len(), 2);
+        assert_eq!(st.saved(&["album", "playlist"]).unwrap()[0].id, "MPb");
+        st.set_saved(&item("UCa", "artist", ""), false).unwrap();
+        assert!(!st.is_saved("UCa").unwrap());
+    }
+
+    #[test]
     fn playlist_lifecycle() {
         let st = Store::open_memory().unwrap();
         let id = st.create_playlist("  Road trip ").unwrap();
@@ -263,9 +331,16 @@ mod tests {
         assert_eq!(ids(&st.playlist_songs(id).unwrap()), ["c", "a", "b"]);
         st.remove_from_playlist(id, 1).unwrap();
         assert_eq!(ids(&st.playlist_songs(id).unwrap()), ["c", "b"]);
-        // appending after removals keeps order
+        // New songs go on top, a batch in its own order, after removals too.
         st.add_to_playlist(id, &[song("d", "d", "Z")]).unwrap();
-        assert_eq!(ids(&st.playlist_songs(id).unwrap()), ["c", "b", "d"]);
+        assert_eq!(ids(&st.playlist_songs(id).unwrap()), ["d", "c", "b"]);
+        assert_eq!(st.add_to_playlist(id, &[song("e", "e", "Z"), song("f", "f", "Z"), song("d", "d", "Z")]).unwrap(), 2);
+        assert_eq!(ids(&st.playlist_songs(id).unwrap()), ["e", "f", "d", "c", "b"]);
+        st.remove_from_playlist(id, 0).unwrap();
+        st.remove_from_playlist(id, 0).unwrap();
+        assert!(!st.playlists().unwrap()[0].auto_download);
+        st.set_playlist_auto_download(id, true).unwrap();
+        assert!(st.playlists().unwrap()[0].auto_download);
         st.rename_playlist(id, "Trips").unwrap();
         let p = st.playlists().unwrap();
         assert_eq!((p[0].id, p[0].name.as_str(), p[0].count, p[0].pinned), (id, "Trips", 3, false));

@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `cached_view`, `collection_view`, `e`, `eng`, `export_songs`, `home_artists`, `import_view`, `lyrics_view`, `queue_view`, `request`, `serde_json_string`, `song_from_json`, `song`, `spotify_embed_url`, `spotify_token`, `view`, `views`, `youtube_list_id`
+// These functions are ignored because they are not marked as `pub`: `cached_view`, `collection_view`, `e`, `eng`, `export_songs`, `home_artists`, `import_view`, `lyrics_view`, `queue_view`, `request`, `serde_json_string`, `song_from_json`, `song`, `spotify_embed_url`, `spotify_token`, `this_year`, `view`, `views`, `youtube_list_id`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Engine`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
@@ -138,6 +138,11 @@ Future<List<PlaylistView>> playlists() =>
     RustLib.instance.api.crateApiEnginePlaylists();
 
 /// Pins a playlist to the top of the list (or unpins it).
+Future<void> playlistAutoDownload({
+  required PlatformInt64 id,
+  required bool on_,
+}) => RustLib.instance.api.crateApiEnginePlaylistAutoDownload(id: id, on_: on_);
+
 Future<void> playlistPin({required PlatformInt64 id, required bool pinned}) =>
     RustLib.instance.api.crateApiEnginePlaylistPin(id: id, pinned: pinned);
 
@@ -356,6 +361,27 @@ Future<Uint8List> libraryBackup() =>
 /// Checks a backup and sets it to replace the library the next time Harp starts.
 Future<BackupInfoView> libraryRestore({required List<int> bytes}) =>
     RustLib.instance.api.crateApiEngineLibraryRestore(bytes: bytes);
+
+/// Follow an artist, or save an album, playlist or podcast to the library (`on`), or undo it.
+Future<void> collectionSave({required CollectionView c, required bool on_}) =>
+    RustLib.instance.api.crateApiEngineCollectionSave(c: c, on_: on_);
+
+bool collectionIsSaved({required String id}) =>
+    RustLib.instance.api.crateApiEngineCollectionIsSaved(id: id);
+
+/// Followed artists (`kind` "artist") or saved albums, playlists and podcasts (`kind` "other").
+Future<List<CollectionView>> savedCollections({required String kind}) =>
+    RustLib.instance.api.crateApiEngineSavedCollections(kind: kind);
+
+/// New albums and singles from the artists you follow (this year and last),
+/// newest first. Kept for 12 hours; `offline` uses only the saved copy.
+Future<List<CollectionView>> newReleases({
+  required bool refresh,
+  required bool offline,
+}) => RustLib.instance.api.crateApiEngineNewReleases(
+  refresh: refresh,
+  offline: offline,
+);
 
 /// What a backup file holds.
 class BackupInfoView {
@@ -762,6 +788,9 @@ class PlaylistView {
   final PlatformInt64 id;
   final String name;
   final int count;
+
+  /// Songs added later get downloaded ("Download All" was chosen).
+  final bool autoDownload;
   final bool pinned;
 
   /// Artwork of the first songs, for a cover mosaic.
@@ -771,6 +800,7 @@ class PlaylistView {
     required this.id,
     required this.name,
     required this.count,
+    required this.autoDownload,
     required this.pinned,
     required this.covers,
   });
@@ -780,6 +810,7 @@ class PlaylistView {
       id.hashCode ^
       name.hashCode ^
       count.hashCode ^
+      autoDownload.hashCode ^
       pinned.hashCode ^
       covers.hashCode;
 
@@ -791,6 +822,7 @@ class PlaylistView {
           id == other.id &&
           name == other.name &&
           count == other.count &&
+          autoDownload == other.autoDownload &&
           pinned == other.pinned &&
           covers == other.covers;
 }

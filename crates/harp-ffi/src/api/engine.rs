@@ -496,6 +496,8 @@ pub struct PlaylistView {
     pub id: i64,
     pub name: String,
     pub count: u32,
+    /// Songs added later get downloaded ("Download All" was chosen).
+    pub auto_download: bool,
     pub pinned: bool,
     /// Artwork of the first songs, for a cover mosaic.
     pub covers: Vec<String>,
@@ -503,10 +505,14 @@ pub struct PlaylistView {
 
 pub fn playlists() -> Result<Vec<PlaylistView>, String> {
     let v = eng()?.store.lock().unwrap().playlists().map_err(e)?;
-    Ok(v.into_iter().map(|p| PlaylistView { id: p.id, name: p.name, count: p.count, pinned: p.pinned, covers: p.covers }).collect())
+    Ok(v.into_iter().map(|p| PlaylistView { id: p.id, name: p.name, count: p.count, auto_download: p.auto_download, pinned: p.pinned, covers: p.covers }).collect())
 }
 
 /// Pins a playlist to the top of the list (or unpins it).
+pub fn playlist_auto_download(id: i64, on: bool) -> Result<(), String> {
+    eng()?.store.lock().unwrap().set_playlist_auto_download(id, on).map_err(e)
+}
+
 pub fn playlist_pin(id: i64, pinned: bool) -> Result<(), String> {
     eng()?.store.lock().unwrap().pin_playlist(id, pinned).map_err(e)
 }
@@ -1339,4 +1345,87 @@ pub fn library_restore(bytes: Vec<u8>) -> Result<BackupInfoView, String> {
     let _ = std::fs::remove_file(&tmp);
     let i = r.map_err(e)?;
     Ok(BackupInfoView { liked: i.liked, playlists: i.playlists, plays: i.plays })
+}
+
+// --- followed artists, saved albums, new releases ---
+
+/// Follow an artist, or save an album, playlist or podcast to the library (`on`), or undo it.
+pub fn collection_save(c: CollectionView, on: bool) -> Result<(), String> {
+    let item = harp_core::library::Saved { id: c.id, kind: c.kind, title: c.title, subtitle: c.subtitle, thumbnail: c.thumbnail };
+    let en = eng()?;
+    en.store.lock().unwrap().set_saved(&item, on).map_err(e)?;
+    if item.kind == "artist" {
+        // The new-releases shelf changes with who you follow.
+        let _ = en.store.lock().unwrap().kv_set("releases", "");
+    }
+    Ok(())
+}
+
+#[flutter_rust_bridge::frb(sync)]
+pub fn collection_is_saved(id: String) -> bool {
+    eng().ok().and_then(|en| en.store.lock().unwrap().is_saved(&id).ok()).unwrap_or(false)
+}
+
+/// Followed artists (`kind` "artist") or saved albums, playlists and podcasts (`kind` "other").
+pub fn saved_collections(kind: String) -> Result<Vec<CollectionView>, String> {
+    let kinds: &[&str] = if kind == "artist" { &["artist"] } else { &["album", "playlist", "podcast"] };
+    let v = eng()?.store.lock().unwrap().saved(kinds).map_err(e)?;
+    Ok(v.into_iter().map(|s| CollectionView { id: s.id, title: s.title, subtitle: s.subtitle, thumbnail: s.thumbnail, kind: s.kind }).collect())
+}
+
+/// New albums and singles from the artists you follow (this year and last),
+/// newest first. Kept for 12 hours; `offline` uses only the saved copy.
+pub fn new_releases(refresh: bool, offline: bool) -> Result<Vec<CollectionView>, String> {
+    let en = eng()?;
+    let cached: Option<(u64, Vec<CachedCollection>)> =
+        en.store.lock().unwrap().kv_get("releases").ok().flatten().and_then(|j| serde_json::from_str(&j).ok());
+    let fresh_enough = cached.as_ref().is_some_and(|(ts, _)| now_secs().saturating_sub(*ts) < 12 * 3600);
+    if offline || (fresh_enough && !refresh) {
+        return Ok(cached.map(|(_, v)| v.into_iter().map(cached_view).collect()).unwrap_or_default());
+    }
+    let artists = en.store.lock().unwrap().saved(&["artist"]).map_err(e)?;
+    if artists.is_empty() {
+        return Ok(vec![]);
+    }
+    let year = this_year();
+    let per_artist: Vec<Vec<CachedCollection>> = std::thread::scope(|sc| {
+        let jobs: Vec<_> = artists
+            .iter()
+            .take(16)
+            .map(|a| {
+                sc.spawn(move || {
+                    let Ok((_, _, related)) = ytmusic::open_artist(&a.id) else { return vec![] };
+                    ytmusic::latest_releases(&related, year, 3)
+                        .into_iter()
+                        .map(|c| CachedCollection {
+                            id: c.id,
+                            title: c.title,
+                            subtitle: format!("{} · {}", a.title, c.subtitle.replace(" • ", " · ")),
+                            thumbnail: c.thumbnail.unwrap_or_default(),
+                            kind: c.kind,
+                        })
+                        .collect()
+                })
+            })
+            .collect();
+        jobs.into_iter().map(|j| j.join().unwrap_or_default()).collect()
+    });
+    // Newest first across artists; round-robin within a year so one artist doesn't fill the shelf.
+    let mut all: Vec<(u32, usize, CachedCollection)> = Vec::new();
+    for list in per_artist {
+        for (rank, c) in list.into_iter().enumerate() {
+            let y = ytmusic::release_year(&c.subtitle).unwrap_or(0);
+            all.push((y, rank, c));
+        }
+    }
+    all.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+    let mut seen = std::collections::HashSet::new();
+    let out: Vec<CachedCollection> = all.into_iter().map(|(_, _, c)| c).filter(|c| seen.insert(c.id.clone())).take(20).collect();
+    let _ = en.store.lock().unwrap().kv_set("releases", &serde_json::to_string(&(now_secs(), &out)).unwrap_or_default());
+    Ok(out.into_iter().map(cached_view).collect())
+}
+
+fn this_year() -> u32 {
+    // Days since 1970 to a year is close enough for "this year or last".
+    (1970 + now_secs() / 31_556_952) as u32
 }

@@ -51,7 +51,15 @@ Future<void> addToPlaylistDialog(BuildContext context, PlayerController player, 
   }
   final added = await api.playlistAdd(id: id, songs: songs);
   player.libraryRev.value++;
-  if (context.mounted) toast(context, added == 0 ? 'Already in that playlist' : 'Added $added to playlist');
+  // A playlist you chose "Download All" for keeps itself downloaded.
+  final auto = (await api.playlists()).where((p) => p.id == id).firstOrNull?.autoDownload ?? false;
+  final todo = auto ? songs.where((s) => !s.downloaded).toList() : const <api.SongView>[];
+  if (context.mounted) {
+    toast(context, added == 0 ? 'Already in that playlist' : (todo.isEmpty ? 'Added $added to playlist' : 'Added $added to playlist · downloading'));
+  }
+  for (final s in todo) {
+    await player.download(s);
+  }
 }
 
 Future<String?> promptText(BuildContext context, {required String title, String hint = '', String initial = ''}) {

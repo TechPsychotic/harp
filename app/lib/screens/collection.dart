@@ -22,6 +22,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
   api.CollectionDetail? _detail;
   String? _error;
   bool _allSongs = false;
+  late bool _saved = api.collectionIsSaved(id: widget.info.id);
 
   PlayerController get p => widget.player;
   bool get _isArtist => widget.info.kind == 'artist';
@@ -50,6 +51,25 @@ class _CollectionScreenState extends State<CollectionScreen> {
     }
   }
 
+  /// Follow the artist, or save the album / playlist / podcast to the library.
+  Future<void> _toggleSaved() async {
+    final i = _detail?.info;
+    final c = api.CollectionView(
+      id: widget.info.id,
+      kind: widget.info.kind,
+      title: (i?.title.isNotEmpty ?? false) ? i!.title : widget.info.title,
+      subtitle: (i?.subtitle.isNotEmpty ?? false) ? i!.subtitle : widget.info.subtitle,
+      thumbnail: (i?.thumbnail.isNotEmpty ?? false) ? i!.thumbnail : widget.info.thumbnail,
+    );
+    final on = !_saved;
+    await api.collectionSave(c: c, on_: on);
+    setState(() => _saved = on);
+    p.savedRev.value++;
+    if (mounted) {
+      toast(context, _isArtist ? (on ? 'Following ${c.title}: new releases show on Listen Now' : 'Unfollowed') : (on ? 'Saved to your library' : 'Removed from your library'));
+    }
+  }
+
   Future<void> _saveAsPlaylist(api.CollectionDetail d, String name) async {
     final id = await api.playlistCreate(name: name);
     final n = await api.playlistAdd(id: id, songs: d.songs);
@@ -70,6 +90,12 @@ class _CollectionScreenState extends State<CollectionScreen> {
     return Scaffold(
       appBar: AppBar(
         actions: [
+          if (!_isArtist)
+            IconButton(
+              tooltip: _saved ? 'In your library' : 'Save to Library',
+              icon: Icon(_saved ? Icons.library_add_check_rounded : Icons.library_add_rounded),
+              onPressed: _toggleSaved,
+            ),
           if (d != null && d.songs.isNotEmpty)
             IconButton(tooltip: 'Save as a playlist', icon: const Icon(Icons.playlist_add_rounded), onPressed: () => _saveAsPlaylist(d, name)),
         ],
@@ -104,6 +130,15 @@ class _CollectionScreenState extends State<CollectionScreen> {
                   style: TextStyle(fontSize: 17, color: Theme.of(context).colorScheme.primary),
                 ),
               ),
+              if (_isArtist)
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Center(
+                    child: _saved
+                        ? OutlinedButton.icon(onPressed: _toggleSaved, icon: const Icon(Icons.check_rounded, size: 18), label: const Text('Following'))
+                        : FilledButton.icon(onPressed: _toggleSaved, icon: const Icon(Icons.person_add_alt_1_rounded, size: 18), label: const Text('Follow')),
+                  ),
+                ),
               if (d != null && !_isArtist)
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
