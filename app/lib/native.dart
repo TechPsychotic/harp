@@ -14,6 +14,23 @@ class Native {
     } catch (_) {}
   }
 
+  /// What the last crash left behind (empty if there was none, or off Android).
+  static Future<String> crashReport() async {
+    if (!Platform.isAndroid) return '';
+    try {
+      return await _c.invokeMethod<String>('crashReport') ?? '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  static Future<void> clearCrash() async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _c.invokeMethod('clearCrash');
+    } catch (_) {}
+  }
+
   static Future<void> requestNotifications() async {
     if (!Platform.isAndroid) return;
     try {

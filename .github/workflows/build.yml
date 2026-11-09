@@ -121,6 +121,11 @@ jobs:
       - name: Check Python and QuickJS are inside the APK
         run: |
           unzip -l app/build/app/outputs/flutter-apk/app-release.apk | grep -E "libpython.so|libqjs.so|python.zip"
+      - name: Check the media notification icon survived resource shrinking
+        run: |
+          AAPT2=$(ls -d "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -1)
+          "$AAPT2" dump resources app/build/app/outputs/flutter-apk/app-release.apk | grep -q "drawable/ic_stat_harp" || { echo "ic_stat_harp was stripped: the media notification would crash"; exit 1; }
+          echo "notification icon present"
       - uses: actions/upload-artifact@v4
         with:
           name: harp-android-arm64

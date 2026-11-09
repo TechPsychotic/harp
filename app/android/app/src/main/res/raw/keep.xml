@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The media notification looks its icon up by name at run time, so the resource
+     shrinker would otherwise remove it and the notification could not be built. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_stat_harp,@mipmap/ic_launcher,@mipmap/ic_launcher_foreground"
+    tools:shrinkMode="safe" />

@@ -8,6 +8,25 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-09 (night): the crash, and why there were no notification controls
+
+**Found and fixed**
+- **The media notification icon was missing from the APK.** Android's resource shrinker
+  removed `ic_stat_harp` because the media service looks it up by name at run time, so
+  the shrinker thought it was unused. Without a valid icon Android cannot build the
+  media notification: no lock-screen / notification controls, and the media service can
+  take the app down when playback starts. This is my best explanation for both the crash
+  and the missing controls on the build you have. ✅ confirmed the icon is absent from
+  that APK (`aapt2`). 📱 not yet confirmed that this was the whole crash.
+  Fix: a keep rule (`res/raw/keep.xml`), and CI now **fails the build** if the icon is
+  missing from the APK.
+- **Crash reporting inside the app.** Any crash is now written to a file before the app
+  closes, and Android's own record of why it last exited is read back. Settings › About ›
+  *Last crash report* shows it with Copy and Clear. Nothing is sent anywhere. If it
+  crashes again, that screen gives the actual error. 📱
+- **"Two settings".** The gear on the Home header was left over from the first layout.
+  It is gone; Settings is only the tab. (The build on your phone predates that removal.)
+
 ## 2026-11-09 (later): artists, long playlists, speed, consistency
 
 **Added**

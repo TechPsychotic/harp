@@ -1,6 +1,8 @@
 package dev.harp.harp
 
 import android.Manifest
+import android.app.ActivityManager
+import android.app.ApplicationExitInfo
 import android.content.Context
 import android.content.pm.PackageManager
 import android.net.wifi.WifiManager
@@ -9,6 +11,8 @@ import android.os.PowerManager
 import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import java.io.File
+import java.util.Date
 
 class MainActivity : AudioServiceActivity() {
     private var wake: PowerManager.WakeLock? = null
@@ -37,6 +41,38 @@ class MainActivity : AudioServiceActivity() {
         }
     }
 
+    /** What a crash left behind: our own stack trace, and Android's record of why the app last exited. */
+    private fun crashReport(): String {
+        val sb = StringBuilder()
+        val f = File(filesDir, "last_crash.txt")
+        if (f.exists()) sb.append("== Crash trace ==\n").append(f.readText().take(6000)).append("\n\n")
+        if (Build.VERSION.SDK_INT >= 30) {
+            try {
+                val am = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+                val names = mapOf(
+                    ApplicationExitInfo.REASON_CRASH to "CRASH (Java exception)",
+                    ApplicationExitInfo.REASON_CRASH_NATIVE to "CRASH_NATIVE (native code)",
+                    ApplicationExitInfo.REASON_ANR to "ANR (not responding)",
+                    ApplicationExitInfo.REASON_LOW_MEMORY to "LOW_MEMORY",
+                    ApplicationExitInfo.REASON_SIGNALED to "SIGNALED",
+                    ApplicationExitInfo.REASON_EXIT_SELF to "EXIT_SELF",
+                    ApplicationExitInfo.REASON_USER_REQUESTED to "USER_REQUESTED",
+                    ApplicationExitInfo.REASON_INITIALIZATION_FAILURE to "INITIALIZATION_FAILURE",
+                    ApplicationExitInfo.REASON_PERMISSION_CHANGE to "PERMISSION_CHANGE",
+                    ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE to "EXCESSIVE_RESOURCE_USAGE",
+                    ApplicationExitInfo.REASON_OTHER to "OTHER",
+                )
+                val exits = am.getHistoricalProcessExitReasons(packageName, 0, 4)
+                if (exits.isNotEmpty()) sb.append("== Recent exits (Android) ==\n")
+                for (e in exits) {
+                    sb.append("${Date(e.timestamp)}  ${names[e.reason] ?: "reason ${e.reason}"}  ${e.description ?: ""}\n")
+                }
+            } catch (_: Exception) {
+            }
+        }
+        return sb.toString()
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.harp/native")
@@ -51,6 +87,11 @@ class MainActivity : AudioServiceActivity() {
                     )
                     "wakeLock" -> {
                         setWake(call.argument<Boolean>("on") ?: false)
+                        result.success(null)
+                    }
+                    "crashReport" -> result.success(crashReport())
+                    "clearCrash" -> {
+                        File(filesDir, "last_crash.txt").delete()
                         result.success(null)
                     }
                     "requestNotifications" -> {

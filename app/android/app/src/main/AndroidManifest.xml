@@ -9,7 +9,7 @@
     <application
         android:label="Harp"
         android:usesCleartextTraffic="false"
-        android:name="${applicationName}"
+        android:name=".HarpApplication"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
         android:enableOnBackInvokedCallback="true">

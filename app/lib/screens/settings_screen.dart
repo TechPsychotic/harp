@@ -2,6 +2,9 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import 'package:flutter/services.dart';
+
+import '../native.dart';
 import '../player/controller.dart';
 import '../settings.dart';
 import '../src/rust/api/engine.dart' as api;
@@ -186,6 +189,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _Section('About', [
                 ListTile(title: const Text('Harp'), subtitle: Text('No accounts, no servers. Your taste stays on this device.', style: TextStyle(color: tok.textDim))),
                 ListTile(title: const Text('yt-dlp'), subtitle: Text(_ytdlp, style: TextStyle(color: tok.textDim))),
+                if (Platform.isAndroid)
+                  ListTile(
+                    title: const Text('Last crash report'),
+                    subtitle: Text('If Harp closed on its own, this says why. Nothing is sent anywhere.', style: TextStyle(color: tok.textDim)),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () async {
+                      final r = await Native.crashReport();
+                      if (!context.mounted) return;
+                      await showDialog<void>(
+                        context: context,
+                        builder: (ctx) {
+                          final nav = Navigator.of(ctx);
+                          return AlertDialog(
+                          title: const Text('Last crash report'),
+                          content: SingleChildScrollView(child: SelectableText(r.isEmpty ? 'No crash recorded.' : r, style: const TextStyle(fontSize: 11.5, fontFamily: 'monospace'))),
+                          actions: [
+                            if (r.isNotEmpty) TextButton(onPressed: () => Clipboard.setData(ClipboardData(text: r)).then((_) => nav.pop()), child: const Text('Copy')),
+                            if (r.isNotEmpty) TextButton(onPressed: () => Native.clearCrash().then((_) => nav.pop()), child: const Text('Clear')),
+                            TextButton(onPressed: () => nav.pop(), child: const Text('Close')),
+                          ],
+                        );
+                        },
+                      );
+                    },
+                  ),
               ]),
             ],
           ),
