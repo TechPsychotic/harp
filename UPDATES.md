@@ -8,6 +8,16 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-09 (late night): moods and Smart Shuffle play again
+
+- **Fixed: "Couldn't play …: the value of User-Agent must not contain … comma".** It hit songs that
+  stream straight from YouTube (moods and Smart Shuffle pick new songs; songs already cached play from
+  disk, so they were fine). yt-dlp gives browser headers whose values contain commas (the
+  User-Agent's "(KHTML, like Gecko)", Accept, Accept-Language), and the new engine refuses commas in
+  per-song headers. Now the User-Agent goes through the player's own setting, which has no such
+  limit, and the browser-only headers are left out. ✅ reproduced your exact error with a real
+  YouTube stream on the laptop, then played it with the fix. 🧪
+
 ## 2026-11-09 (night, fixes): skips play again, light-mode player, the original waves
 
 - **Fixed: skipping (and autoplay) left the next song paused.** The new engine doesn't start a

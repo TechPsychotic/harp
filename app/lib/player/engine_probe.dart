@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:mpv_audio_kit/mpv_audio_kit.dart' as mak;
 
 import '../src/rust/api/engine.dart' as api;
+import 'stream_headers.dart';
 
 /// Roadmap M2, step 1: a self-check of the candidate audio engine
 /// (`mpv_audio_kit`) on this device. It runs only when you start it
@@ -50,7 +51,9 @@ class EngineProbe {
         }
       }));
       final st = await api.resolveStream(id: id, quality: quality);
-      await p.open(mak.Media(st.url, httpHeaders: st.local ? null : {for (final (k, v) in st.headers) k: v}));
+      final h = engineHeaders(st.headers, local: st.local);
+      if (h.userAgent != null) await p.setRawProperty('user-agent', h.userAgent!);
+      await p.open(mak.Media(st.url, httpHeaders: h.headers));
       await p.play();
       final t0 = DateTime.now();
       while (pos < const Duration(milliseconds: 1500) && DateTime.now().difference(t0) < const Duration(seconds: 20)) {

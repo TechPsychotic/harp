@@ -13,6 +13,7 @@ import '../theme/glass.dart';
 import '../src/rust/api/engine.dart' as api;
 import '../widgets/cover.dart';
 import 'media_session.dart';
+import 'stream_headers.dart';
 import 'visualizer.dart';
 
 /// Owns playback: the audio engine (mpv_audio_kit: libmpv with FFmpeg's audio
@@ -132,6 +133,7 @@ class PlayerController extends ChangeNotifier {
   final AppSettings settings;
   final HarpAudioHandler session;
   final mak.Player _player = mak.Player();
+  String? _userAgent;
   late final Visualizer viz;
   final List<StreamSubscription<dynamic>> _subs = [];
 
@@ -452,7 +454,12 @@ class PlayerController extends ChangeNotifier {
       }
       // play: true — this engine doesn't start a newly opened song by itself
       // (the old one did), which left skips and autoplay paused.
-      await _player.open(mak.Media(st.url, start: resume, httpHeaders: st.local ? null : {for (final (k, v) in st.headers) k: v}), play: true);
+      final h = engineHeaders(st.headers, local: st.local);
+      if (h.userAgent != null && h.userAgent != _userAgent) {
+        await _player.setRawProperty('user-agent', h.userAgent!);
+        _userAgent = h.userAgent;
+      }
+      await _player.open(mak.Media(st.url, start: resume, httpHeaders: h.headers), play: true);
       if (gen != _loadGen) {
         superseded = true;
         return;

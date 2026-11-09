@@ -126,6 +126,7 @@ the idea and the code. `UPDATES.md` is the dated log of changes; this file is th
 | B26 | Skipping left the next song paused | ✅ | The new engine needs `play: true` when opening a song. Reproduced and fixed on the laptop's engine. |
 | B27 | The player is always dark, even in light mode | 🟡 | It follows the app's theme now (pale cover wash, dark text in light mode). |
 | B28 | A pill bar on the player that did nothing | ✅ | Removed. |
+| B29 | Moods / Smart Shuffle: "User-Agent must not contain comma" | ✅ | The new engine refuses commas in per-song headers; the User-Agent now goes through mpv's `user-agent` option, browser-only headers are dropped. Reproduced and fixed with a real stream. |
 | F33 | The same for Amazon Music | ⛔ | No public API for listeners (Amazon's web API is invite-only), and shared playlist pages are a JavaScript app with no songs in the page (checked). Workarounds: paste the list, or a CSV from a converter such as TuneMyMusic (already imports). |
 
 **Features (48): 29 done and checked, 15 done but waiting for your confirmation, 3 in progress,
