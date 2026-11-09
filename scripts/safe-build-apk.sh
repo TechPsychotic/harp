@@ -60,4 +60,7 @@ while kill -0 "$BUILD" 2>/dev/null; do
 done
 wait "$BUILD"; rc=$?
 echo "build exited with $rc (lowest available memory during the build: ${low} MB)" | tee -a "$LOG"
+# Gradle leaves a daemon holding a few GB after an APK build; the next build's
+# memory check then waits for memory that never frees. Stop it now.
+if [ "$TARGET" = apk ]; then (cd android && timeout 60 ./gradlew --stop >/dev/null 2>&1) || true; fi
 exit "$rc"
