@@ -170,6 +170,13 @@ Goal: lyrics as good as Apple Music's: word-by-word where they exist, line-synce
     gathered from Apple Music, Musixmatch and others.
   - **Musixmatch** word sync ("richsync"), as the SyncLyrics library does: needs a token, so last.
   - LRCLIB stays the open default.
+  - **Better Lyrics** (GPL-3, like Harp; github.com/better-lyrics): its extension merges bLyrics
+    (its own word-synced TTML catalogue), Unison (community lyrics, `unison.betterlyrics.org`),
+    Musixmatch richsync, LRCLIB and YouTube Music's own lyrics. Its backend (Go, open source)
+    gets most lyrics from **lrc.red**, a shared catalogue keyed by ISRC, and documents its API
+    at docs.betterlyrics.org (with rate limits). The extension passes a Turnstile check before
+    asking for lyrics, so a third-party app may not be welcome: ask the authors or use lrc.red
+    and Unison directly. Its TTML handling is a good reference for our parser.
 - ☐ Parsers for TTML (word timings, background vocals, duet sides) and YRC, with tests on saved
   real responses.
 - ☐ Word-by-word highlighting (Apple-style sweep), duet alignment, bigger full-screen lyrics,
@@ -216,6 +223,7 @@ Goal: lyrics as good as Apple Music's: word-by-word where they exist, line-synce
   https://source.android.com/docs/core/audio/spatial
 - Steam Audio (HRTF, SOFA files, Android libraries): https://valvesoftware.github.io/steam-audio/doc/capi/getting-started.html
   · OpenAL Soft fork with Android HRTF: https://github.com/6779660/OpenAL-MOB
+- Better Lyrics: https://github.com/better-lyrics (extension, API, docs.betterlyrics.org, lrc.red)
 - Word-synced lyrics: YouLy+ / LyricsPlus (https://github.com/ibratabian17/youlyplus),
   SyncLyrics (Musixmatch, LRCLIB, NetEase: https://synclyrics.js.org/),
   NetEase YRC format (https://docs.lyricify.app/en/lyrics/guide/),
