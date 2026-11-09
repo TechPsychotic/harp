@@ -7,9 +7,9 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `collection_view`, `e`, `eng`, `export_songs`, `import_view`, `lyrics_view`, `queue_view`, `request`, `serde_json_string`, `song_from_json`, `song`, `spotify_embed_url`, `spotify_token`, `view`, `views`, `youtube_list_id`
+// These functions are ignored because they are not marked as `pub`: `cached_view`, `collection_view`, `e`, `eng`, `export_songs`, `home_artists`, `import_view`, `lyrics_view`, `queue_view`, `request`, `serde_json_string`, `song_from_json`, `song`, `spotify_embed_url`, `spotify_token`, `view`, `views`, `youtube_list_id`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Engine`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// Starts the engine: opens the database, makes sure yt-dlp is installed.
 /// Safe to call again (does nothing the second time).
@@ -349,6 +349,39 @@ Future<ImportPlaylistView> spotifyFetch({
   required String name,
 }) => RustLib.instance.api.crateApiEngineSpotifyFetch(id: id, name: name);
 
+/// The whole library (likes, playlists, history, taste, settings) as one file's bytes.
+Future<Uint8List> libraryBackup() =>
+    RustLib.instance.api.crateApiEngineLibraryBackup();
+
+/// Checks a backup and sets it to replace the library the next time Harp starts.
+Future<BackupInfoView> libraryRestore({required List<int> bytes}) =>
+    RustLib.instance.api.crateApiEngineLibraryRestore(bytes: bytes);
+
+/// What a backup file holds.
+class BackupInfoView {
+  final int liked;
+  final int playlists;
+  final int plays;
+
+  const BackupInfoView({
+    required this.liked,
+    required this.playlists,
+    required this.plays,
+  });
+
+  @override
+  int get hashCode => liked.hashCode ^ playlists.hashCode ^ plays.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BackupInfoView &&
+          runtimeType == other.runtimeType &&
+          liked == other.liked &&
+          playlists == other.playlists &&
+          plays == other.plays;
+}
+
 class CollectionDetail {
   final CollectionView info;
   final List<SongView> songs;
@@ -520,6 +553,12 @@ class HomeFeed {
   final List<SongView> downloads;
   final List<PlaylistView> playlists;
 
+  /// Artists you play most.
+  final List<CollectionView> artists;
+
+  /// Albums by them.
+  final List<CollectionView> albums;
+
   /// False when the recommendations came from the saved copy.
   final bool fresh;
 
@@ -531,6 +570,8 @@ class HomeFeed {
     required this.liked,
     required this.downloads,
     required this.playlists,
+    required this.artists,
+    required this.albums,
     required this.fresh,
   });
 
@@ -543,6 +584,8 @@ class HomeFeed {
       liked.hashCode ^
       downloads.hashCode ^
       playlists.hashCode ^
+      artists.hashCode ^
+      albums.hashCode ^
       fresh.hashCode;
 
   @override
@@ -557,6 +600,8 @@ class HomeFeed {
           liked == other.liked &&
           downloads == other.downloads &&
           playlists == other.playlists &&
+          artists == other.artists &&
+          albums == other.albums &&
           fresh == other.fresh;
 }
 

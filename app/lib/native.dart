@@ -41,6 +41,17 @@ class Native {
     }
   }
 
+  /// Opens the share sheet with [text]. Returns false where there is none
+  /// (desktop), so the caller can copy it instead.
+  static Future<bool> share(String text) async {
+    if (!Platform.isAndroid) return false;
+    try {
+      return await _c.invokeMethod<bool>('share', {'text': text}) ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static Future<void> requestNotifications() async {
     if (!Platform.isAndroid) return;
     try {

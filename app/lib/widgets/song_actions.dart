@@ -1,9 +1,10 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../native.dart';
 import '../player/controller.dart';
 import '../src/rust/api/engine.dart' as api;
 import '../theme/glass.dart';
@@ -93,6 +94,7 @@ class SongMenu extends StatelessWidget {
           _item('undownload', Icons.delete_outline_rounded, 'Remove download')
         else
           _item('download', Icons.download_rounded, 'Download'),
+        _item('share', Icons.share_rounded, 'Share link'),
         if (onRemoveFromList != null) _item('remove', Icons.remove_circle_outline_rounded, removeLabel),
       ],
     );
@@ -120,6 +122,13 @@ Future<void> runSongAction(BuildContext context, PlayerController player, api.So
       if (context.mounted) toast(context, err ?? 'Downloaded “${song.title}”');
     case 'undownload':
       await player.removeDownload(song);
+    case 'share':
+      // A YouTube Music link opens for anyone, in any app or the browser.
+      final link = 'https://music.youtube.com/watch?v=${song.id}';
+      if (!await Native.share('${song.title} · ${song.artist}\n$link')) {
+        await Clipboard.setData(ClipboardData(text: link));
+        if (context.mounted) toast(context, 'Link copied');
+      }
     case 'remove':
       onRemove?.call();
   }
@@ -166,6 +175,7 @@ Future<void> showSongSheet(BuildContext context, PlayerController player, api.So
             item('playlist', Icons.playlist_add_rounded, 'Add to playlist…'),
             item('like', song.liked ? Icons.favorite_rounded : Icons.favorite_border_rounded, song.liked ? 'Remove from liked' : 'Like'),
             if (song.downloaded) item('undownload', Icons.delete_outline_rounded, 'Remove download') else item('download', Icons.download_rounded, 'Download'),
+            item('share', Icons.share_rounded, 'Share link'),
             if (onRemove != null) item('remove', Icons.remove_circle_outline_rounded, removeLabel),
             const SizedBox(height: 8),
           ]),

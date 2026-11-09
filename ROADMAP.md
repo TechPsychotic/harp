@@ -69,7 +69,7 @@ the idea and the code. `UPDATES.md` is the dated log of changes; this file is th
 
 **Problems (23): 5 fixed and checked, 17 fixed but waiting for your confirmation, 1 partly fixed.**
 
-### 1b. Features you asked for (38)
+### 1b. Features you asked for (43)
 
 | # | Feature | Status | Notes |
 |---|---|---|---|
@@ -110,9 +110,14 @@ the idea and the code. `UPDATES.md` is the dated log of changes; this file is th
 | F36 | Hindi, Urdu, Punjabi… lyrics in English letters (Hinglish) | 🟡 | Built into Harp's core (no service, works offline): Devanagari, Gurmukhi, Bengali, Gujarati, Odia, Tamil, Telugu, Kannada, Malayalam, and Urdu approximately. Drops the silent "a" the way people type ("tum hi ho", "aankhein", "dil"). The lyrics view has a switch: original / both / English letters. 🧪 Urdu is rougher than the rest, because Urdu script leaves most vowels out. |
 | F37 | Downloads grouped by playlist | 🟡 | Downloaded songs that belong to playlists show under each playlist ("12 of 40 songs downloaded", with Play and Shuffle); the rest under Songs. |
 | F38 | Recommendations learn from saved playlists | ✅ | Songs in your playlists now seed picks ("Because … is in your playlist …"). 🧪 |
+| F39 | Moods as pictures | ✅ | Each mood tile has its own icon art, rings and a two-colour gradient. |
+| F40 | Artists and albums on the home page | 🟡 | "Your Artists" (your most played, with pictures) and "Albums for You" (by them), looked up side by side and kept with the home picks. 🧪 ranking. Live lookup not yet seen on the phone. |
+| F41 | Refresh button only on the laptop | ✅ | Phones pull down to refresh; desktop keeps the button. |
+| F42 | "Harp" with an animated logo instead of "Listen Now" | ✅ | The logo writes itself in, and its strike line quivers like a plucked string with the music (still when paused or with effects off). |
+| F43 | Share a song | 🟡 | Share sheet on Android, link copied on desktop (a YouTube Music link anyone can open). |
 | F33 | The same for Amazon Music | ⛔ | No public API for listeners (Amazon's web API is invite-only), and shared playlist pages are a JavaScript app with no songs in the page (checked). Workarounds: paste the list, or a CSV from a converter such as TuneMyMusic (already imports). |
 
-**Features (38): 23 done and checked, 11 done but waiting for your confirmation, 3 in progress,
+**Features (43): 26 done and checked, 13 done but waiting for your confirmation, 3 in progress,
 1 not possible (Amazon Music); plus parts that are not possible (Dolby Atmos, Apple Music
 account access without a paid developer key).**
 
@@ -157,13 +162,15 @@ the music.
 
 ### M3 · Sound
 Goal: control over how it sounds. *(Needs M2 for Android.)*
-- ☐ Equalizer: presets (Flat, Bass, Vocal, Treble, Loudness: chains checked in libmpv ✅), then a
-  10-band custom EQ, then per-headphone correction (AutoEQ profiles).
+- ◐ Equalizer: presets (Flat, Bass, Vocal, Treble, Loudness) **in the app on desktop** (Settings ›
+  Playback; each chain played in libmpv together with spatial and the loudness reader ✅). Android
+  waits for M2. Then a 10-band custom EQ, then per-headphone correction (AutoEQ profiles).
 - ☐ Spatial audio: Wide stage and Headphone crossfeed on Android (M2); a true **HRTF binaural** mode
   with a bundled HRTF data set (FFmpeg `sofalizer`, or Steam Audio / OpenAL Soft, both of which
   support HRTF on Android).
 - ☐ Loudness normalisation (songs at even volume), crossfade, gapless (M2).
-- ☐ Playback speed (podcasts); resume position for long tracks and episodes.
+- ☑ Playback speed, 0.75–2× with the pitch kept (Now Playing and Settings); resume position for
+  long tracks and episodes (10 min or more, each remembered on its own).
 - ☑ Sleep timer.
 - **Done when:** every sound option works the same on phone and laptop.
 - ⛔ Dolby Atmos stays impossible (stereo sources, licensed decoder).
@@ -193,9 +200,13 @@ Goal: lyrics as good as Apple Music's: word-by-word where they exist, line-synce
   offline. Check each source's terms before shipping it.
 
 ### M5 · Library and discovery
-- ☐ Albums and artists in the library; follow artists; new releases from followed artists.
-- ☐ Sort and filter everywhere (recent, title, artist); playlist folders and custom covers.
-- ☐ Backup and restore of the whole library to one file (pairs with M7 sync).
+- ◐ Your most played artists and their albums on Listen Now. Still to do: albums and artists in
+  the library; follow artists; new releases from followed artists.
+- ◐ Sort: Liked and Downloaded (recent, title, artist), Library playlists (recent, name; pinned
+  stay on top), remembered. Playlist covers are automatic mosaics. Still to do: filter, folders,
+  custom covers.
+- ☑ Backup and restore of the whole library to one file (Settings › Backup; 🧪). A restore is
+  checked, then swapped in on the next start, keeping the old library aside.
 - ☐ Local files as a source (your own music on the device).
 - ☐ Browse: charts by country, genres, new releases.
 - ☐ A smarter taste model: song-level signals, time decay, time-of-day and mood, wider starter

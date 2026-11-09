@@ -90,6 +90,15 @@ class MainActivity : AudioServiceActivity() {
                         result.success(null)
                     }
                     "crashReport" -> result.success(crashReport())
+                    // The system share sheet (WhatsApp, Messages, copy…).
+                    "share" -> {
+                        val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(android.content.Intent.EXTRA_TEXT, call.argument<String>("text"))
+                        }
+                        startActivity(android.content.Intent.createChooser(send, null))
+                        result.success(true)
+                    }
                     "isMetered" -> {
                         val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
                         result.success(cm.isActiveNetworkMetered)

@@ -43,7 +43,7 @@ class HarpAudioHandler extends BaseAudioHandler with SeekHandler {
     mediaItem.add(m.copyWith(duration: d));
   }
 
-  void setState({required bool playing, required bool loading, required Duration position, bool hasNext = true, bool hasPrevious = true}) {
+  void setState({required bool playing, required bool loading, required Duration position, bool hasNext = true, bool hasPrevious = true, double speed = 1}) {
     playbackState.add(PlaybackState(
       controls: [
         if (hasPrevious) MediaControl.skipToPrevious,
@@ -55,7 +55,7 @@ class HarpAudioHandler extends BaseAudioHandler with SeekHandler {
       processingState: loading ? AudioProcessingState.loading : AudioProcessingState.ready,
       playing: playing,
       updatePosition: position,
-      speed: 1,
+      speed: speed,
     ));
   }
 

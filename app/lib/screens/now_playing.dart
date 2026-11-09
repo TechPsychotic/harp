@@ -268,6 +268,17 @@ class _Controls extends StatelessWidget {
                   },
           ),
         ),
+        ListenableBuilder(
+          listenable: player.settings,
+          builder: (context, _) {
+            final sp = player.settings.speed;
+            return TextButton(
+              onPressed: () => showSpeedSheet(context, player),
+              style: TextButton.styleFrom(foregroundColor: sp == 1 ? dim : Colors.white, backgroundColor: sp == 1 ? Colors.transparent : Colors.white24, minimumSize: const Size(44, 40)),
+              child: Text(speedLabel(sp), style: const TextStyle(fontWeight: FontWeight.w700)),
+            );
+          },
+        ),
         IconButton(
           tooltip: player.sleepAfterSong
               ? 'Sleep: after this song'
@@ -352,5 +363,29 @@ void showSleepSheet(BuildContext context, PlayerController player) {
         ]),
       );
     },
+  );
+}
+
+String speedLabel(double v) => '${v.toStringAsFixed(v == v.roundToDouble() ? 0 : 2).replaceFirst(RegExp(r'0$'), '')}×';
+
+/// Playback speed, for podcasts and long talks. The pitch stays the same.
+void showSpeedSheet(BuildContext context, PlayerController player) {
+  showModalBottomSheet<void>(
+    context: context,
+    builder: (ctx) => SafeArea(
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        const Padding(padding: EdgeInsets.fromLTRB(16, 16, 16, 4), child: Text('Playback Speed', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700))),
+        for (final v in const [0.75, 1.0, 1.25, 1.5, 1.75, 2.0])
+          ListTile(
+            title: Text(v == 1 ? '1× (normal)' : speedLabel(v)),
+            trailing: player.settings.speed == v ? Icon(Icons.check_rounded, color: Theme.of(ctx).colorScheme.primary) : null,
+            onTap: () {
+              player.settings.setSpeed(v);
+              Navigator.pop(ctx);
+            },
+          ),
+        const SizedBox(height: 8),
+      ]),
+    ),
   );
 }

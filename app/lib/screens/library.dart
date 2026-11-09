@@ -22,6 +22,17 @@ class _LibraryScreenState extends State<LibraryScreen> {
   List<api.PlaylistView> _playlists = [];
   int _liked = 0, _downloads = 0;
 
+  /// Playlists: "recent" or "name". Pinned ones stay on top either way.
+  String _plSort = 'recent';
+
+  List<api.PlaylistView> get _shownPlaylists {
+    if (_plSort != 'name') return _playlists;
+    return [..._playlists]..sort((a, b) {
+        if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
+        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      });
+  }
+
   PlayerController get p => widget.player;
 
   @override
@@ -41,7 +52,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
     final pl = await api.playlists();
     final l = await api.likedSongs();
     final d = await api.downloads();
-    if (mounted) setState(() { _playlists = pl; _liked = l.length; _downloads = d.length; });
+    final sort = await api.settingGet(key: 'sort:playlists') ?? 'recent';
+    if (mounted) setState(() { _playlists = pl; _liked = l.length; _downloads = d.length; _plSort = sort; });
   }
 
   void _push(Widget w) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => w));
@@ -81,13 +93,29 @@ class _LibraryScreenState extends State<LibraryScreen> {
       row(Icons.arrow_circle_down_rounded, 'Downloaded', '$_downloads', () => _push(SongListScreen(player: p, kind: 'downloads'))),
       row(Icons.history_rounded, 'Recently Played', null, () => _push(SongListScreen(player: p, kind: 'history'))),
       row(Icons.swap_horiz_rounded, 'Bring Your Music Over', null, () => _push(ImportScreen(player: p))),
-      SectionHeader('Playlists', action: 'New', onAction: _newPlaylist),
+      SectionHeader(
+        'Playlists',
+        action: _plSort == 'name' ? 'Sort: Name' : 'Sort: Recent',
+        onAction: () {
+          final v = _plSort == 'name' ? 'recent' : 'name';
+          setState(() => _plSort = v);
+          api.settingSet(key: 'sort:playlists', value: v);
+        },
+      ),
       if (_playlists.isEmpty)
         Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Text('Make a playlist, or bring one over from another app.', style: TextStyle(color: tok.textDim)))
       else
-        for (final pl in _playlists) _PlaylistRow(pl: pl, onTap: () => _push(PlaylistScreen(player: p, playlist: pl)), onPin: () => _pin(pl)),
+        for (final pl in _shownPlaylists) _PlaylistRow(pl: pl, onTap: () => _push(PlaylistScreen(player: p, playlist: pl)), onPin: () => _pin(pl)),
     ]);
   }
+}
+
+/// Sorts songs by "title" or "artist" (case-insensitive); "recent" keeps the
+/// order they came in (newest first).
+List<api.SongView> sortSongs(List<api.SongView> l, String by) {
+  if (by != 'title' && by != 'artist') return l;
+  String k(api.SongView s) => (by == 'title' ? s.title : '${s.artist}\u0000${s.title}').toLowerCase();
+  return [...l]..sort((a, b) => k(a).compareTo(k(b)));
 }
 
 /// One playlist in the library: cover mosaic, name, count. Pinned ones sit on
@@ -158,6 +186,11 @@ class _SongListScreenState extends State<SongListScreen> {
   /// Downloads only: downloaded songs that aren't in any playlist.
   List<api.SongView> _loose = [];
 
+  /// "recent", "title" or "artist" (remembered per list).
+  String _sort = 'recent';
+
+  List<api.SongView> _sorted(List<api.SongView> l) => sortSongs(l, _sort);
+
   PlayerController get p => widget.player;
 
   @override
@@ -176,6 +209,8 @@ class _SongListScreenState extends State<SongListScreen> {
   Future<void> _load() async {
     List<api.SongView> s;
     var notes = <String, String>{};
+    final sort = await api.settingGet(key: 'sort:${widget.kind}');
+    if (sort != null && mounted) _sort = sort;
     switch (widget.kind) {
       case 'liked':
         s = await api.likedSongs();
@@ -233,11 +268,26 @@ class _SongListScreenState extends State<SongListScreen> {
   @override
   Widget build(BuildContext context) {
     final title = switch (widget.kind) { 'liked' => 'Liked Songs', 'downloads' => 'Downloaded', _ => 'Recently Played' };
-    final songs = _songs;
+    final songs = _songs == null ? null : _sorted(_songs!);
     return Scaffold(
       appBar: AppBar(
         title: Text(title),
         actions: [
+          if (widget.kind != 'history')
+            PopupMenuButton<String>(
+              tooltip: 'Sort',
+              icon: const Icon(Icons.sort_rounded),
+              initialValue: _sort,
+              onSelected: (v) {
+                setState(() => _sort = v);
+                api.settingSet(key: 'sort:${widget.kind}', value: v);
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'recent', child: Text('Recently added')),
+                PopupMenuItem(value: 'title', child: Text('Title')),
+                PopupMenuItem(value: 'artist', child: Text('Artist')),
+              ],
+            ),
           if (widget.kind == 'liked')
             IconButton(
               tooltip: 'Export',
@@ -274,10 +324,10 @@ class _SongListScreenState extends State<SongListScreen> {
                   ),
                   if (widget.kind == 'downloads' && _groups.isNotEmpty) ...[
                     // Downloaded playlists first, then songs downloaded on their own.
-                    for (final (pl, got) in _groups) _group(pl, got),
+                    for (final (pl, got) in _groups) _group(pl, _sorted(got)),
                     if (_loose.isNotEmpty) ...[
                       const SectionHeader('Songs'),
-                      ..._tiles(_loose),
+                      ..._tiles(_sorted(_loose)),
                     ],
                   ] else
                     ..._tiles(songs),

@@ -8,6 +8,40 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-09 (night, final): a livelier home, equalizer, speed, backup
+
+**Home**
+- **"Harp" at the top with an animated logo**, instead of "Listen Now". The logo writes itself in
+  when the page opens, and while music plays its strike line quivers like a plucked harp string,
+  harder on louder parts. It stays still when paused or when background effects are off.
+- **Refresh button only on the laptop.** On the phone, pull down to refresh.
+- **Moods are pictures now:** each has its own icon art, soft rings and a two-colour gradient.
+- **Your Artists and Albums for You:** your most played artists (plays count once, liked songs
+  three times) with their pictures, and albums by them. They're looked up side by side and saved
+  with the home picks, so they show instantly next time. 🧪 ranking
+
+**From the milestone map**
+- **Equalizer presets (M3), desktop:** Flat, Bass boost, Vocal, Treble boost, Loudness (Settings ›
+  Playback). Boosting presets lower the volume a little first so nothing clips. ✅ every preset
+  played in libmpv together with spatial audio and the loudness reader, without stalling. Android
+  waits for the new audio engine (M2).
+- **Playback speed (M3):** 0.75× to 2× with the pitch kept, from the new speed button in Now
+  Playing or in Settings. The notification knows the speed, so its bar keeps up.
+- **Long tracks remember where you stopped (M3):** podcast episodes, mixes and anything 10 minutes
+  or longer start where you left them, each one separately. Finished ones forget.
+- **Sorting (M5):** Liked Songs and Downloaded by recently added, title or artist; Library
+  playlists by recent or name (pinned stay on top). Your choice is remembered. 🧪
+- **Backup and restore (M5):** Settings › Backup saves your whole library (likes, playlists,
+  history, taste, settings, saved lyrics) as one `.harp` file. Restoring checks the file, shows
+  what's in it, and switches over the next time Harp starts, keeping the current library aside
+  as a safety copy. Downloads from another device that aren't on this one are dropped from the list. 🧪
+- **Share a song:** "Share link" in every song menu opens the share sheet on Android, and copies
+  the link on the laptop.
+
+**Tested:** ✅ 64 core tests, Flutter analyzer clean, 19 widget/unit tests, EQ chains in libmpv.
+**Not verified:** the phone (share sheet, speed in the notification, the home artist lookups on
+mobile data).
+
 ## 2026-11-09 (late night): mini player everywhere, pause on unplug, Hinglish lyrics, playlist covers
 
 **Fixed**

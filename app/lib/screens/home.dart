@@ -1,11 +1,15 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../player/controller.dart';
 import '../src/rust/api/engine.dart' as api;
 import '../theme/glass.dart';
+import '../theme/logo.dart';
 import '../widgets/cover.dart';
 import '../widgets/playlist_art.dart';
 import '../widgets/shelf.dart';
+import 'collection.dart';
 import 'import_screen.dart';
 import 'playlist.dart';
 
@@ -97,6 +101,10 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  static final _desktop = Platform.isLinux || Platform.isWindows || Platform.isMacOS;
+
+  void _open(api.CollectionView c) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CollectionScreen(player: p, info: c)));
+
   String _greeting() {
     final h = DateTime.now().hour;
     return h < 5 ? 'Late night' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
@@ -114,11 +122,16 @@ class _HomeScreenState extends State<HomeScreen> {
         padding: const EdgeInsets.only(bottom: 24),
         children: [
           PageTitle(
-            'Listen Now',
+            'Harp',
             subtitle: _greeting(),
+            leading: ListenableBuilder(
+              listenable: p,
+              builder: (_, _) => AnimatedHarpLogo(size: 40, playing: p.playing, level: p.viz.level, animate: !p.settings.flatBackground),
+            ),
             actions: [
               if (_refreshing) const Padding(padding: EdgeInsets.only(right: 8), child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))),
-              IconButton(tooltip: 'New picks', icon: const Icon(Icons.refresh_rounded), onPressed: offline ? null : _forceRefresh),
+              // Phones pull down to refresh; computers get a button.
+              if (_desktop) IconButton(tooltip: 'New picks', icon: const Icon(Icons.refresh_rounded), onPressed: offline ? null : _forceRefresh),
             ],
           ),
           if (offline)
@@ -148,7 +161,7 @@ class _HomeScreenState extends State<HomeScreen> {
             if (_moods.isNotEmpty && !offline) ...[
               const SectionHeader('Moods'),
               SizedBox(
-                height: 88,
+                height: 112,
                 child: ListView.builder(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -157,7 +170,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ],
+            if (!offline) CollectionShelf(title: 'Your Artists', items: f.artists, size: 120, onOpen: _open),
             SongShelf(title: 'More for You', songs: picks.skip(6).toList(), player: p),
+            if (!offline) CollectionShelf(title: 'Albums for You', items: f.albums, onOpen: _open),
             if (f.similarTo != null) SongShelf(title: 'Because You Played', subtitle: f.similarTo!.title, songs: f.similar, player: p),
             SongShelf(title: 'Recently Played', songs: f.recent, player: p),
             if (f.playlists.isNotEmpty) ...[
@@ -269,6 +284,20 @@ Color moodColor(String key) {
   return HSLColor.fromAHSL(1, (h % 360).toDouble(), 0.62, 0.48).toColor();
 }
 
+/// Each mood's picture: an icon drawn large in the tile's corner.
+const _moodIcons = <String, IconData>{
+  'chill': Icons.spa_rounded,
+  'focus': Icons.center_focus_strong_rounded,
+  'workout': Icons.fitness_center_rounded,
+  'party': Icons.celebration_rounded,
+  'sad': Icons.water_drop_rounded,
+  'romance': Icons.favorite_rounded,
+  'sleep': Icons.nightlight_round,
+  'commute': Icons.directions_car_rounded,
+};
+
+/// A mood as a picture: a two-colour gradient, soft rings, and the mood's
+/// icon large and tilted in the corner, with its name over it.
 class _MoodTile extends StatelessWidget {
   const _MoodTile({required this.keyName, required this.label, required this.onTap});
   final String keyName;
@@ -278,25 +307,42 @@ class _MoodTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = moodColor(keyName);
+    final hsl = HSLColor.fromColor(c);
+    final deep = hsl.withHue((hsl.hue + 35) % 360).withLightness(0.24).toColor();
+    final icon = _moodIcons[keyName] ?? Icons.music_note_rounded;
     return Padding(
       padding: const EdgeInsets.only(right: 10),
       child: Material(
         borderRadius: BorderRadius.circular(Radii.tile),
         clipBehavior: Clip.antiAlias,
         child: Ink(
-          width: 150,
-          decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [c, HSLColor.fromColor(c).withLightness(0.28).toColor()])),
+          width: 168,
+          decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [c, deep])),
           child: InkWell(
             onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Align(alignment: Alignment.bottomLeft, child: Text(label, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: Colors.white))),
-            ),
+            child: Stack(children: [
+              Positioned(right: -30, top: -34, child: _ring(110, Colors.white.withValues(alpha: 0.10))),
+              Positioned(left: -24, bottom: -40, child: _ring(90, Colors.black.withValues(alpha: 0.12))),
+              Positioned(
+                right: -8,
+                bottom: -10,
+                child: Transform.rotate(angle: 0.32, child: Icon(icon, size: 78, color: Colors.white.withValues(alpha: 0.85))),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Align(
+                  alignment: Alignment.topLeft,
+                  child: Text(label, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17, color: Colors.white, shadows: [Shadow(color: Colors.black26, blurRadius: 6)])),
+                ),
+              ),
+            ]),
           ),
         ),
       ),
     );
   }
+
+  Widget _ring(double d, Color color) => Container(width: d, height: d, decoration: BoxDecoration(shape: BoxShape.circle, color: color));
 }
 
 /// A playlist card: a colour tile with a music icon, name and count.

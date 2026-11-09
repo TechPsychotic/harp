@@ -3,6 +3,7 @@
 //! No accounts and no API keys: everything here works from what yt-dlp can
 //! fetch (through the [`recommend::CandidateSource`] trait) and a local SQLite file.
 
+pub mod backup;
 pub mod error;
 pub mod export;
 pub mod import;

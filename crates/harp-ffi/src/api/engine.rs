@@ -1,3 +1,4 @@
+use crate::home_cache::CachedCollection;
 use crate::home_cache::{now_secs, HomeCache, HOME_TTL_SECS};
 use crate::spotify_state::{PendingSignIn, SPOTIFY_CANCEL, SPOTIFY_PENDING};
 use harp_core::import as imp;
@@ -77,6 +78,7 @@ pub struct EngineConfig {
 
 struct Engine {
     yt: YtDlp,
+    db_path: PathBuf,
     downloads_dir: PathBuf,
     cache_dir: PathBuf,
     thumbs_dir: PathBuf,
@@ -210,10 +212,13 @@ pub fn start_engine(cfg: EngineConfig) -> Result<(), String> {
         Tool::binary(install::ensure(&tools, asset, false).map_err(e)?)
     };
 
+    // A backup chosen in Settings › Restore is swapped in now, before anything opens the database.
+    let _ = harp_core::backup::apply_pending(&db);
     let store = Store::open(&db).map_err(e)?;
     // The queue as it was when the app last closed.
     let queue: Queue = store.kv_get("queue").ok().flatten().and_then(|j| serde_json::from_str(&j).ok()).unwrap_or_default();
     let engine = Engine {
+        db_path: db.clone(),
         downloads_dir: data.join("downloads"),
         cache_dir: data.join("cache"),
         thumbs_dir: data.join("thumbs"),
@@ -656,6 +661,10 @@ pub struct HomeFeed {
     pub liked: Vec<SongView>,
     pub downloads: Vec<SongView>,
     pub playlists: Vec<PlaylistView>,
+    /// Artists you play most.
+    pub artists: Vec<CollectionView>,
+    /// Albums by them.
+    pub albums: Vec<CollectionView>,
     /// False when the recommendations came from the saved copy.
     pub fresh: bool,
 }
@@ -687,15 +696,30 @@ pub fn home_feed(refresh: bool, offline: bool) -> Result<HomeFeed, String> {
                 Some(s) => en.yt.related(&s.id, 12).unwrap_or_default(),
                 None => vec![],
             };
-            Ok(HomeCache { ts: now_secs(), recommended: recs.into_iter().map(|r| r.song).collect(), similar_to: last, similar })
+            Ok(HomeCache { ts: now_secs(), recommended: recs.into_iter().map(|r| r.song).collect(), similar_to: last, similar, ..Default::default() })
         })();
-        if let Ok(c) = attempt {
+        if let Ok(mut c) = attempt {
             if !c.recommended.is_empty() {
-                let _ = en.store.lock().unwrap().kv_set("home_cache", &serde_json::to_string(&c).unwrap_or_default());
+                c.artists = std::mem::take(&mut cache.artists);
+                c.albums = std::mem::take(&mut cache.albums);
                 cache = c;
                 fresh = true;
             }
         }
+    }
+    // Artists and albums: with new picks, or once for a cache saved before they existed.
+    if !offline && (fresh || cache.artists.is_empty()) {
+        let (artists, albums) = home_artists(en);
+        if !artists.is_empty() {
+            cache.artists = artists;
+            cache.albums = albums;
+            if cache.ts == 0 {
+                cache.ts = now_secs();
+            }
+        }
+    }
+    if fresh || !cache.artists.is_empty() {
+        let _ = en.store.lock().unwrap().kv_set("home_cache", &serde_json::to_string(&cache).unwrap_or_default());
     }
     let st_recent = en.store.lock().unwrap().history(14).map_err(e)?;
     let liked = en.store.lock().unwrap().liked_songs().map_err(e)?;
@@ -708,7 +732,59 @@ pub fn home_feed(refresh: bool, offline: bool) -> Result<HomeFeed, String> {
         liked: views(en, liked.into_iter().take(14)),
         downloads: views(en, dls.into_iter().take(14)),
         playlists: playlists()?,
+        artists: cache.artists.into_iter().map(cached_view).collect(),
+        albums: cache.albums.into_iter().map(cached_view).collect(),
         fresh,
+    })
+}
+
+fn cached_view(c: CachedCollection) -> CollectionView {
+    CollectionView { id: c.id, title: c.title, subtitle: c.subtitle, thumbnail: c.thumbnail, kind: c.kind }
+}
+
+/// The artists you play most (looked up on YouTube Music for their pictures)
+/// and a couple of albums by each of the top few. Lookups run side by side.
+fn home_artists(en: &Engine) -> (Vec<CachedCollection>, Vec<CachedCollection>) {
+    let names = {
+        let st = en.store.lock().unwrap();
+        let history = st.history(150).unwrap_or_default();
+        let liked = st.liked_songs().unwrap_or_default();
+        recommend::top_artists(&history, &liked, 8)
+    };
+    if names.is_empty() {
+        return (vec![], vec![]);
+    }
+    let keep = |c: ytmusic::Collection| CachedCollection { id: c.id, title: c.title, subtitle: c.subtitle, thumbnail: c.thumbnail.unwrap_or_default(), kind: c.kind };
+    std::thread::scope(|sc| {
+        let artist_jobs: Vec<_> = names
+            .iter()
+            .map(|n| {
+                sc.spawn(move || {
+                    let hits = ytmusic::search_collections(ytmusic::Kind::Artists, n, 3).ok()?;
+                    let exact = hits.iter().position(|h| h.title.eq_ignore_ascii_case(n)).unwrap_or(0);
+                    hits.into_iter().nth(exact)
+                })
+            })
+            .collect();
+        let album_jobs: Vec<_> = names
+            .iter()
+            .take(4)
+            .map(|n| {
+                sc.spawn(move || {
+                    let low = n.to_lowercase();
+                    ytmusic::search_collections(ytmusic::Kind::Albums, n, 6)
+                        .unwrap_or_default()
+                        .into_iter()
+                        .filter(|a| a.subtitle.to_lowercase().contains(&low))
+                        .take(2)
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect();
+        let mut seen = std::collections::HashSet::new();
+        let artists = artist_jobs.into_iter().filter_map(|j| j.join().ok().flatten()).filter(|a| seen.insert(a.id.clone())).map(keep).collect();
+        let albums = album_jobs.into_iter().flat_map(|j| j.join().unwrap_or_default()).filter(|a| seen.insert(a.id.clone())).map(keep).collect();
+        (artists, albums)
     })
 }
 
@@ -1229,4 +1305,38 @@ pub fn spotify_fetch(id: String, name: String) -> Result<ImportPlaylistView, Str
     let token = spotify_token()?;
     let p = spotify::Api::default().tracks(&token, &id, &name).map_err(e)?;
     Ok(import_view(p))
+}
+
+// --- backup and restore ---
+
+/// What a backup file holds.
+#[derive(Clone, Debug)]
+pub struct BackupInfoView {
+    pub liked: u32,
+    pub playlists: u32,
+    pub plays: u32,
+}
+
+/// The whole library (likes, playlists, history, taste, settings) as one file's bytes.
+pub fn library_backup() -> Result<Vec<u8>, String> {
+    let en = eng()?;
+    std::fs::create_dir_all(&en.cache_dir).map_err(e)?;
+    let tmp = en.cache_dir.join(format!("backup-{}.harp", now_secs()));
+    let _ = std::fs::remove_file(&tmp);
+    en.store.lock().unwrap().backup_to(&tmp).map_err(e)?;
+    let bytes = std::fs::read(&tmp).map_err(e);
+    let _ = std::fs::remove_file(&tmp);
+    bytes
+}
+
+/// Checks a backup and sets it to replace the library the next time Harp starts.
+pub fn library_restore(bytes: Vec<u8>) -> Result<BackupInfoView, String> {
+    let en = eng()?;
+    std::fs::create_dir_all(&en.cache_dir).map_err(e)?;
+    let tmp = en.cache_dir.join("restore-check.harp");
+    std::fs::write(&tmp, &bytes).map_err(e)?;
+    let r = harp_core::backup::stage_restore(&en.db_path, &tmp);
+    let _ = std::fs::remove_file(&tmp);
+    let i = r.map_err(e)?;
+    Ok(BackupInfoView { liked: i.liked, playlists: i.playlists, plays: i.plays })
 }

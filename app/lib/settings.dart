@@ -36,6 +36,12 @@ class AppSettings extends ChangeNotifier {
   /// or "original".
   String lyricsScript = 'both';
 
+  /// Equalizer preset: "flat", "bass", "vocal", "treble" or "loudness".
+  String eq = 'flat';
+
+  /// Playback speed (1 = normal). Pitch stays the same.
+  double speed = 1;
+
   /// "off", "wide", "headphone" or "immersive": a virtual spatial effect (not Dolby Atmos).
   String spatial = 'off';
 
@@ -94,6 +100,8 @@ class AppSettings extends ChangeNotifier {
     cacheMb = int.tryParse(await get('cache_mb') ?? '') ?? 512;
     prefetchOnMobile = await get('prefetch_mobile') == '1';
     lyricsScript = await get('lyrics_script') ?? 'both';
+    eq = await get('eq') ?? 'flat';
+    speed = double.tryParse(await get('speed') ?? '') ?? 1;
     notifyListeners();
   }
 
@@ -135,6 +143,18 @@ class AppSettings extends ChangeNotifier {
     prefetchOnMobile = v;
     notifyListeners();
     await _save('prefetch_mobile', v ? '1' : '0');
+  }
+
+  Future<void> setEq(String v) async {
+    eq = v;
+    notifyListeners();
+    await _save('eq', v);
+  }
+
+  Future<void> setSpeed(double v) async {
+    speed = v;
+    notifyListeners();
+    await _save('speed', '$v');
   }
 
   Future<void> setLyricsScript(String v) async {
@@ -186,4 +206,12 @@ String spatialLabel(String s) => switch (s) {
       'headphone' => 'Headphone crossfeed',
       'immersive' => 'Virtual 3D',
       _ => 'Off',
+    };
+
+String eqLabel(String s) => switch (s) {
+      'bass' => 'Bass boost',
+      'vocal' => 'Vocal',
+      'treble' => 'Treble boost',
+      'loudness' => 'Loudness (low volume)',
+      _ => 'Flat',
     };

@@ -69,7 +69,14 @@ class PlayerController extends ChangeNotifier {
       _player.stream.error.listen(_onPlayerError),
     ]);
     String lastFx = _fxKey();
+    var lastSpeed = settings.speed;
+    if (lastSpeed != 1) unawaited(_player.setRate(lastSpeed));
     settings.addListener(() {
+      if (settings.speed != lastSpeed) {
+        lastSpeed = settings.speed;
+        unawaited(_player.setRate(lastSpeed));
+        _syncSession();
+      }
       viz.enabled = settings.reactiveBackground && settings.fullEffects;
       final fx = _fxKey();
       if (fx != lastFx) {
@@ -192,14 +199,14 @@ class PlayerController extends ChangeNotifier {
   bool get currentSuperliked => _currentSuperliked;
   String? get currentReason => current == null ? null : reasons[current!.id];
 
-  String _fxKey() => '${settings.spatial}|${settings.reactiveBackground}|${settings.fullEffects}';
+  String _fxKey() => '${settings.spatial}|${settings.eq}|${settings.reactiveBackground}|${settings.fullEffects}';
 
   /// The audio filter chain. Changing it mid-song makes libmpv rebuild the audio
   /// pipeline, which on some systems leaves playback stalled, so after a change
   /// the song is reopened at the same position (and resumes by itself).
   Future<void> _applyAudioFx({bool reopen = false}) async {
     if (!fxSupported) return;
-    await viz.applyFilters(spatial: settings.spatial, analyze: settings.reactiveBackground && settings.fullEffects);
+    await viz.applyFilters(spatial: settings.spatial, analyze: settings.reactiveBackground && settings.fullEffects, eq: settings.eq);
     if (reopen && current != null && !_loading) {
       await _reopenAt(position.value);
     }
@@ -250,6 +257,19 @@ class PlayerController extends ChangeNotifier {
     final s = current;
     if (s == null || _loadedId != s.id) return;
     unawaited(api.settingSet(key: 'resume_spot', value: '${s.id}|${position.value.inMilliseconds}'));
+    _saveLongSpot();
+  }
+
+  /// Long tracks (podcast episodes, mixes, audiobooks: 10 minutes or more)
+  /// remember where you stopped, each on its own, and start there next time.
+  /// Finished (or barely started) ones forget.
+  static const _longTrack = Duration(minutes: 10);
+  void _saveLongSpot() {
+    final id = _loadedId;
+    final d = duration.value, pos = position.value;
+    if (id == null || d < _longTrack) return;
+    final keep = pos > const Duration(seconds: 30) && pos < d - const Duration(seconds: 45);
+    unawaited(api.settingSet(key: 'pos:$id', value: keep ? '${pos.inMilliseconds}' : ''));
   }
 
   // --- sleep timer ---
@@ -295,7 +315,7 @@ class PlayerController extends ChangeNotifier {
       session.setIdle();
       return;
     }
-    session.setState(playing: playing, loading: loading, position: position.value);
+    session.setState(playing: playing, loading: loading, position: position.value, speed: settings.speed);
   }
 
   Future<void> _updateAccent(api.SongView s) async {
@@ -413,6 +433,7 @@ class PlayerController extends ChangeNotifier {
     final s = queue.current;
     if (s == null) return;
     final gen = ++_loadGen;
+    _saveLongSpot(); // the song being left, while its position is still known
     _loading = true;
     loading = true;
     error = null;
@@ -434,8 +455,17 @@ class PlayerController extends ChangeNotifier {
         return;
       }
       // A restored song starts where it was when the app closed.
-      final resume = _resumeAt != null && _resumeAt!.$1 == s.id && _resumeAt!.$2 > 5000 ? Duration(milliseconds: _resumeAt!.$2) : null;
+      var resume = _resumeAt != null && _resumeAt!.$1 == s.id && _resumeAt!.$2 > 5000 ? Duration(milliseconds: _resumeAt!.$2) : null;
       _resumeAt = null;
+      // A long track you stopped partway through starts where you left it.
+      if (resume == null && (s.durationSecs == null || s.durationSecs! >= _longTrack.inSeconds)) {
+        final ms = int.tryParse(await api.settingGet(key: 'pos:${s.id}') ?? '');
+        if (ms != null && ms > 0) resume = Duration(milliseconds: ms);
+        if (gen != _loadGen) {
+          superseded = true;
+          return;
+        }
+      }
       await _player.open(Media(st.url, start: resume, httpHeaders: st.local ? null : {for (final (k, v) in st.headers) k: v}));
       if (gen != _loadGen) {
         superseded = true;

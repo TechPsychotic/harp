@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
 
 import '../native.dart';
@@ -47,6 +48,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final d = (await api.downloads()).fold<int>(0, (a, e) => a + e.bytes.toInt());
     final c = await api.cacheBytes();
     if (mounted) setState(() { _thumbBytes = t.toInt(); _downloadBytes = d; _cacheBytes = c.toInt(); });
+  }
+
+  Future<void> _backup(BuildContext context) async {
+    try {
+      final bytes = await api.libraryBackup();
+      final d = DateTime.now();
+      final name = 'harp-library-${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}.harp';
+      final where = await FilePicker.saveFile(fileName: name, bytes: bytes, dialogTitle: 'Save your Harp library');
+      if (context.mounted) toast(context, where == null ? 'Not saved' : 'Library saved');
+    } catch (e) {
+      if (context.mounted) toast(context, "Couldn't back up: $e");
+    }
+  }
+
+  Future<void> _restore(BuildContext context) async {
+    try {
+      final files = await FilePicker.pickFiles(dialogTitle: 'Choose a Harp backup');
+      if (files.isEmpty || files.first.path == null) return;
+      final bytes = await File(files.first.path!).readAsBytes();
+      final info = await api.libraryRestore(bytes: bytes);
+      if (!context.mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Backup ready'),
+          content: Text('${info.liked} liked songs, ${info.playlists} playlists and ${info.plays} plays.\n\n'
+              'Close Harp and open it again to switch to this library. Your current library is kept aside as a safety copy.'),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
+        ),
+      );
+    } catch (e) {
+      if (context.mounted) toast(context, "Couldn't restore: $e");
+    }
   }
 
   String _mb(int b) => '${(b / 1048576).toStringAsFixed(1)} MB';
@@ -109,6 +143,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     initialValue: s.spatial,
                     onSelected: s.setSpatial,
                     itemBuilder: (_) => [for (final m in ['off', 'wide', 'headphone', 'immersive']) PopupMenuItem(value: m, child: Text(spatialLabel(m)))],
+                  ),
+                ),
+                ListTile(
+                  enabled: PlayerController.fxSupported,
+                  title: const Text('Equalizer'),
+                  subtitle: Text(
+                    PlayerController.fxSupported ? eqLabel(s.eq) : 'Coming to Android with the new audio engine (roadmap M2).',
+                    style: TextStyle(color: tok.textDim),
+                  ),
+                  trailing: !PlayerController.fxSupported ? null : PopupMenuButton<String>(
+                    icon: const Icon(Icons.expand_more_rounded),
+                    initialValue: s.eq,
+                    onSelected: s.setEq,
+                    itemBuilder: (_) => [for (final m in ['flat', 'bass', 'vocal', 'treble', 'loudness']) PopupMenuItem(value: m, child: Text(eqLabel(m)))],
+                  ),
+                ),
+                ListTile(
+                  title: const Text('Playback speed'),
+                  subtitle: Text(s.speed == 1 ? 'Normal' : '${s.speed}× · the pitch stays the same', style: TextStyle(color: tok.textDim)),
+                  trailing: PopupMenuButton<double>(
+                    icon: const Icon(Icons.expand_more_rounded),
+                    initialValue: s.speed,
+                    onSelected: s.setSpeed,
+                    itemBuilder: (_) => [for (final v in const [0.75, 1.0, 1.25, 1.5, 1.75, 2.0]) PopupMenuItem(value: v, child: Text(v == 1 ? 'Normal' : '$v×'))],
                   ),
                 ),
               ]),
@@ -183,6 +241,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     },
                     child: const Text('Clear'),
                   ),
+                ),
+              ]),
+              _Section('Backup', [
+                ListTile(
+                  leading: const Icon(Icons.save_alt_rounded),
+                  title: const Text('Back up your library'),
+                  subtitle: Text('Likes, playlists, history, taste and settings in one file. Keep it safe, or move it to another device.', style: TextStyle(color: tok.textDim)),
+                  onTap: () => _backup(context),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.settings_backup_restore_rounded),
+                  title: const Text('Restore from a backup'),
+                  subtitle: Text('Replaces this library the next time Harp starts. The current one is kept aside.', style: TextStyle(color: tok.textDim)),
+                  onTap: () => _restore(context),
                 ),
               ]),
               _Section('Spotify', [

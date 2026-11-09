@@ -316,6 +316,41 @@ fn warm(src: &dyn CandidateSource, seeds: &[Song], rng: &mut Rng) -> (Vec<Song>,
     (out, picked)
 }
 
+/// The first artist named on a song ("A, B", "A & B", "A feat. B" -> "A").
+pub fn main_artist(artist: &str) -> &str {
+    let mut end = artist.len();
+    for sep in [",", " & ", " x ", " feat", " ft.", " Feat", " with ", " and "] {
+        if let Some(i) = artist.find(sep) {
+            end = end.min(i);
+        }
+    }
+    artist[..end].trim()
+}
+
+/// The artists you listen to most, for the home page's artist shelf: plays
+/// count once, liked songs three times. Most played first; ties keep the
+/// order they were last heard.
+pub fn top_artists(history: &[Song], liked: &[Song], n: usize) -> Vec<String> {
+    let mut order: Vec<String> = Vec::new();
+    let mut score: HashMap<String, (f64, String)> = HashMap::new();
+    for (songs, w) in [(history, 1.0), (liked, 3.0)] {
+        for s in songs {
+            let name = main_artist(&s.artist);
+            if name.is_empty() || name.eq_ignore_ascii_case("unknown") || name.eq_ignore_ascii_case("various artists") {
+                continue;
+            }
+            let key = name.to_lowercase();
+            let e = score.entry(key.clone()).or_insert_with(|| {
+                order.push(key.clone());
+                (0.0, name.to_string())
+            });
+            e.0 += w;
+        }
+    }
+    order.sort_by(|a, b| score[b].0.partial_cmp(&score[a].0).unwrap_or(std::cmp::Ordering::Equal));
+    order.into_iter().take(n).map(|k| score[&k].1.clone()).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -494,5 +529,14 @@ mod tests {
     fn query_formatting() {
         assert_eq!(format_query("90s pop hits"), "90s Pop");
         assert_eq!(format_query("jazz standards"), "Jazz Standards");
+    }
+
+    #[test]
+    fn top_artists_counts_plays_and_likes() {
+        let s = |a: &str| Song { id: a.into(), title: "t".into(), artist: a.into(), artist_id: None, album: None, duration_secs: None, thumbnail: None };
+        let history = vec![s("Arijit Singh, Shreya Ghoshal"), s("Taylor Swift"), s("arijit singh"), s("Unknown"), s("Taylor Swift feat. Ed Sheeran"), s("Taylor Swift")];
+        let liked = vec![s("Prateek Kuhad")];
+        assert_eq!(top_artists(&history, &liked, 5), vec!["Taylor Swift", "Prateek Kuhad", "Arijit Singh"]);
+        assert_eq!(main_artist("A & B"), "A");
     }
 }

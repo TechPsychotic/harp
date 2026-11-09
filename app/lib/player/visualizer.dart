@@ -40,8 +40,23 @@ class Visualizer {
 
   /// The whole `af` value: optional spatial effect, then the loudness analyzer
   /// (after the effect, so the background follows what you actually hear).
-  static String filterChain({required String spatial, required bool analyze}) {
+  /// Equalizer presets as FFmpeg filters. Boosting presets first lower the
+  /// volume a little so loud songs don't clip.
+  static String? eqFilter(String preset) {
+    String band(int f, double g) => 'equalizer=f=$f:t=q:w=1:g=$g';
+    return switch (preset) {
+      'bass' => ['volume=-5dB', band(60, 6), band(150, 3.5), band(400, -1)].join(','),
+      'vocal' => ['volume=-3dB', band(250, -2), band(1500, 3), band(3500, 3), band(9000, -1)].join(','),
+      'treble' => ['volume=-4dB', band(4000, 2), band(8000, 4), band(14000, 5)].join(','),
+      'loudness' => ['volume=-4dB', band(60, 5), band(3000, -1), band(10000, 4)].join(','),
+      _ => null,
+    };
+  }
+
+  static String filterChain({required String spatial, required bool analyze, String eq = 'flat'}) {
     final parts = <String>[];
+    final e = eqFilter(eq);
+    if (e != null) parts.add('@eq:lavfi=[$e]');
     final fx = spatialFilter(spatial);
     if (fx != null) parts.add('@fx:lavfi=[$fx]');
     if (analyze) parts.add('@harp:lavfi=[astats=metadata=1:reset=1:length=0.05]');
@@ -60,9 +75,9 @@ class Visualizer {
   }
 
   /// (Re)applies the audio filters. Safe if the player has no filter support.
-  Future<void> applyFilters({required String spatial, required bool analyze}) async {
+  Future<void> applyFilters({required String spatial, required bool analyze, String eq = 'flat'}) async {
     try {
-      await _np?.setProperty('af', filterChain(spatial: spatial, analyze: analyze));
+      await _np?.setProperty('af', filterChain(spatial: spatial, analyze: analyze, eq: eq));
     } catch (_) {}
   }
 
