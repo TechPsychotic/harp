@@ -130,7 +130,8 @@ fn views(en: &Engine, v: impl Iterator<Item = Song>) -> Vec<SongView> {
     let st = en.store.lock().unwrap();
     v.map(|s| {
         let liked = st.is_liked(&s.id).unwrap_or(false);
-        let dl = st.downloaded_path(&s.id).ok().flatten().is_some();
+        // Your own files are on the device already: they count as downloaded (they play offline).
+        let dl = harp_core::local::is_local(&s.id) || st.downloaded_path(&s.id).ok().flatten().is_some();
         view(&s, liked, dl)
     })
     .collect()
@@ -212,7 +213,7 @@ pub fn start_engine(cfg: EngineConfig) -> Result<(), String> {
         Tool::binary(install::ensure(&tools, asset, false).map_err(e)?)
     };
 
-    // A backup chosen in Settings › Restore is swapped in now, before anything opens the database.
+    // A backup an older build left staged is merged in (never swapped over this library).
     let _ = harp_core::backup::apply_pending(&db);
     let store = Store::open(&db).map_err(e)?;
     // The queue as it was when the app last closed.
@@ -249,6 +250,12 @@ pub fn search(query: String) -> Result<Vec<SongView>, String> {
 /// chosen quality ("low", "medium" or "high").
 pub fn resolve_stream(id: String, quality: String) -> Result<StreamView, String> {
     let en = eng()?;
+    if harp_core::local::is_local(&id) {
+        return match en.store.lock().unwrap().local_path(&id).map_err(e)? {
+            Some(p) if std::path::Path::new(&p).is_file() => Ok(StreamView { url: p, local: true, headers: vec![], expires_at: None }),
+            _ => Err("this file is no longer on the device (rescan your folders in Library › On This Device)".into()),
+        };
+    }
     if let Some(p) = en.store.lock().unwrap().downloaded_path(&id).map_err(e)? {
         if std::path::Path::new(&p).is_file() {
             return Ok(StreamView { url: p, local: true, headers: vec![], expires_at: None });
@@ -699,7 +706,7 @@ pub fn home_feed(refresh: bool, offline: bool) -> Result<HomeFeed, String> {
             let last = st.history(1).map_err(e)?.into_iter().next();
             drop(st);
             let similar = match &last {
-                Some(s) => en.yt.related(&s.id, 12).unwrap_or_default(),
+                Some(s) => recommend::related_to(&en.yt, s, 12).unwrap_or_default(),
                 None => vec![],
             };
             Ok(HomeCache { ts: now_secs(), recommended: recs.into_iter().map(|r| r.song).collect(), similar_to: last, similar, ..Default::default() })
@@ -1127,6 +1134,9 @@ pub fn prefetch_songs(ids: Vec<String>, quality: String, limit_mb: u32) {
     }
     let inflight = PREFETCHING.get_or_init(|| Mutex::new(Default::default()));
     for id in ids {
+        if harp_core::local::is_local(&id) {
+            continue; // already on the device
+        }
         if en.store.lock().unwrap().downloaded_path(&id).ok().flatten().is_some() || cache::find(&en.cache_dir, &id).is_some() {
             continue;
         }
@@ -1315,13 +1325,6 @@ pub fn spotify_fetch(id: String, name: String) -> Result<ImportPlaylistView, Str
 
 // --- backup and restore ---
 
-/// What a backup file holds.
-#[derive(Clone, Debug)]
-pub struct BackupInfoView {
-    pub liked: u32,
-    pub playlists: u32,
-    pub plays: u32,
-}
 
 /// The whole library (likes, playlists, history, taste, settings) as one file's bytes.
 pub fn library_backup() -> Result<Vec<u8>, String> {
@@ -1335,16 +1338,25 @@ pub fn library_backup() -> Result<Vec<u8>, String> {
     bytes
 }
 
-/// Checks a backup and sets it to replace the library the next time Harp starts.
-pub fn library_restore(bytes: Vec<u8>) -> Result<BackupInfoView, String> {
+/// What a restore added to your library.
+#[derive(Clone, Debug)]
+pub struct MergeInfoView {
+    pub liked: u32,
+    pub playlists_new: u32,
+    pub playlists_grown: u32,
+    pub plays: u32,
+}
+
+/// Adds a backup to your library (nothing already here is replaced or lost).
+pub fn library_restore(bytes: Vec<u8>) -> Result<MergeInfoView, String> {
     let en = eng()?;
     std::fs::create_dir_all(&en.cache_dir).map_err(e)?;
-    let tmp = en.cache_dir.join("restore-check.harp");
+    let tmp = en.cache_dir.join("restore.harp");
     std::fs::write(&tmp, &bytes).map_err(e)?;
-    let r = harp_core::backup::stage_restore(&en.db_path, &tmp);
+    let r = en.store.lock().unwrap().merge_from(&tmp);
     let _ = std::fs::remove_file(&tmp);
     let i = r.map_err(e)?;
-    Ok(BackupInfoView { liked: i.liked, playlists: i.playlists, plays: i.plays })
+    Ok(MergeInfoView { liked: i.liked, playlists_new: i.playlists_new, playlists_grown: i.playlists_grown, plays: i.plays })
 }
 
 // --- followed artists, saved albums, new releases ---
@@ -1486,4 +1498,39 @@ pub fn lyrics_find(s: SongView, title: String, artist: String) -> Result<Option<
         let _ = en.store.lock().unwrap().save_lyrics(&s.id, &l);
         lyrics_view(l)
     }))
+}
+
+// --- your own music files ---
+
+/// The folders Harp reads your music files from.
+pub fn local_folders() -> Result<Vec<String>, String> {
+    eng()?.store.lock().unwrap().local_folders().map_err(e)
+}
+
+/// Adds (`on`) or removes a folder, then rescans. Returns how many songs there are.
+pub fn local_folder_set(path: String, on: bool) -> Result<u32, String> {
+    let en = eng()?;
+    {
+        let st = en.store.lock().unwrap();
+        let mut dirs = st.local_folders().map_err(e)?;
+        dirs.retain(|d| d != &path);
+        if on {
+            dirs.push(path);
+        }
+        st.set_local_folders(&dirs).map_err(e)?;
+    }
+    local_rescan()
+}
+
+/// Reads the folders again (new, changed and removed files).
+pub fn local_rescan() -> Result<u32, String> {
+    let en = eng()?;
+    let covers = en.thumbs_dir.join("local");
+    en.store.lock().unwrap().local_rescan(Some(&covers)).map_err(e)
+}
+
+pub fn local_songs() -> Result<Vec<SongView>, String> {
+    let en = eng()?;
+    let v = en.store.lock().unwrap().local_songs().map_err(e)?;
+    Ok(views(en, v.into_iter()))
 }

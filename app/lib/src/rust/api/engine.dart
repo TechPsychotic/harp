@@ -358,8 +358,8 @@ Future<ImportPlaylistView> spotifyFetch({
 Future<Uint8List> libraryBackup() =>
     RustLib.instance.api.crateApiEngineLibraryBackup();
 
-/// Checks a backup and sets it to replace the library the next time Harp starts.
-Future<BackupInfoView> libraryRestore({required List<int> bytes}) =>
+/// Adds a backup to your library (nothing already here is replaced or lost).
+Future<MergeInfoView> libraryRestore({required List<int> bytes}) =>
     RustLib.instance.api.crateApiEngineLibraryRestore(bytes: bytes);
 
 /// Follow an artist, or save an album, playlist or podcast to the library (`on`), or undo it.
@@ -412,30 +412,19 @@ Future<LyricsView?> lyricsFind({
   artist: artist,
 );
 
-/// What a backup file holds.
-class BackupInfoView {
-  final int liked;
-  final int playlists;
-  final int plays;
+/// The folders Harp reads your music files from.
+Future<List<String>> localFolders() =>
+    RustLib.instance.api.crateApiEngineLocalFolders();
 
-  const BackupInfoView({
-    required this.liked,
-    required this.playlists,
-    required this.plays,
-  });
+/// Adds (`on`) or removes a folder, then rescans. Returns how many songs there are.
+Future<int> localFolderSet({required String path, required bool on_}) =>
+    RustLib.instance.api.crateApiEngineLocalFolderSet(path: path, on_: on_);
 
-  @override
-  int get hashCode => liked.hashCode ^ playlists.hashCode ^ plays.hashCode;
+/// Reads the folders again (new, changed and removed files).
+Future<int> localRescan() => RustLib.instance.api.crateApiEngineLocalRescan();
 
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is BackupInfoView &&
-          runtimeType == other.runtimeType &&
-          liked == other.liked &&
-          playlists == other.playlists &&
-          plays == other.plays;
-}
+Future<List<SongView>> localSongs() =>
+    RustLib.instance.api.crateApiEngineLocalSongs();
 
 class BrowseGroupView {
   final String title;
@@ -837,6 +826,38 @@ class MatchView {
           score == other.score &&
           confidence == other.confidence &&
           alternatives == other.alternatives;
+}
+
+/// What a restore added to your library.
+class MergeInfoView {
+  final int liked;
+  final int playlistsNew;
+  final int playlistsGrown;
+  final int plays;
+
+  const MergeInfoView({
+    required this.liked,
+    required this.playlistsNew,
+    required this.playlistsGrown,
+    required this.plays,
+  });
+
+  @override
+  int get hashCode =>
+      liked.hashCode ^
+      playlistsNew.hashCode ^
+      playlistsGrown.hashCode ^
+      plays.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is MergeInfoView &&
+          runtimeType == other.runtimeType &&
+          liked == other.liked &&
+          playlistsNew == other.playlistsNew &&
+          playlistsGrown == other.playlistsGrown &&
+          plays == other.plays;
 }
 
 class Pick {

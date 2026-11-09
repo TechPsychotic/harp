@@ -108,6 +108,8 @@ CREATE TABLE IF NOT EXISTS playlist_items(
   id INTEGER PRIMARY KEY, playlist_id INTEGER NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
   pos INTEGER NOT NULL, song_id TEXT NOT NULL, song_json TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS playlist_items_pl ON playlist_items(playlist_id, pos);
+CREATE TABLE IF NOT EXISTS local_files(
+  id TEXT PRIMARY KEY, path TEXT NOT NULL, mtime INTEGER NOT NULL, song_json TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS saved(
   id TEXT PRIMARY KEY, kind TEXT NOT NULL, title TEXT NOT NULL,
   subtitle TEXT NOT NULL DEFAULT '', thumbnail TEXT NOT NULL DEFAULT '',
@@ -127,7 +129,26 @@ const MIGRATIONS: &[&str] = &[
     "DELETE FROM lyrics WHERE json LIKE '%\"lines\":[]%';",
     // 3: playlists that download new songs by themselves.
     "ALTER TABLE playlists ADD COLUMN autodl INTEGER NOT NULL DEFAULT 0;",
+    // 4: artist scores fade with time; this is when each was last brought up to date.
+    "ALTER TABLE artist_scores ADD COLUMN updated INTEGER NOT NULL DEFAULT 0;",
 ];
+
+/// Taste fades: an artist's score halves every 60 days without new plays,
+/// so what you listen to now outweighs what you played a year ago.
+pub const HALF_LIFE_SECS: f64 = 60.0 * 86400.0;
+
+fn now_secs() -> i64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
+}
+
+/// How much of a score is left after `age` seconds. Scores never stamped
+/// (from before fading existed) are treated as fresh.
+pub fn decay(age_secs: i64, stamped: bool) -> f64 {
+    if !stamped || age_secs <= 0 {
+        return 1.0;
+    }
+    0.5f64.powf(age_secs as f64 / HALF_LIFE_SECS)
+}
 
 pub(crate) fn migrate(conn: &Connection) -> Result<()> {
     let done: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
@@ -187,13 +208,53 @@ impl Store {
     }
 
     fn bump_artist(&self, key: &str, name: &str, likes: f64, skips: f64) -> Result<()> {
+        self.bump_artist_at(key, name, likes, skips, now_secs())
+    }
+
+    /// Fades the old score to `now`, then adds the new evidence.
+    pub(crate) fn bump_artist_at(&self, key: &str, name: &str, likes: f64, skips: f64, now: i64) -> Result<()> {
+        use rusqlite::OptionalExtension;
+        let old: Option<(f64, f64, i64)> = self
+            .conn
+            .query_row("SELECT likes,skips,updated FROM artist_scores WHERE artist_key=?", [key], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            .optional()?;
+        let (l, s) = match old {
+            Some((l, s, at)) => {
+                let k = decay(now - at, at > 0);
+                (l * k, s * k)
+            }
+            None => (0.0, 0.0),
+        };
         self.conn.execute(
-            "INSERT INTO artist_scores(artist_key,name,likes,skips) VALUES(?,?,?,?)
+            "INSERT INTO artist_scores(artist_key,name,likes,skips,updated) VALUES(?,?,?,?,?)
              ON CONFLICT(artist_key) DO UPDATE SET
-               likes=likes+excluded.likes, skips=skips+excluded.skips, name=excluded.name",
-            params![key, name, likes, skips],
+               likes=excluded.likes, skips=excluded.skips, name=excluded.name, updated=excluded.updated",
+            params![key, name, l + likes, s + skips, now],
         )?;
         Ok(())
+    }
+
+    /// Artists you tend to play around this time of day: for each artist with at
+    /// least 3 plays, the share of them within two hours of the hour now (local
+    /// time). Morning music in the morning, night music at night.
+    pub fn hour_affinity(&self) -> Result<HashMap<String, f64>> {
+        self.hour_affinity_at(None)
+    }
+
+    pub(crate) fn hour_affinity_at(&self, hour: Option<u32>) -> Result<HashMap<String, f64>> {
+        let h: i64 = match hour {
+            Some(h) => h as i64,
+            None => self.conn.query_row("SELECT CAST(strftime('%H','now','localtime') AS INTEGER)", [], |r| r.get(0))?,
+        };
+        let mut st = self.conn.prepare(
+            "SELECT artist_key, count(*),
+               sum(CASE WHEN min(abs(CAST(strftime('%H',played_at,'unixepoch','localtime') AS INTEGER) - ?1),
+                                 24 - abs(CAST(strftime('%H',played_at,'unixepoch','localtime') AS INTEGER) - ?1)) <= 2
+                   THEN 1 ELSE 0 END)
+             FROM plays GROUP BY artist_key HAVING count(*) >= 3",
+        )?;
+        let rows = st.query_map([h], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, i64>(2)?)))?;
+        Ok(rows.filter_map(|r| r.ok()).map(|(k, n, near)| (k, near as f64 / n as f64)).collect())
     }
 
     /// Why the user skipped a song. "Not this artist" and "overplayed" push the
@@ -212,10 +273,14 @@ impl Store {
         Ok(())
     }
 
+    /// Every artist's score, faded to now.
     pub fn artist_scores(&self) -> Result<HashMap<String, ArtistScore>> {
-        let mut st = self.conn.prepare("SELECT artist_key,likes,skips FROM artist_scores")?;
+        let now = now_secs();
+        let mut st = self.conn.prepare("SELECT artist_key,likes,skips,updated FROM artist_scores")?;
         let rows = st.query_map([], |r| {
-            Ok((r.get::<_, String>(0)?, ArtistScore { likes: r.get(1)?, skips: r.get(2)? }))
+            let at: i64 = r.get(3)?;
+            let k = decay(now - at, at > 0);
+            Ok((r.get::<_, String>(0)?, ArtistScore { likes: r.get::<_, f64>(1)? * k, skips: r.get::<_, f64>(2)? * k }))
         })?;
         Ok(rows.collect::<std::result::Result<_, _>>()?)
     }
@@ -413,5 +478,44 @@ mod tests {
         st.kv_set("last", "x").unwrap();
         assert_eq!(st.kv_get("last").unwrap().as_deref(), Some("x"));
         assert_eq!(st.kv_get("nope").unwrap(), None);
+    }
+
+    #[test]
+    fn taste_fades_with_time() {
+        assert_eq!(decay(0, true), 1.0);
+        assert!((decay(HALF_LIFE_SECS as i64, true) - 0.5).abs() < 1e-9);
+        assert_eq!(decay(10_000_000, false), 1.0, "never-stamped scores aren't faded");
+        let st = Store::open_memory().unwrap();
+        let day = 86400;
+        // Loved a year ago, nothing since...
+        st.bump_artist_at("old", "Old", 10.0, 0.0, 1_000_000).unwrap();
+        // ...versus a little, recently: the old love is down to ~1/64 of itself.
+        st.bump_artist_at("old", "Old", 0.0, 0.0, 1_000_000 + 360 * day).unwrap();
+        st.bump_artist_at("new", "New", 1.0, 0.0, 1_000_000 + 360 * day).unwrap();
+        let (l, _, _): (f64, f64, i64) = st.conn.query_row("SELECT likes,skips,updated FROM artist_scores WHERE artist_key='old'", [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?))).unwrap();
+        assert!(l < 0.2, "{l}");
+    }
+
+    #[test]
+    fn time_of_day_affinity() {
+        let st = Store::open_memory().unwrap();
+        // Plays stamped at chosen local hours.
+        let at = |hour: i64| -> i64 {
+            let off: i64 = st.conn.query_row("SELECT strftime('%s','2026-01-01 00:00:00') - strftime('%s','2026-01-01 00:00:00','utc')", [], |r| r.get(0)).unwrap();
+            1_767_225_600 + hour * 3600 - off // 2026-01-01 local
+        };
+        for (artist, hour) in [("m", 7), ("m", 8), ("m", 9), ("m", 21), ("n", 22), ("n", 23), ("n", 0), ("x", 8)] {
+            st.conn.execute(
+                "INSERT INTO plays(song_id,song_json,artist_key,completion,liked,superliked,source,played_at) VALUES('s','{}',?,1,1,0,'auto',?)",
+                params![artist, at(hour)],
+            ).unwrap();
+        }
+        let morning = st.hour_affinity_at(Some(8)).unwrap();
+        assert_eq!(morning.get("m"), Some(&0.75));
+        assert_eq!(morning.get("n"), Some(&0.0));
+        assert!(!morning.contains_key("x"), "too few plays to tell");
+        let night = st.hour_affinity_at(Some(23)).unwrap();
+        assert_eq!(night.get("n"), Some(&1.0), "wraps around midnight");
+        assert_eq!(night.get("m"), Some(&0.25));
     }
 }

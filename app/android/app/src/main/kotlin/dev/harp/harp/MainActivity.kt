@@ -41,6 +41,16 @@ class MainActivity : AudioServiceActivity() {
         }
     }
 
+    private var pendingAudio: MethodChannel.Result? = null
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 8) {
+            pendingAudio?.success(grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED)
+            pendingAudio = null
+        }
+    }
+
     /** What a crash left behind: our own stack trace, and Android's record of why the app last exited. */
     private fun crashReport(): String {
         val sb = StringBuilder()
@@ -114,6 +124,17 @@ class MainActivity : AudioServiceActivity() {
                             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 7)
                         }
                         result.success(null)
+                    }
+                    // Reading your music files: asks once, answers whether Harp may.
+                    "requestAudioAccess" -> {
+                        val perm = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
+                        if (checkSelfPermission(perm) == PackageManager.PERMISSION_GRANTED) {
+                            result.success(true)
+                        } else {
+                            pendingAudio?.success(false)
+                            pendingAudio = result
+                            requestPermissions(arrayOf(perm), 8)
+                        }
                     }
                     else -> result.notImplemented()
                 }

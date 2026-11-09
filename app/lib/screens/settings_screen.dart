@@ -68,13 +68,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (files.isEmpty || files.first.path == null) return;
       final bytes = await File(files.first.path!).readAsBytes();
       final info = await api.libraryRestore(bytes: bytes);
+      widget.player.libraryRev.value++;
+      widget.player.savedRev.value++;
       if (!context.mounted) return;
+      final nothing = info.liked == 0 && info.playlistsNew == 0 && info.playlistsGrown == 0 && info.plays == 0;
       await showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Backup ready'),
-          content: Text('${info.liked} liked songs, ${info.playlists} playlists and ${info.plays} plays.\n\n'
-              'Close Harp and open it again to switch to this library. Your current library is kept aside as a safety copy.'),
+          title: const Text('Backup added'),
+          content: Text(nothing
+              ? 'Everything in this backup is already here.'
+              : 'Added ${info.liked} liked songs, ${info.playlistsNew} new playlists'
+                  '${info.playlistsGrown > 0 ? ', more songs in ${info.playlistsGrown} playlists you already had' : ''}'
+                  ' and ${info.plays} plays from your history. Nothing you had was changed.'),
           actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
         ),
       );
@@ -262,7 +268,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ListTile(
                   leading: const Icon(Icons.settings_backup_restore_rounded),
                   title: const Text('Restore from a backup'),
-                  subtitle: Text('Replaces this library the next time Harp starts. The current one is kept aside.', style: TextStyle(color: tok.textDim)),
+                  subtitle: Text('Adds the backup to what’s here: nothing you have now is replaced or lost.', style: TextStyle(color: tok.textDim)),
                   onTap: () => _restore(context),
                 ),
               ]),

@@ -98,11 +98,14 @@ class SongMenu extends StatelessWidget {
         _item('add', Icons.queue_music_rounded, 'Add to queue'),
         _item('playlist', Icons.playlist_add_rounded, 'Add to playlist…'),
         _item('like', song.liked ? Icons.favorite_rounded : Icons.favorite_border_rounded, song.liked ? 'Remove from liked' : 'Like'),
-        if (song.downloaded)
-          _item('undownload', Icons.delete_outline_rounded, 'Remove download')
-        else
-          _item('download', Icons.download_rounded, 'Download'),
-        _item('share', Icons.share_rounded, 'Share link'),
+        // Your own files: nothing to download or share a link to.
+        if (!song.id.startsWith('local:')) ...[
+          if (song.downloaded)
+            _item('undownload', Icons.delete_outline_rounded, 'Remove download')
+          else
+            _item('download', Icons.download_rounded, 'Download'),
+          _item('share', Icons.share_rounded, 'Share link'),
+        ],
         if (onRemoveFromList != null) _item('remove', Icons.remove_circle_outline_rounded, removeLabel),
       ],
     );
@@ -182,8 +185,10 @@ Future<void> showSongSheet(BuildContext context, PlayerController player, api.So
             item('add', Icons.queue_music_rounded, 'Add to queue'),
             item('playlist', Icons.playlist_add_rounded, 'Add to playlist…'),
             item('like', song.liked ? Icons.favorite_rounded : Icons.favorite_border_rounded, song.liked ? 'Remove from liked' : 'Like'),
-            if (song.downloaded) item('undownload', Icons.delete_outline_rounded, 'Remove download') else item('download', Icons.download_rounded, 'Download'),
-            item('share', Icons.share_rounded, 'Share link'),
+            if (!song.id.startsWith('local:')) ...[
+              if (song.downloaded) item('undownload', Icons.delete_outline_rounded, 'Remove download') else item('download', Icons.download_rounded, 'Download'),
+              item('share', Icons.share_rounded, 'Share link'),
+            ],
             if (onRemove != null) item('remove', Icons.remove_circle_outline_rounded, removeLabel),
             const SizedBox(height: 8),
           ]),

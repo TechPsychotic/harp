@@ -8,6 +8,33 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-09 (latest): background fix, lyrics position, your own music files, restore adds
+
+**Fixed**
+- **The reactive background could bring the phone down.** It drew big full-screen clouds with
+  "screen" blending and blurred rings, 60 times a second. On Android's graphics engine, each of those
+  draws can force a copy of the whole screen, which can overwhelm a phone's GPU. Now the scene is
+  drawn at 54 pixels wide and scaled up (the blur of scaling is the look anyway), with normal blending
+  and no blur filters, at 30 frames a second: a tiny fraction of the work, the same look (checked on
+  a rendered frame). 📱 please confirm.
+- **Lyrics now open at the line being sung.** The list only builds the lines near the top, so when
+  you opened lyrics mid-song the current line didn't exist yet and the scroll gave up. It now jumps
+  near the line first, then lands on it exactly. 📱
+- **Restoring a backup adds to your library instead of replacing it** (you asked). Likes, follows,
+  saved albums and history are added; a playlist with the same name gets the songs it's missing (at
+  the end); new playlists are created; your settings, queue and folders stay. It happens right away,
+  with no restart, and restoring the same backup twice adds nothing more. 🧪
+
+**Next milestones (M5)**
+- **Your own music files:** Library › On This Device. Add folders; Harp reads titles, artists,
+  albums, lengths and embedded covers (or uses "Artist - Title" from the file name), and they play
+  offline like downloads, with likes, playlists, the queue and recommendations ("Because you played"
+  finds the song online to suggest similar ones). Filter and sort, rescan, remove folders.
+  🧪 on real tagged and untagged files. Android asks for the music permission (📱).
+- **Smarter picks:** taste now fades (an artist's score halves after 60 days without plays, so what
+  you like now counts more than a year ago), and artists you usually play around this hour get a
+  nudge (morning music in the morning). 🧪
+
 ## 2026-11-09 (late): browse charts and genres, lyrics tools, even volume
 
 **Browse (M5)**

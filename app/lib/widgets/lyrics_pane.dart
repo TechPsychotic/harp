@@ -122,14 +122,33 @@ class _LyricsPaneState extends State<LyricsPane> {
 
   void _follow(int idx) {
     if (idx == _active) return;
+    final first = _active == -1; // just opened, or the song changed
     _active = idx;
     if (idx < 0 || idx >= _keys.length) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final ctx = _keys[idx].currentContext;
-      if (ctx != null && mounted) {
-        Scrollable.ensureVisible(ctx, alignment: 0.38, duration: const Duration(milliseconds: 350), curve: Curves.easeOutCubic);
-      }
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollTo(idx, animate: !first, tries: 4));
+  }
+
+  /// Brings line [idx] to the reading position. The list only builds the
+  /// lines near the screen, so a far line (opening the lyrics mid-song) has
+  /// no position yet: jump near it by estimate first, then land exactly.
+  void _scrollTo(int idx, {required bool animate, required int tries}) {
+    if (!mounted || idx != _active) return;
+    final ctx = _keys[idx].currentContext;
+    if (ctx != null) {
+      Scrollable.ensureVisible(
+        ctx,
+        alignment: 0.38,
+        duration: animate ? const Duration(milliseconds: 350) : Duration.zero,
+        curve: Curves.easeOutCubic,
+      );
+      return;
+    }
+    if (tries == 0 || !_scroll.hasClients) return;
+    // Estimate from the lines already laid out (about 50 px each otherwise).
+    final pos = _scroll.position;
+    final perLine = pos.maxScrollExtent > 0 && _keys.isNotEmpty ? (pos.maxScrollExtent + pos.viewportDimension) / (_keys.length + 1) : 50.0;
+    _scroll.jumpTo((60 + idx * perLine - pos.viewportDimension * 0.38).clamp(0.0, pos.maxScrollExtent));
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollTo(idx, animate: false, tries: tries - 1));
   }
 
   @override

@@ -52,6 +52,16 @@ class Native {
     }
   }
 
+  /// Android: asks to read your music files (true elsewhere).
+  static Future<bool> requestAudioAccess() async {
+    if (!Platform.isAndroid) return true;
+    try {
+      return await _c.invokeMethod<bool>('requestAudioAccess') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static Future<void> requestNotifications() async {
     if (!Platform.isAndroid) return;
     try {

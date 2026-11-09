@@ -69,7 +69,7 @@ the idea and the code. `UPDATES.md` is the dated log of changes; this file is th
 
 **Problems (23): 5 fixed and checked, 17 fixed but waiting for your confirmation, 1 partly fixed.**
 
-### 1b. Features you asked for (48)
+### 1b. Features you asked for (49)
 
 | # | Feature | Status | Notes |
 |---|---|---|---|
@@ -120,6 +120,9 @@ the idea and the code. `UPDATES.md` is the dated log of changes; this file is th
 | F46 | New songs go on top of a playlist | ✅ | Added songs appear first (a batch keeps its order). 🧪 |
 | F47 | Playlists you downloaded keep downloading new songs | 🟡 | "Download All" now also turns on auto-download for that playlist (shown under its name; "Stop downloading new songs" in its menu). Songs added later download by themselves. |
 | F48 | Search's top result can't be queued or added to a playlist | ✅ | It has a ⋮ menu and a long press, like every other song. |
+| B24 | The reactive background crashed the phone | 🟡 | Cause: it drew full-screen "screen"-blended clouds and blurred rings 60 times a second, and on Android's graphics engine each such draw can force a full-screen copy. Now it's drawn at 54 px wide with normal blending and scaled up (same look), at 30 fps. Needs the phone to confirm. |
+| B25 | Lyrics don't open at the current line | 🟡 | The list only builds lines near the top, so a far line had no position and the scroll gave up. Now it jumps near the line by estimate, then lands exactly. |
+| F49 | Restoring a backup should add, not overwrite | ✅ | Restoring adds the backup to the current library, right away (no restart). 🧪 |
 | F33 | The same for Amazon Music | ⛔ | No public API for listeners (Amazon's web API is invite-only), and shared playlist pages are a JavaScript app with no songs in the page (checked). Workarounds: paste the list, or a CSV from a converter such as TuneMyMusic (already imports). |
 
 **Features (48): 29 done and checked, 15 done but waiting for your confirmation, 3 in progress,
@@ -217,13 +220,17 @@ Goal: lyrics as good as Apple Music's: word-by-word where they exist, line-synce
 - ◐ Sort: Liked and Downloaded (recent, title, artist), Library playlists (recent, name; pinned
   stay on top), remembered. Playlist covers are automatic mosaics. Still to do: filter, folders,
   custom covers.
-- ☑ Backup and restore of the whole library to one file (Settings › Backup; 🧪). A restore is
-  checked, then swapped in on the next start, keeping the old library aside.
-- ☐ Local files as a source (your own music on the device).
+- ☑ Backup and restore of the whole library to one file (Settings › Backup; 🧪). Restoring
+  **adds** the backup to what's here (likes, playlists by name, history, follows); nothing is lost,
+  and restoring twice adds nothing more.
+- ☑ **Your own music files** (Library › On This Device): pick folders; tags, covers and lengths are
+  read; they play offline and work with likes, playlists and the queue. 🧪 on real files. Android:
+  asks for the music permission (needs the phone to confirm).
 - ☑ Browse (Search tab): **Charts** for your country (from the device's region) and every
   YouTube Music **mood and genre** as a tile, each opening rows of playlists. Checked live; 🧪.
-- ☐ A smarter taste model: song-level signals, time decay, time-of-day and mood, wider starter
-  genres; recommendations from downloads when offline.
+- ◐ A smarter taste model: **time decay** (an artist's score halves every 60 days) and
+  **time of day** (artists you play around this hour get a nudge) are in, 🧪. Still to do:
+  song-level signals, wider starter genres, recommendations from downloads when offline.
 - **Done when:** the Library tab can replace another music app's library for you.
 
 ### M6 · Platform integration

@@ -9,6 +9,7 @@ import '../widgets/song_actions.dart';
 import '../widgets/song_tile.dart';
 import 'collection.dart';
 import 'import_screen.dart';
+import 'local_screen.dart';
 import 'playlist.dart';
 
 /// Your music on this device: categories first, then your playlists.
@@ -98,6 +99,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       PageTitle('Library', actions: [IconButton(tooltip: 'New playlist', icon: Icon(Icons.add_rounded, color: accent), onPressed: _newPlaylist)]),
       row(Icons.favorite_rounded, 'Liked Songs', '$_liked', () => _push(SongListScreen(player: p, kind: 'liked'))),
       row(Icons.arrow_circle_down_rounded, 'Downloaded', '$_downloads', () => _push(SongListScreen(player: p, kind: 'downloads'))),
+      row(Icons.folder_special_rounded, 'On This Device', null, () => _push(LocalScreen(player: p))),
       row(Icons.mic_external_on_rounded, 'Artists', '$_artists', () => _push(SavedScreen(player: p, kind: 'artist'))),
       row(Icons.album_rounded, 'Albums & Podcasts', '$_albums', () => _push(SavedScreen(player: p, kind: 'other'))),
       row(Icons.history_rounded, 'Recently Played', null, () => _push(SongListScreen(player: p, kind: 'history'))),

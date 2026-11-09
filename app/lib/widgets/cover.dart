@@ -59,6 +59,8 @@ class ThumbCache {
 
   /// The cached file if there already is one (no waiting).
   static String? peek(String url) {
+    // A cover from your own music files is already a file on the device.
+    if (url.startsWith('/')) return File(url).existsSync() ? url : null;
     final known = _paths[url];
     if (known != null) return known;
     if (_dir == null) return null;

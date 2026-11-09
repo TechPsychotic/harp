@@ -82,14 +82,32 @@ pub struct Recommendation {
     pub reason: String,
 }
 
+/// Songs like `song`. Your own files have no online id, so their online
+/// match (by title and artist) stands in for them.
+pub fn related_to(src: &dyn CandidateSource, song: &Song, limit: usize) -> Result<Vec<Song>> {
+    if !crate::local::is_local(&song.id) {
+        return src.related(&song.id, limit);
+    }
+    let q = format!("{} {}", song.title, if song.artist == "Unknown artist" { "" } else { &song.artist });
+    match src.search(q.trim(), 1)?.into_iter().next() {
+        Some(online) => Ok(src.related(&online.id, limit)?.into_iter().filter(|s| s.id != online.id).collect()),
+        None => Ok(vec![]),
+    }
+}
+
 fn playable(s: &Song) -> bool {
     s.duration_secs.map_or(true, |d| (60..=600).contains(&d))
 }
 
-fn score(song: &Song, scores: &HashMap<String, ArtistScore>, rng: &mut Rng) -> f64 {
+fn score(song: &Song, scores: &HashMap<String, ArtistScore>, hours: &HashMap<String, f64>, rng: &mut Rng) -> f64 {
     let mut base = rng.f64();
-    if let Some(s) = scores.get(&song.artist_key()) {
+    let key = song.artist_key();
+    if let Some(s) = scores.get(&key) {
         base += s.likes * 3.0 - s.skips * 2.0;
+    }
+    // A nudge (not a takeover) toward what you usually play at this hour.
+    if let Some(a) = hours.get(&key) {
+        base += 1.5 * a;
     }
     base
 }
@@ -240,7 +258,8 @@ fn pick_n(
     let pool: Vec<&Song> = if fresh.is_empty() { g.candidates.iter().collect() } else { fresh };
 
     let scores = store.artist_scores()?;
-    let mut ranked: Vec<(f64, &Song)> = pool.into_iter().map(|s| (score(s, &scores, rng), s)).collect();
+    let hours = store.hour_affinity().unwrap_or_default();
+    let mut ranked: Vec<(f64, &Song)> = pool.into_iter().map(|s| (score(s, &scores, &hours, rng), s)).collect();
     ranked.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
 
     let cap = if n > 1 { 2 } else { usize::MAX };
@@ -304,7 +323,7 @@ fn warm(src: &dyn CandidateSource, seeds: &[Song], rng: &mut Rng) -> (Vec<Song>,
     let mut seen: HashSet<String> = picked.iter().map(|s| s.id.clone()).collect();
     let mut out = Vec::new();
     for seed in &picked {
-        for s in src.related(&seed.id, 25).unwrap_or_default() {
+        for s in related_to(src, seed, 25).unwrap_or_default() {
             if playable(&s) && seen.insert(s.id.clone()) {
                 out.push(s);
             }

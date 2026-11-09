@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -94,7 +95,9 @@ class _MusicBackdropState extends State<MusicBackdrop> with SingleTickerProvider
   }
 
   void _onTick(Duration elapsed) {
-    final dt = _last == Duration.zero ? 1 / 60 : ((elapsed - _last).inMicroseconds / 1e6).clamp(0.0, 0.1);
+    // 30 frames a second is plenty for slow clouds, and halves the work.
+    if (_last != Duration.zero && elapsed - _last < const Duration(milliseconds: 30)) return;
+    final dt = _last == Duration.zero ? 1 / 30 : ((elapsed - _last).inMicroseconds / 1e6).clamp(0.0, 0.1);
     _last = elapsed;
     final raw = widget.level.value.clamp(0.0, 1.0);
     final f = _f;
@@ -164,8 +167,39 @@ class _BackdropPainter extends CustomPainter {
     (0.22, 0.33, 5.3, 0.9, 0.32, 0.38),
   ];
 
+  /// The scene is drawn tiny (54 px wide) and scaled up to the screen. The
+  /// scaling blurs it for free, which is the look anyway, and it keeps the
+  /// GPU work trivial. (Drawing it full size with "screen" blending and
+  /// blurred rings overloaded phone GPUs: on Android's Impeller each such
+  /// draw can force a full-screen copy.)
+  static const _w = 54.0;
+
   @override
   void paint(Canvas canvas, Size size) {
+    if (size.isEmpty) return;
+    final h = (_w * size.height / size.width).clamp(24.0, 200.0).roundToDouble();
+    final rec = ui.PictureRecorder();
+    _scene(Canvas(rec), Size(_w, h));
+    final pic = rec.endRecording();
+    final img = pic.toImageSync(_w.toInt(), h.toInt());
+    pic.dispose();
+    canvas.drawImageRect(img, Rect.fromLTWH(0, 0, _w, h), Offset.zero & size, Paint()..filterQuality = FilterQuality.medium);
+    img.dispose();
+    // Darker towards the bottom, so the controls always read clearly.
+    final rect = Offset.zero & size;
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0x33000000), Color(0x00000000), Color(0x99000000)],
+          stops: [0, 0.35, 1],
+        ).createShader(rect),
+    );
+  }
+
+  void _scene(Canvas canvas, Size size) {
     final colors = _blend(f.from, f.to, f.mix);
     final lv = f.level;
     final rect = Offset.zero & size;
@@ -186,7 +220,6 @@ class _BackdropPainter extends CustomPainter {
         c,
         r,
         Paint()
-          ..blendMode = BlendMode.screen
           ..shader = RadialGradient(
             colors: [colors[i].withValues(alpha: a), colors[i].withValues(alpha: a * 0.35), colors[i].withValues(alpha: 0)],
             stops: const [0, 0.45, 1],
@@ -206,24 +239,11 @@ class _BackdropPainter extends CustomPainter {
         radius,
         Paint()
           ..style = PaintingStyle.stroke
-          ..strokeWidth = long * (0.035 * (1 - t) + 0.008)
-          ..blendMode = BlendMode.screen
-          ..color = Color.lerp(Colors.white, colors[1], 0.35)!.withValues(alpha: 0.28 * fade * ring.strength)
-          ..maskFilter = MaskFilter.blur(BlurStyle.normal, long * 0.018),
+          ..strokeWidth = long * (0.05 * (1 - t) + 0.015)
+          ..color = Color.lerp(Colors.white, colors[1], 0.35)!.withValues(alpha: 0.30 * fade * ring.strength),
       );
     }
 
-    // Darker towards the bottom, so the controls always read clearly.
-    canvas.drawRect(
-      rect,
-      Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0x33000000), Color(0x00000000), Color(0x99000000)],
-          stops: [0, 0.35, 1],
-        ).createShader(rect),
-    );
   }
 
   @override
