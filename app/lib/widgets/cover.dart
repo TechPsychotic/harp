@@ -26,6 +26,33 @@ class ThumbCache {
   static Future<void> init(String dataDir) async {
     _dir = Directory('$dataDir/thumbs');
     await _dir!.create(recursive: true);
+    unawaited(trim());
+  }
+
+  /// Keeps the cover cache under [maxBytes], removing the least recently written first.
+  static Future<int> trim({int maxBytes = 300 << 20}) async {
+    final d = _dir;
+    if (d == null) return 0;
+    final files = <(File, int, DateTime)>[];
+    await for (final e in d.list()) {
+      if (e is File) {
+        final st = await e.stat();
+        files.add((e, st.size, st.modified));
+      }
+    }
+    var total = files.fold<int>(0, (a, f) => a + f.$2);
+    files.sort((a, b) => a.$3.compareTo(b.$3));
+    var removed = 0;
+    for (final (f, size, _) in files) {
+      if (total <= maxBytes) break;
+      try {
+        await f.delete();
+        total -= size;
+        removed++;
+      } catch (_) {}
+    }
+    if (removed > 0) _paths.clear();
+    return removed;
   }
 
   static String _file(String url) => '${_dir!.path}/${sha256.convert(utf8.encode(url)).toString().substring(0, 24)}.img';

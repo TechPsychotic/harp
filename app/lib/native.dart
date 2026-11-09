@@ -31,6 +31,16 @@ class Native {
     } catch (_) {}
   }
 
+  /// True on mobile data (or any metered network). Desktop: never.
+  static Future<bool> isMetered() async {
+    if (!Platform.isAndroid) return false;
+    try {
+      return await _c.invokeMethod<bool>('isMetered') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static Future<void> requestNotifications() async {
     if (!Platform.isAndroid) return;
     try {

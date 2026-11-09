@@ -36,6 +36,7 @@ class PlayerController extends ChangeNotifier {
       _player.stream.position.listen((p) => position.value = p),
       _player.stream.duration.listen((d) => duration.value = d),
       _player.stream.playing.listen((p) {
+        if (!p) _saveSpot();
         playing = p;
         viz.playing = p;
         settings.animating = p && settings.fullEffects;
@@ -47,6 +48,11 @@ class PlayerController extends ChangeNotifier {
         // Only a real end counts: not the old file being replaced.
         final d = duration.value.inMilliseconds;
         if (done && !_loading && d > 0 && position.value.inMilliseconds >= d - 2500) {
+          if (sleepAfterSong) {
+            // The sleep timer said "at the end of this song".
+            cancelSleep();
+            return;
+          }
           _pendingAuto = true;
           unawaited(_drain());
         }
@@ -114,6 +120,18 @@ class PlayerController extends ChangeNotifier {
   String? _mood; // genre / mood key autoplay should stay in
   Timer? _skipChipTimer;
 
+  /// The song that is actually loaded in the player (a restored queue starts with none).
+  String? _loadedId;
+
+  /// Where the restored song was when the app closed: picked up on the first play.
+  (String, int)? _resumeAt;
+  Timer? _spotTimer;
+
+  /// Sleep timer.
+  DateTime? sleepAt;
+  bool sleepAfterSong = false;
+  Timer? _sleepTimer;
+
   int _loadGen = 0;
   int _pendingSkips = 0;
   bool _pendingAuto = false;
@@ -160,8 +178,67 @@ class PlayerController extends ChangeNotifier {
   }
 
   Future<void> init() async {
+    // The queue comes back as it was; the song waits, paused, where it stopped.
     queue = await api.queueState();
-    resumeOffer = await api.lastPlayed();
+    final spot = await api.settingGet(key: 'resume_spot');
+    if (spot != null && spot.contains('|')) {
+      final i = spot.lastIndexOf('|');
+      final ms = int.tryParse(spot.substring(i + 1)) ?? 0;
+      _resumeAt = (spot.substring(0, i), ms);
+    }
+    if (queue.current == null) {
+      resumeOffer = await api.lastPlayed();
+    } else {
+      _publishNowPlaying(queue.current!);
+      session.setState(playing: false, loading: false, position: Duration(milliseconds: _resumeAt?.$2 ?? 0));
+      viz.songSeed = queue.current!.id;
+      unawaited(_updateAccent(queue.current!));
+    }
+    _spotTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (playing) _saveSpot();
+    });
+    notifyListeners();
+  }
+
+  /// Remembers the song and position, so a restart picks up where you were.
+  void _saveSpot() {
+    final s = current;
+    if (s == null || _loadedId != s.id) return;
+    unawaited(api.settingSet(key: 'resume_spot', value: '${s.id}|${position.value.inMilliseconds}'));
+  }
+
+  // --- sleep timer ---
+
+  /// Pause after [d] (null cancels).
+  void setSleep(Duration? d) {
+    _sleepTimer?.cancel();
+    sleepAfterSong = false;
+    sleepAt = d == null ? null : DateTime.now().add(d);
+    if (d != null) {
+      _sleepTimer = Timer(d, () {
+        _player.pause();
+        sleepAt = null;
+        notifyListeners();
+      });
+    }
+    notifyListeners();
+  }
+
+  /// Pause when the current song ends.
+  void setSleepAfterSong() {
+    _sleepTimer?.cancel();
+    sleepAt = null;
+    sleepAfterSong = true;
+    notifyListeners();
+  }
+
+  void cancelSleep() {
+    _sleepTimer?.cancel();
+    sleepAt = null;
+    if (sleepAfterSong) {
+      sleepAfterSong = false;
+      _player.pause();
+    }
     notifyListeners();
   }
 
@@ -311,11 +388,15 @@ class PlayerController extends ChangeNotifier {
         superseded = true; // a newer song was asked for while this one was resolving
         return;
       }
-      await _player.open(Media(st.url, httpHeaders: st.local ? null : {for (final (k, v) in st.headers) k: v}));
+      // A restored song starts where it was when the app closed.
+      final resume = _resumeAt != null && _resumeAt!.$1 == s.id && _resumeAt!.$2 > 5000 ? Duration(milliseconds: _resumeAt!.$2) : null;
+      _resumeAt = null;
+      await _player.open(Media(st.url, start: resume, httpHeaders: st.local ? null : {for (final (k, v) in st.headers) k: v}));
       if (gen != _loadGen) {
         superseded = true;
         return;
       }
+      _loadedId = s.id;
       _retried = false;
       _errorStreak = 0;
       unawaited(api.saveLastPlayed(s: s));
@@ -355,12 +436,18 @@ class PlayerController extends ChangeNotifier {
   /// instant and playback survives a dropped connection or a sleeping screen.
   void _prefetch() {
     if (settings.cacheMb <= 0 || settings.offline) return;
+    unawaited(_prefetchIfAllowed());
+  }
+
+  Future<void> _prefetchIfAllowed() async {
+    // Don't fetch ahead on mobile data unless allowed in Settings.
+    if (!settings.prefetchOnMobile && await Native.isMetered()) return;
     final ids = <String>[
       ...queue.user.take(2).map((s) => s.id),
       ...queue.autoplay.take(3).map((s) => s.id),
       if (current != null) current!.id,
     ];
-    if (ids.isNotEmpty) api.prefetchSongs(ids: ids, quality: settings.streamQuality, limitMb: settings.cacheMb);
+    if (ids.isNotEmpty) await api.prefetchSongs(ids: ids, quality: settings.streamQuality, limitMb: settings.cacheMb);
   }
 
   Future<void> _topUpAutoplay() async {
@@ -388,6 +475,12 @@ class PlayerController extends ChangeNotifier {
 
   Future<void> togglePlay() async {
     if (current == null) return;
+    // After a restart the queue is back but nothing is loaded yet.
+    if (_loadedId != current!.id) {
+      _pendingSkips = 0;
+      await _load();
+      return;
+    }
     await _player.playOrPause();
   }
 
@@ -591,6 +684,9 @@ class PlayerController extends ChangeNotifier {
       s.cancel();
     }
     _skipChipTimer?.cancel();
+    _sleepTimer?.cancel();
+    _spotTimer?.cancel();
+    _saveSpot();
     viz.dispose();
     _player.dispose();
     position.dispose();

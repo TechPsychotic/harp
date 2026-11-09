@@ -264,6 +264,21 @@ mod tests {
     }
 
     #[test]
+    fn the_whole_queue_survives_saving_and_loading() {
+        let mut q = Queue::new();
+        q.play_now(s("cur"));
+        q.add_to_queue(s("u1"));
+        q.set_autoplay(vec![s("a1")]);
+        q.repeat = Repeat::All;
+        q.next(false);
+        let back: Queue = serde_json::from_str(&serde_json::to_string(&q).unwrap()).unwrap();
+        assert_eq!(back.current().unwrap().id, "u1");
+        assert_eq!(back.history().len(), 1);
+        assert_eq!(back.autoplay().count(), 1);
+        assert_eq!(back.repeat, Repeat::All);
+    }
+
+    #[test]
     fn move_and_remove() {
         let mut q = Queue::new();
         for n in ["a", "b", "c"] {

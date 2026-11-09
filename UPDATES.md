@@ -8,6 +8,21 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-09 (night, later): the queue survives restarts, sleep timer, gestures
+
+**Added**
+- **The whole queue comes back after a restart** (current song, what is next, autoplay, repeat),
+  and the song resumes from where it stopped when you press play. 🧪 (save/load round trip)
+- **Sleep timer** on Now Playing: 15 / 30 / 45 / 60 minutes or the end of this song.
+- **Gestures on Now Playing**: swipe down to close; swipe the artwork left / right for the next /
+  previous song.
+- **No fetching ahead on mobile data** unless Settings › Play cache › *Fetch ahead on mobile data*
+  is on (Android checks whether the network is metered).
+- **The cover-art cache is capped** at 300 MB (oldest covers go first).
+- **Auto-update**: the Linux app is rebuilt and reinstalled after each change
+  (`scripts/ci-local.sh --no-apk --install`). A git hook that does this on every commit is in
+  `scripts/hooks/post-commit`; turning it on is up to you (`git config core.hooksPath scripts/hooks`).
+
 ## 2026-11-09 (evening): CI moves to the laptop
 
 - **`scripts/ci-local.sh`** runs Harp's CI here: Rust tests, Flutter analysis and tests, then the

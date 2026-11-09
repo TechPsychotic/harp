@@ -1,0 +1,28 @@
+#!/bin/sh
+# After every commit: run the local CI and reinstall the Linux app, in the background.
+# Turn on once with:   git config core.hooksPath scripts/hooks
+# Skip it for one commit with HARP_NO_AUTOBUILD=1 git commit ...
+# One build at a time: a commit made while a build runs is picked up when it finishes.
+[ -n "${HARP_NO_AUTOBUILD:-}" ] && exit 0
+cd "$(git rev-parse --show-toplevel)" || exit 0
+LOCK=/tmp/harp-autobuild.lock AGAIN=/tmp/harp-autobuild.again LOG="$HOME/harp-autobuild.log"
+if [ -f "$LOCK" ] && kill -0 "$(cat "$LOCK" 2>/dev/null)" 2>/dev/null; then
+  touch "$AGAIN"
+  echo "harp: a build is already running; this commit will be built right after it."
+  exit 0
+fi
+nohup sh -c '
+  echo $$ > "'"$LOCK"'"
+  while :; do
+    rm -f "'"$AGAIN"'"
+    if scripts/ci-local.sh --no-apk --install > "'"$LOG"'" 2>&1; then
+      msg="Harp updated to $(git log -1 --format=%h): $(git log -1 --format=%s | cut -c1-70)"
+    else
+      msg="Harp build failed: see ~/harp-autobuild.log"
+    fi
+    command -v notify-send >/dev/null && notify-send -a Harp -i dev.harp.harp "Harp" "$msg"
+    [ -e "'"$AGAIN"'" ] || break
+  done
+  rm -f "'"$LOCK"'"
+' >/dev/null 2>&1 &
+echo "harp: building and installing the Linux app in the background (log: ~/harp-autobuild.log)."

@@ -143,7 +143,13 @@ fn queue_view(en: &Engine) -> QueueView {
         Repeat::One => "one",
     }
     .to_string();
+    // Every change to the queue passes through here, so this is where it is saved:
+    // the whole queue comes back after a restart.
+    let saved = serde_json::to_string(&*q).unwrap_or_default();
     drop(q);
+    if let Ok(st) = en.store.lock() {
+        let _ = st.kv_set("queue", &saved);
+    }
     QueueView {
         current: views(en, cur.into_iter()).into_iter().next(),
         user: views(en, user.into_iter()),
@@ -194,14 +200,17 @@ pub fn start_engine(cfg: EngineConfig) -> Result<(), String> {
         Tool::binary(install::ensure(&tools, asset, false).map_err(e)?)
     };
 
+    let store = Store::open(&db).map_err(e)?;
+    // The queue as it was when the app last closed.
+    let queue: Queue = store.kv_get("queue").ok().flatten().and_then(|j| serde_json::from_str(&j).ok()).unwrap_or_default();
     let engine = Engine {
         downloads_dir: data.join("downloads"),
         cache_dir: data.join("cache"),
         thumbs_dir: data.join("thumbs"),
         yt: YtDlp::new(tool),
-        store: Mutex::new(Store::open(&db).map_err(e)?),
+        store: Mutex::new(store),
         rec_store: Mutex::new(Store::open(&db).map_err(e)?),
-        queue: Mutex::new(Queue::new()),
+        queue: Mutex::new(queue),
         rng: Mutex::new(Rng::from_time()),
         _proxy: proxy,
     };

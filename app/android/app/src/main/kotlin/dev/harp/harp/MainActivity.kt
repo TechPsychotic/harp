@@ -90,6 +90,10 @@ class MainActivity : AudioServiceActivity() {
                         result.success(null)
                     }
                     "crashReport" -> result.success(crashReport())
+                    "isMetered" -> {
+                        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+                        result.success(cm.isActiveNetworkMetered)
+                    }
                     "clearCrash" -> {
                         File(filesDir, "last_crash.txt").delete()
                         result.success(null)

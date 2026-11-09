@@ -125,7 +125,7 @@ account access without a paid developer key).**
    Now Playing, an Apple-style "Browse" of charts and new releases.
 7. Measure and fix lag on the phone with frame-time numbers (B3).
 8. Gapless playback and crossfade (in the original roadmap, not done).
-9. Persist the whole queue across restarts (today only the last song is remembered).
+9. ~~Persist the whole queue across restarts~~ done (2026-11-09).
 10. Word-by-word lyrics (F25).
 
 **P2: depth**
@@ -147,9 +147,9 @@ account access without a paid developer key).**
   will need a versioned migration step.
 - **Rust calls block worker threads.** Long yt-dlp calls (2–5 s) share the bridge's thread pool
   with everything else and cannot be cancelled; heavy use can still delay taps.
-- **The queue is not saved** across restarts (only the last song is).
-- **The cover cache has no size limit** (the play cache does).
-- **Prefetching ignores mobile data**: it downloads ahead on metered connections too.
+- ~~The queue is not saved across restarts~~ fixed: the whole queue and the position come back.
+- ~~The cover cache has no size limit~~ fixed: capped at 300 MB.
+- ~~Prefetching ignores mobile data~~ fixed: off on metered networks unless allowed in Settings.
 - **Undocumented YouTube Music calls.** Search filters (e.g. podcasts = `JQ`) were found by
   experiment and can change without notice; yt-dlp is a fallback only for songs.
 - **Spotify link imports are capped at 100** by Spotify; the account connection (F31) is the fix.
@@ -197,7 +197,7 @@ account access without a paid developer key).**
 
 ## 5. Ideas worth adding (backlog)
 
-**Listening:** sleep timer · equalizer (desktop first) · playback speed (podcasts) · crossfade /
+**Listening:** ~~sleep timer~~ (done) · equalizer (desktop first) · playback speed (podcasts) · crossfade /
 gapless · loudness normalisation · "radio" from any song, artist or playlist · smart downloads
 (auto-download liked songs on Wi-Fi) · offline recommendations from downloads.
 

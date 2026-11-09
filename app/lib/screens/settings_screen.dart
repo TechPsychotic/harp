@@ -128,6 +128,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     itemBuilder: (_) => [for (final mb in [0, 256, 512, 1024, 2048]) PopupMenuItem(value: mb, child: Text(mb == 0 ? 'Off' : '$mb MB'))],
                   ),
                 ),
+                SwitchListTile(
+                  title: const Text('Fetch ahead on mobile data'),
+                  subtitle: Text('Off: songs are fetched ahead only on Wi-Fi.', style: TextStyle(color: tok.textDim)),
+                  value: s.prefetchOnMobile,
+                  onChanged: s.setPrefetchOnMobile,
+                ),
                 ListTile(
                   title: const Text('Cached songs'),
                   subtitle: Text(_mb(_cacheBytes), style: TextStyle(color: tok.textDim)),

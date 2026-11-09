@@ -61,7 +61,15 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                       Positioned.fill(child: _Backdrop(song: s, accent: accent, blurArt: !player.settings.flatBackground)),
                       if (player.settings.fullEffects && player.settings.reactiveBackground)
                         Positioned.fill(child: ReactiveWaves(color: Colors.white, level: player.viz.level, active: player.playing)),
-                      SafeArea(child: LayoutBuilder(builder: (context, c) => _body(context, s, c))),
+                      SafeArea(
+                        child: GestureDetector(
+                          // Swipe down to close, like a music app's player.
+                          onVerticalDragEnd: (d) {
+                            if ((d.primaryVelocity ?? 0) > 700) Navigator.of(context).maybePop();
+                          },
+                          child: LayoutBuilder(builder: (context, c) => _body(context, s, c)),
+                        ),
+                      ),
                     ]),
             );
           },
@@ -75,7 +83,14 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     final artSide = wide ? 380.0 : (c.maxWidth - 48).clamp(200, 420).toDouble();
     final art = _lyrics
         ? SizedBox(width: wide ? 460 : double.infinity, height: wide ? 460 : c.maxHeight * 0.5, child: LyricsPane(player: player, song: s))
-        : Center(
+        : GestureDetector(
+            // Swipe the artwork: left for the next song, right for the previous.
+            onHorizontalDragEnd: (d) {
+              final v = d.primaryVelocity ?? 0;
+              if (v < -400) player.next();
+              if (v > 400) player.previous();
+            },
+            child: Center(
             child: AnimatedScale(
               scale: player.playing ? 1 : 0.86,
               duration: const Duration(milliseconds: 350),
@@ -88,6 +103,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                 child: Hero(tag: 'np-art', child: Cover(url: s.thumbnail, seed: s.id, size: artSide, radius: 12)),
               ),
             ),
+          ),
           );
     final controls = _Controls(player: player, song: s, lyricsOn: _lyrics, onLyrics: () => setState(() => _lyrics = !_lyrics), onArtist: () => _openArtist(s));
     final top = Row(children: [
@@ -252,6 +268,16 @@ class _Controls extends StatelessWidget {
                   },
           ),
         ),
+        IconButton(
+          tooltip: player.sleepAfterSong
+              ? 'Sleep: after this song'
+              : player.sleepAt != null
+                  ? 'Sleep in ${player.sleepAt!.difference(DateTime.now()).inMinutes + 1} min'
+                  : 'Sleep timer',
+          icon: Icon(Icons.bedtime_rounded, color: player.sleepAt != null || player.sleepAfterSong ? Colors.white : dim),
+          style: IconButton.styleFrom(backgroundColor: player.sleepAt != null || player.sleepAfterSong ? Colors.white24 : Colors.transparent),
+          onPressed: () => showSleepSheet(context, player),
+        ),
         IconButton(tooltip: 'Queue', icon: const Icon(Icons.format_list_bulleted_rounded, color: dim), onPressed: () => showQueueSheet(context, player)),
       ]),
     ]);
@@ -306,5 +332,25 @@ void showQueueSheet(BuildContext context, PlayerController player) {
         },
       ),
     ),
+  );
+}
+
+/// Sleep timer: pause after a while, or at the end of this song.
+void showSleepSheet(BuildContext context, PlayerController player) {
+  showModalBottomSheet<void>(
+    context: context,
+    builder: (ctx) {
+      Widget opt(String label, VoidCallback f) => ListTile(title: Text(label), onTap: () { f(); Navigator.pop(ctx); });
+      final on = player.sleepAt != null || player.sleepAfterSong;
+      return SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Padding(padding: EdgeInsets.fromLTRB(16, 16, 16, 4), child: Text('Sleep Timer', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700))),
+          for (final m in const [15, 30, 45, 60]) opt('$m minutes', () => player.setSleep(Duration(minutes: m))),
+          opt('End of this song', player.setSleepAfterSong),
+          if (on) opt('Turn off', () => player.setSleep(null)),
+          const SizedBox(height: 8),
+        ]),
+      );
+    },
   );
 }

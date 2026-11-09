@@ -28,6 +28,9 @@ class AppSettings extends ChangeNotifier {
   /// Size of the play cache in MB (0 = off). Songs about to play are fetched ahead of time.
   int cacheMb = 512;
 
+  /// Also fetch ahead on mobile data (off: only on Wi-Fi / unmetered networks).
+  bool prefetchOnMobile = false;
+
   /// "off", "wide", "headphone" or "immersive": a virtual spatial effect (not Dolby Atmos).
   String spatial = 'off';
 
@@ -84,6 +87,7 @@ class AppSettings extends ChangeNotifier {
     _autoLevel = await get('effects_auto') ?? 'full';
     spatial = await get('spatial') ?? 'off';
     cacheMb = int.tryParse(await get('cache_mb') ?? '') ?? 512;
+    prefetchOnMobile = await get('prefetch_mobile') == '1';
     notifyListeners();
   }
 
@@ -119,6 +123,12 @@ class AppSettings extends ChangeNotifier {
     notifyListeners();
     await _save('effects', v);
     await _save('effects_auto', _autoLevel);
+  }
+
+  Future<void> setPrefetchOnMobile(bool v) async {
+    prefetchOnMobile = v;
+    notifyListeners();
+    await _save('prefetch_mobile', v ? '1' : '0');
   }
 
   Future<void> setCacheMb(int v) async {
