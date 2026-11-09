@@ -7,9 +7,9 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `e`, `eng`, `import_view`, `queue_view`, `request`, `serde_json_string`, `song_from_json`, `song`, `spotify_embed_url`, `view`, `views`
+// These functions are ignored because they are not marked as `pub`: `collection_view`, `e`, `eng`, `import_view`, `lyrics_view`, `queue_view`, `request`, `serde_json_string`, `song_from_json`, `song`, `spotify_embed_url`, `view`, `views`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Engine`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// Starts the engine: opens the database, makes sure yt-dlp is installed.
 /// Safe to call again (does nothing the second time).
@@ -230,6 +230,119 @@ Future<List<ImportPlaylistView>> importLink({required String url}) =>
 Future<MatchView> importMatch({required ImportTrackView t}) =>
     RustLib.instance.api.crateApiEngineImportMatch(t: t);
 
+Future<List<String>> searchHistory({required int limit}) =>
+    RustLib.instance.api.crateApiEngineSearchHistory(limit: limit);
+
+Future<void> searchHistoryRemove({required String q}) =>
+    RustLib.instance.api.crateApiEngineSearchHistoryRemove(q: q);
+
+Future<void> searchHistoryClear() =>
+    RustLib.instance.api.crateApiEngineSearchHistoryClear();
+
+/// Search albums, playlists or podcasts (`kind`: "albums", "playlists", "podcasts").
+Future<List<CollectionView>> searchCollections({
+  required String kind,
+  required String query,
+}) => RustLib.instance.api.crateApiEngineSearchCollections(
+  kind: kind,
+  query: query,
+);
+
+/// An album, playlist or podcast show with its songs or episodes.
+Future<CollectionDetail> openCollection({required String id}) =>
+    RustLib.instance.api.crateApiEngineOpenCollection(id: id);
+
+/// Plays a list of songs: the first now, the rest queued after what you already added.
+Future<QueueView> queuePlayList({
+  required List<SongView> songs,
+  required bool shuffle,
+}) => RustLib.instance.api.crateApiEngineQueuePlayList(
+  songs: songs,
+  shuffle: shuffle,
+);
+
+/// Lyrics for a song (synced when available): from the saved copy, else LRCLIB.
+/// `None` when there are none. A "none" answer is remembered for three days.
+Future<LyricsView?> lyricsFor({
+  required SongView s,
+  required bool allowNetwork,
+}) => RustLib.instance.api.crateApiEngineLyricsFor(
+  s: s,
+  allowNetwork: allowNetwork,
+);
+
+/// Fetches songs into the play cache in the background, one at a time, so the
+/// next songs start instantly (and still play if the connection drops). Songs
+/// already downloaded or cached are skipped. `limit_mb` is the cache size cap.
+Future<void> prefetchSongs({
+  required List<String> ids,
+  required String quality,
+  required int limitMb,
+}) => RustLib.instance.api.crateApiEnginePrefetchSongs(
+  ids: ids,
+  quality: quality,
+  limitMb: limitMb,
+);
+
+Future<BigInt> cacheBytes() => RustLib.instance.api.crateApiEngineCacheBytes();
+
+Future<void> clearCache() => RustLib.instance.api.crateApiEngineClearCache();
+
+class CollectionDetail {
+  final CollectionView info;
+  final List<SongView> songs;
+
+  const CollectionDetail({required this.info, required this.songs});
+
+  @override
+  int get hashCode => info.hashCode ^ songs.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CollectionDetail &&
+          runtimeType == other.runtimeType &&
+          info == other.info &&
+          songs == other.songs;
+}
+
+class CollectionView {
+  final String id;
+  final String title;
+  final String subtitle;
+  final String thumbnail;
+
+  /// "album", "playlist" or "podcast"
+  final String kind;
+
+  const CollectionView({
+    required this.id,
+    required this.title,
+    required this.subtitle,
+    required this.thumbnail,
+    required this.kind,
+  });
+
+  @override
+  int get hashCode =>
+      id.hashCode ^
+      title.hashCode ^
+      subtitle.hashCode ^
+      thumbnail.hashCode ^
+      kind.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CollectionView &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          title == other.title &&
+          subtitle == other.subtitle &&
+          thumbnail == other.thumbnail &&
+          kind == other.kind;
+}
+
 class DownloadView {
   final SongView song;
   final BigInt bytes;
@@ -406,6 +519,48 @@ class ImportTrackView {
           artist == other.artist &&
           album == other.album &&
           durationSecs == other.durationSecs;
+}
+
+class LyricLineView {
+  final int atMs;
+  final String text;
+
+  const LyricLineView({required this.atMs, required this.text});
+
+  @override
+  int get hashCode => atMs.hashCode ^ text.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is LyricLineView &&
+          runtimeType == other.runtimeType &&
+          atMs == other.atMs &&
+          text == other.text;
+}
+
+class LyricsView {
+  final bool synced;
+  final List<LyricLineView> lines;
+  final String source;
+
+  const LyricsView({
+    required this.synced,
+    required this.lines,
+    required this.source,
+  });
+
+  @override
+  int get hashCode => synced.hashCode ^ lines.hashCode ^ source.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is LyricsView &&
+          runtimeType == other.runtimeType &&
+          synced == other.synced &&
+          lines == other.lines &&
+          source == other.source;
 }
 
 class MatchView {

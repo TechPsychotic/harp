@@ -62,6 +62,14 @@ fn now() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
 }
 
+/// Errors that come from the network rather than from the video.
+pub(crate) fn is_transient(msg: &str) -> bool {
+    let m = msg.to_lowercase();
+    ["tunnel connection failed", "502", "503", "504", "timed out", "temporary failure", "connection reset", "connection refused", "remote end closed", "unable to download api page"]
+        .iter()
+        .any(|k| m.contains(k))
+}
+
 impl YtDlp {
     pub fn new(tool: Tool) -> Self {
         YtDlp { tool, cache: Mutex::new(HashMap::new()), ytmusic: true }
@@ -80,7 +88,21 @@ impl YtDlp {
             cmd.env(k, v);
         }
         cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
-        let mut child = cmd.spawn()?;
+        // "Text file busy" happens when the program was written a moment ago while
+        // another thread forked; it clears within milliseconds.
+        let mut child = {
+            let mut tries = 0;
+            loop {
+                match cmd.spawn() {
+                    Ok(c) => break c,
+                    Err(e) if e.kind() == std::io::ErrorKind::ExecutableFileBusy && tries < 8 => {
+                        tries += 1;
+                        std::thread::sleep(std::time::Duration::from_millis(25));
+                    }
+                    Err(e) => return Err(e.into()),
+                }
+            }
+        };
         // Read both pipes on threads so a full pipe never blocks the child.
         let mut out = child.stdout.take().expect("piped");
         let mut err = child.stderr.take().expect("piped");
@@ -154,13 +176,25 @@ impl YtDlp {
                 return Ok(s.clone());
             }
         }
-        let out = self.run(&[
-            "--no-playlist".into(),
+        let args = [
+            "--no-playlist".to_string(),
             "-f".into(),
             q.format().into(),
             "-J".into(),
             format!("https://www.youtube.com/watch?v={id}"),
-        ])?;
+        ];
+        // A flaky connection (a dropped tunnel, a 502, a timeout) is worth another try.
+        let mut attempt = 0;
+        let out = loop {
+            match self.run(&args) {
+                Ok(o) => break o,
+                Err(Error::Failed(m)) if attempt < 2 && is_transient(&m) => {
+                    attempt += 1;
+                    std::thread::sleep(std::time::Duration::from_millis(600 * attempt as u64));
+                }
+                Err(e) => return Err(e),
+            }
+        };
         let s = parse::stream_from_info(&out)?;
         self.cache.lock().unwrap().insert(key, s.clone());
         Ok(s)
@@ -271,6 +305,25 @@ mod tests {
         assert_eq!(y.resolve("5NV6Rdv1a3I", Quality::High).unwrap(), a);
         y.forget("5NV6Rdv1a3I");
         assert!(y.resolve("5NV6Rdv1a3I", Quality::High).is_err());
+    }
+
+    #[test]
+    fn network_errors_are_retried_but_video_errors_are_not() {
+        assert!(is_transient("ERROR: [youtube] x: Unable to download API page: <urlopen error Tunnel connection failed: 502 Bad Gateway>"));
+        assert!(is_transient("The read operation timed out"));
+        assert!(!is_transient("ERROR: Video unavailable. This video is private"));
+        // A tool that fails once with a 502 and then works: resolve succeeds.
+        let d = tmp("retry");
+        let tool = d.join("yt-dlp");
+        let info = include_str!("../tests/fixtures/info.json").replace('\n', "");
+        std::fs::write(
+            &tool,
+            format!("#!/bin/sh\nif [ ! -f \"{d}/seen\" ]; then touch \"{d}/seen\"; echo 'ERROR: Tunnel connection failed: 502 Bad Gateway' >&2; exit 1; fi\ncat <<'EOF'\n{info}\nEOF\n", d = d.display()),
+        )
+        .unwrap();
+        std::fs::set_permissions(&tool, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let y = YtDlp::new(Tool::binary(tool)).without_ytmusic();
+        assert!(y.resolve("5NV6Rdv1a3I", Quality::High).is_ok());
     }
 
     #[test]

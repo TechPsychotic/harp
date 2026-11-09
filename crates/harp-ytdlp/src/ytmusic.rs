@@ -218,6 +218,187 @@ pub fn parse_radio(v: &Value) -> Vec<Song> {
         .collect()
 }
 
+
+// --- albums, playlists and podcasts ---
+
+/// What a search can look for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Kind {
+    Songs,
+    Albums,
+    Playlists,
+    Podcasts,
+}
+
+impl Kind {
+    pub fn parse(s: &str) -> Kind {
+        match s {
+            "albums" => Kind::Albums,
+            "playlists" => Kind::Playlists,
+            "podcasts" => Kind::Podcasts,
+            _ => Kind::Songs,
+        }
+    }
+
+    /// YouTube Music's search filter (the `params` of its search page).
+    fn params(self) -> String {
+        let p2 = match self {
+            Kind::Songs => "II",
+            Kind::Albums => "IY",
+            Kind::Playlists => "Io",
+            Kind::Podcasts => "JQ",
+        };
+        format!("EgWKAQ{p2}AWoKEAkQBRAKEAMQBA%3D%3D")
+    }
+}
+
+/// An album, playlist or podcast show that holds songs or episodes.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Collection {
+    /// The browse id; pass it to [`open`].
+    pub id: String,
+    pub title: String,
+    pub subtitle: String,
+    pub thumbnail: Option<String>,
+    /// "album", "playlist" or "podcast"
+    pub kind: String,
+}
+
+fn kind_of_id(id: &str) -> Option<&'static str> {
+    if id.starts_with("MPRE") {
+        Some("album")
+    } else if id.starts_with("MPSP") {
+        Some("podcast")
+    } else if id.starts_with("VL") {
+        Some("playlist")
+    } else {
+        None
+    }
+}
+
+pub fn search_collections(kind: Kind, query: &str, limit: usize) -> Result<Vec<Collection>> {
+    let v = post("search", json!({"query": query, "params": kind.params()}))?;
+    let mut c = parse_collections(&v);
+    c.truncate(limit);
+    Ok(c)
+}
+
+pub fn parse_collections(v: &Value) -> Vec<Collection> {
+    let mut items = vec![];
+    find_all(v, "musicResponsiveListItemRenderer", &mut items);
+    let mut seen = std::collections::HashSet::new();
+    items
+        .into_iter()
+        .filter_map(|it| {
+            let id = it.pointer("/navigationEndpoint/browseEndpoint/browseId").and_then(Value::as_str)?;
+            let kind = kind_of_id(id)?;
+            let cols = it.get("flexColumns")?.as_array()?;
+            let col = |i: usize| {
+                cols.get(i)
+                    .and_then(|c| c.pointer("/musicResponsiveListItemFlexColumnRenderer/text/runs"))
+                    .and_then(Value::as_array)
+                    .map(|r| r.iter().filter_map(text).collect::<String>())
+            };
+            let title = col(0).filter(|t| !t.is_empty())?;
+            if !seen.insert(id.to_string()) {
+                return None;
+            }
+            Some(Collection { id: id.into(), title, subtitle: col(1).unwrap_or_default(), thumbnail: thumb(it), kind: kind.into() })
+        })
+        .collect()
+}
+
+/// An album, playlist or show's page: its details and its songs or episodes.
+pub fn open(browse_id: &str) -> Result<(Collection, Vec<Song>)> {
+    let v = post("browse", json!({"browseId": browse_id}))?;
+    Ok(parse_page(&v, browse_id))
+}
+
+pub fn parse_page(v: &Value, browse_id: &str) -> (Collection, Vec<Song>) {
+    let mut headers = vec![];
+    find_all(v, "musicResponsiveHeaderRenderer", &mut headers);
+    let header = headers.first().copied();
+    let title = header
+        .and_then(|h| h.pointer("/title/runs/0/text"))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    let strap: Option<&Vec<Value>> = header
+        .and_then(|h| h.pointer("/straplineTextOne/runs").or_else(|| h.pointer("/subtitle/runs")))
+        .and_then(Value::as_array);
+    let owner = strap.and_then(|r| r.first()).and_then(text).unwrap_or("").to_string();
+    let owner_id = strap
+        .and_then(|r| r.first())
+        .and_then(|r| r.pointer("/navigationEndpoint/browseEndpoint/browseId"))
+        .and_then(Value::as_str)
+        .map(String::from);
+    let cover = header.and_then(thumb);
+    let kind = kind_of_id(browse_id).unwrap_or("playlist");
+    let collection = Collection { id: browse_id.into(), title: title.clone(), subtitle: owner.clone(), thumbnail: cover.clone(), kind: kind.into() };
+
+    let mut songs = vec![];
+    let mut seen = std::collections::HashSet::new();
+
+    // Albums and playlists: rows of songs.
+    let mut rows = vec![];
+    find_all(v, "musicResponsiveListItemRenderer", &mut rows);
+    for it in rows {
+        let Some(id) = it.pointer("/playlistItemData/videoId").and_then(Value::as_str) else { continue };
+        let Some(cols) = it.get("flexColumns").and_then(Value::as_array) else { continue };
+        let col = |i: usize| -> Option<String> {
+            cols.get(i)
+                .and_then(|c| c.pointer("/musicResponsiveListItemFlexColumnRenderer/text/runs"))
+                .and_then(Value::as_array)
+                .map(|r| r.iter().filter_map(text).collect::<String>())
+        };
+        let Some(song_title) = col(0).filter(|t| !t.is_empty()) else { continue };
+        // "Artist" or "Artist • 1.2B plays": keep the artist part.
+        let artist = col(1).map(|a| a.split(" • ").next().unwrap_or("").trim().to_string()).filter(|a| !a.is_empty());
+        let artist_id = cols
+            .get(1)
+            .and_then(|c| c.pointer("/musicResponsiveListItemFlexColumnRenderer/text/runs/0/navigationEndpoint/browseEndpoint/browseId"))
+            .and_then(Value::as_str)
+            .map(String::from);
+        let secs = it
+            .pointer("/fixedColumns/0/musicResponsiveListItemFixedColumnRenderer/text/runs/0/text")
+            .and_then(Value::as_str)
+            .and_then(parse_clock);
+        if !seen.insert(id.to_string()) {
+            continue;
+        }
+        songs.push(Song {
+            id: id.into(),
+            title: song_title,
+            artist: artist.unwrap_or_else(|| if owner.is_empty() { "Unknown".into() } else { owner.clone() }),
+            artist_id: artist_id.or_else(|| owner_id.clone()),
+            album: if kind == "album" { Some(title.clone()) } else { col(2).filter(|a| !a.is_empty()) },
+            duration_secs: secs,
+            thumbnail: thumb(it).or_else(|| cover.clone()),
+        });
+    }
+
+    // Podcast shows: episodes.
+    let mut eps = vec![];
+    find_all(v, "musicMultiRowListItemRenderer", &mut eps);
+    for it in eps {
+        let Some(id) = it.pointer("/onTap/watchEndpoint/videoId").and_then(Value::as_str) else { continue };
+        let Some(ep_title) = it.pointer("/title/runs/0/text").and_then(Value::as_str) else { continue };
+        if !seen.insert(id.to_string()) {
+            continue;
+        }
+        songs.push(Song {
+            id: id.into(),
+            title: ep_title.into(),
+            artist: if title.is_empty() { "Podcast".into() } else { title.clone() },
+            artist_id: None,
+            album: None,
+            duration_secs: None,
+            thumbnail: thumb(it).or_else(|| cover.clone()),
+        });
+    }
+    (collection, songs)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -261,7 +442,61 @@ mod tests {
     }
 
     #[test]
+    fn album_search_results() {
+        let c = parse_collections(&fixture(include_str!("../tests/fixtures/ytm_search_albums.json")));
+        assert_eq!(c.len(), 3);
+        assert_eq!(c[0].kind, "album");
+        assert!(c[0].id.starts_with("MPRE"));
+        assert_eq!(c[0].title, "The Arijit Singh Collection");
+        assert!(c[0].subtitle.contains("Arijit Singh"));
+        assert!(c[0].thumbnail.is_some());
+    }
+
+    #[test]
+    fn album_page_gives_songs_with_the_album_artist_and_cover() {
+        let (c, songs) = parse_page(&fixture(include_str!("../tests/fixtures/ytm_album.json")), "MPREb_E4GfUXfDfhy");
+        assert_eq!(c.title, "Aashiqui 2");
+        assert_eq!(c.kind, "album");
+        assert_eq!(songs.len(), 3);
+        assert_eq!(songs[0].title, "Tum Hi Ho");
+        assert_eq!(songs[0].artist, "Arijit Singh", "the plays count is dropped from the artist");
+        assert_eq!(songs[0].album.as_deref(), Some("Aashiqui 2"));
+        assert!(songs[0].duration_secs.is_some());
+        assert!(songs[0].thumbnail.is_some(), "falls back to the album cover");
+    }
+
+    #[test]
+    fn playlist_page() {
+        let (c, songs) = parse_page(&fixture(include_str!("../tests/fixtures/ytm_playlist.json")), "VLPLBWZKm-dhAC7ZZ0EI-XWhwQNsvKi06hDw");
+        assert_eq!(c.kind, "playlist");
+        assert_eq!(c.title, "Bollywood Gym/Exercise/Workout");
+        assert_eq!(songs.len(), 3);
+        assert!(songs.iter().all(|s| !s.artist.is_empty() && s.id.len() == 11));
+    }
+
+    #[test]
+    fn podcast_page_has_episodes_named_after_the_show() {
+        let (c, eps) = parse_page(&fixture(include_str!("../tests/fixtures/ytm_podcast.json")), "MPSPPLk1Sqn_f33KuWf3tW9BBe_4TP7x8l0m3T");
+        assert_eq!(c.kind, "podcast");
+        assert_eq!(eps.len(), 3);
+        assert!(eps[0].title.contains("Joe Rogan Experience"));
+        assert_eq!(eps[0].artist, c.title);
+        assert_eq!(eps[0].id.len(), 11);
+    }
+
+    #[test]
+    fn kinds_and_filters() {
+        assert_eq!(Kind::parse("podcasts"), Kind::Podcasts);
+        assert_eq!(Kind::parse("x"), Kind::Songs);
+        assert!(Kind::Albums.params().starts_with("EgWKAQIY"));
+        assert_eq!(kind_of_id("VLPL1"), Some("playlist"));
+        assert_eq!(kind_of_id("UC1"), None);
+    }
+
+    #[test]
     fn unknown_shapes_give_nothing_not_a_panic() {
+        assert!(parse_collections(&json!([1, {"a": 2}])).is_empty());
+        assert!(parse_page(&json!("x"), "MPRE1").1.is_empty());
         assert!(parse_search(&json!({"contents": [1, 2, {"a": null}]})).is_empty());
         assert!(parse_radio(&json!("nope")).is_empty());
     }

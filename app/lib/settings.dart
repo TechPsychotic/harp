@@ -22,6 +22,9 @@ class AppSettings extends ChangeNotifier {
   String effectsPref = 'auto';
   String _autoLevel = 'full';
 
+  /// Size of the play cache in MB (0 = off). Songs about to play are fetched ahead of time.
+  int cacheMb = 512;
+
   /// "off", "wide", "headphone" or "immersive": a virtual spatial effect (not Dolby Atmos).
   String spatial = 'off';
 
@@ -76,6 +79,7 @@ class AppSettings extends ChangeNotifier {
     effectsPref = await get('effects') ?? 'auto';
     _autoLevel = await get('effects_auto') ?? 'full';
     spatial = await get('spatial') ?? 'off';
+    cacheMb = int.tryParse(await get('cache_mb') ?? '') ?? 512;
     notifyListeners();
   }
 
@@ -111,6 +115,12 @@ class AppSettings extends ChangeNotifier {
     notifyListeners();
     await _save('effects', v);
     await _save('effects_auto', _autoLevel);
+  }
+
+  Future<void> setCacheMb(int v) async {
+    cacheMb = v;
+    notifyListeners();
+    await _save('cache_mb', '$v');
   }
 
   Future<void> setSpatial(String v) async {

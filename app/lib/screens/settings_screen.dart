@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../player/controller.dart';
@@ -20,6 +22,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   int _thumbBytes = 0;
+  int _cacheBytes = 0;
   int _downloadBytes = 0;
   String _ytdlp = '…';
 
@@ -37,7 +40,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _refresh() async {
     final t = await api.thumbnailCacheBytes();
     final d = (await api.downloads()).fold<int>(0, (a, e) => a + e.bytes.toInt());
-    if (mounted) setState(() { _thumbBytes = t.toInt(); _downloadBytes = d; });
+    final c = await api.cacheBytes();
+    if (mounted) setState(() { _thumbBytes = t.toInt(); _downloadBytes = d; _cacheBytes = c.toInt(); });
   }
 
   String _mb(int b) => '${(b / 1048576).toStringAsFixed(1)} MB';
@@ -53,15 +57,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _Section('Appearance', [
                 Padding(
                   padding: const EdgeInsets.all(12),
-                  child: SegmentedButton<ThemeMode>(
-                    segments: const [
-                      ButtonSegment(value: ThemeMode.system, icon: Icon(Icons.brightness_auto_rounded), label: Text('System')),
-                      ButtonSegment(value: ThemeMode.dark, icon: Icon(Icons.dark_mode_rounded), label: Text('Dark')),
-                      ButtonSegment(value: ThemeMode.light, icon: Icon(Icons.light_mode_rounded), label: Text('Light')),
-                    ],
-                    selected: {s.themeMode},
-                    onSelectionChanged: (v) => s.setTheme(v.first),
-                  ),
+                  child: Row(children: [
+                    for (final (mode, icon, label) in [
+                      (ThemeMode.system, Icons.brightness_auto_rounded, 'Auto'),
+                      (ThemeMode.dark, Icons.dark_mode_rounded, 'Dark'),
+                      (ThemeMode.light, Icons.light_mode_rounded, 'Light'),
+                    ])
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 3),
+                          child: _ThemeChoice(icon: icon, label: label, selected: s.themeMode == mode, onTap: () => s.setTheme(mode)),
+                        ),
+                      ),
+                  ]),
                 ),
                 ListTile(
                   title: const Text('Background effects'),
@@ -75,7 +83,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 SwitchListTile(
                   title: const Text('Music-reactive background'),
-                  subtitle: Text('The background moves with the loudness of what plays. Turn off to save battery.', style: TextStyle(color: tok.textDim)),
+                  subtitle: Text(Platform.isAndroid ? 'The background pulses with the music (a beat-style pulse on Android). Turn off to save battery.' : 'The background moves with the loudness of what plays. Turn off to save battery.', style: TextStyle(color: tok.textDim)),
                   value: s.reactiveBackground,
                   onChanged: s.setReactiveBackground,
                 ),
@@ -83,13 +91,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _Section('Playback', [
                 _QualityTile(title: 'Streaming quality', value: s.streamQuality, onChanged: s.setStreamQuality),
                 ListTile(
+                  enabled: PlayerController.fxSupported,
                   title: const Text('Spatial audio'),
-                  subtitle: Text('${spatialLabel(s.spatial)} · a virtual stereo effect for headphones and speakers. Not Dolby Atmos.', style: TextStyle(color: tok.textDim)),
-                  trailing: PopupMenuButton<String>(
+                  subtitle: Text(
+                    PlayerController.fxSupported
+                        ? '${spatialLabel(s.spatial)} · a virtual stereo effect for headphones and speakers. Not Dolby Atmos.'
+                        : 'Not available on Android yet. Dolby Atmos is not possible with this music source.',
+                    style: TextStyle(color: tok.textDim),
+                  ),
+                  trailing: !PlayerController.fxSupported ? null : PopupMenuButton<String>(
                     icon: const Icon(Icons.expand_more_rounded),
                     initialValue: s.spatial,
                     onSelected: s.setSpatial,
                     itemBuilder: (_) => [for (final m in ['off', 'wide', 'headphone', 'immersive']) PopupMenuItem(value: m, child: Text(spatialLabel(m)))],
+                  ),
+                ),
+              ]),
+              _Section('Play cache', [
+                ListTile(
+                  title: const Text('Fetch songs ahead'),
+                  subtitle: Text(
+                    s.cacheMb == 0
+                        ? 'Off: songs stream only'
+                        : 'Up to ${s.cacheMb} MB. The next songs load in the background so skipping is instant and playback survives a weak connection or a sleeping screen.',
+                    style: TextStyle(color: tok.textDim),
+                  ),
+                  trailing: PopupMenuButton<int>(
+                    icon: const Icon(Icons.expand_more_rounded),
+                    initialValue: s.cacheMb,
+                    onSelected: s.setCacheMb,
+                    itemBuilder: (_) => [for (final mb in [0, 256, 512, 1024, 2048]) PopupMenuItem(value: mb, child: Text(mb == 0 ? 'Off' : '$mb MB'))],
+                  ),
+                ),
+                ListTile(
+                  title: const Text('Cached songs'),
+                  subtitle: Text(_mb(_cacheBytes), style: TextStyle(color: tok.textDim)),
+                  trailing: TextButton(
+                    onPressed: () async {
+                      await api.clearCache();
+                      _refresh();
+                      if (context.mounted) toast(context, 'Play cache cleared');
+                    },
+                    child: const Text('Clear'),
                   ),
                 ),
               ]),
@@ -183,6 +226,39 @@ class _QualityTile extends StatelessWidget {
         initialValue: value,
         onSelected: onChanged,
         itemBuilder: (_) => [for (final q in ['low', 'medium', 'high']) PopupMenuItem(value: q, child: Text(qualityLabel(q)))],
+      ),
+    );
+  }
+}
+
+class _ThemeChoice extends StatelessWidget {
+  const _ThemeChoice({required this.icon, required this.label, required this.selected, required this.onTap});
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tok = context.tok;
+    final accent = Theme.of(context).colorScheme.primary;
+    return Material(
+      color: selected ? accent.withValues(alpha: 0.28) : tok.glass.withValues(alpha: context.isDark ? 0.08 : 0.6),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(Radii.control),
+        side: BorderSide(color: tok.glassEdge.withValues(alpha: selected ? 0.4 : 0.14)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, size: 22, color: selected ? tok.text : tok.textDim),
+            const SizedBox(height: 4),
+            Text(label, style: TextStyle(fontSize: 13, fontWeight: selected ? FontWeight.w700 : FontWeight.w500)),
+          ]),
+        ),
       ),
     );
   }

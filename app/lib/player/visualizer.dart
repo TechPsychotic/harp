@@ -48,8 +48,9 @@ class Visualizer {
     return parts.join(',');
   }
 
-  Future<void> attach(Player player) async {
+  Future<void> attach(Player player, {bool native = true}) async {
     try {
+      if (!native) throw 'no native filters on this platform';
       _np = player.platform as NativePlayer;
       await _np!.observeProperty('af-metadata/harp', (s) async => _onMetadata(s));
     } catch (_) {

@@ -5,9 +5,11 @@
 //! a loopback proxy ([`proxy`]) because that Python cannot resolve DNS names.
 
 pub mod android;
+pub mod cache;
 pub mod config;
 pub mod extractor;
 pub mod install;
+pub mod lyrics;
 pub mod parse;
 pub mod proxy;
 pub mod thumbs;

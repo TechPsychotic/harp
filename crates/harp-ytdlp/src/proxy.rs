@@ -6,7 +6,7 @@
 //! credentials, which only yt-dlp's command line holds.
 
 use std::io::{BufRead, BufReader, Read, Write};
-use std::net::{Shutdown, TcpListener, TcpStream, ToSocketAddrs};
+use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -61,6 +61,35 @@ impl Proxy {
     }
 }
 
+/// IPv4 first (many phones resolve an IPv6 address they cannot reach), then the
+/// rest, alternating so one dead family never blocks the other.
+pub(crate) fn order_addrs(addrs: &[SocketAddr]) -> Vec<SocketAddr> {
+    let (v4, v6): (Vec<SocketAddr>, Vec<SocketAddr>) = addrs.iter().copied().partition(|a| a.is_ipv4());
+    let mut out = Vec::new();
+    let (mut i4, mut i6) = (v4.into_iter(), v6.into_iter());
+    loop {
+        match (i4.next(), i6.next()) {
+            (None, None) => break,
+            (a, b) => out.extend(a.into_iter().chain(b)),
+        }
+    }
+    out
+}
+
+/// Tries every address (each with a short timeout) until one connects.
+pub(crate) fn connect_any(addrs: &[SocketAddr]) -> Option<TcpStream> {
+    let started = std::time::Instant::now();
+    for a in order_addrs(addrs) {
+        if started.elapsed() > Duration::from_secs(25) {
+            break;
+        }
+        if let Ok(s) = TcpStream::connect_timeout(&a, Duration::from_secs(7)) {
+            return Some(s);
+        }
+    }
+    None
+}
+
 fn reply(c: &mut TcpStream, status: &str) {
     let _ = write!(c, "HTTP/1.1 {status}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
 }
@@ -93,16 +122,10 @@ fn handle(mut client: TcpStream, expect: &str) -> std::io::Result<()> {
         reply(&mut client, "400 Bad Request");
         return Ok(());
     }
-    let addr = match target.to_socket_addrs().ok().and_then(|mut a| a.next()) {
-        Some(a) => a,
+    let addrs: Vec<SocketAddr> = target.to_socket_addrs().map(|a| a.collect()).unwrap_or_default();
+    let up = match connect_any(&addrs) {
+        Some(u) => u,
         None => {
-            reply(&mut client, "502 Bad Gateway");
-            return Ok(());
-        }
-    };
-    let up = match TcpStream::connect_timeout(&addr, Duration::from_secs(30)) {
-        Ok(u) => u,
-        Err(_) => {
             reply(&mut client, "502 Bad Gateway");
             return Ok(());
         }
@@ -171,6 +194,22 @@ mod tests {
             return format!("200 {}", echo.trim());
         }
         status.trim().to_string()
+    }
+
+    #[test]
+    fn ipv4_first_and_falls_through_dead_addresses() {
+        let v6: SocketAddr = "[::1]:9".parse().unwrap();
+        let v4a: SocketAddr = "127.0.0.1:9".parse().unwrap();
+        let v4b: SocketAddr = "127.0.0.2:9".parse().unwrap();
+        let o = order_addrs(&[v6, v4a, v4b]);
+        assert_eq!(o, vec![v4a, v6, v4b]);
+        // First address is dead, second is alive: the connection still succeeds.
+        let ln = TcpListener::bind("127.0.0.1:0").unwrap();
+        let live = ln.local_addr().unwrap();
+        let dead: SocketAddr = "127.0.0.1:1".parse().unwrap();
+        assert!(connect_any(&[dead, live]).is_some());
+        assert!(connect_any(&[dead]).is_none());
+        assert!(connect_any(&[]).is_none());
     }
 
     #[test]

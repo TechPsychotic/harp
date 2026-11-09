@@ -43,6 +43,7 @@ class SongTile extends StatelessWidget {
         radius: Radii.tile,
         tint: playing ? Theme.of(context).colorScheme.primary : null,
         onTap: onPlay ?? () => player.playSong(song),
+        onLongPress: () => showSongSheet(context, player, song, onRemove: onRemoveFromList, removeLabel: removeLabel),
         child: Row(children: [
           Cover(url: song.thumbnail, seed: song.id, size: 48),
           const SizedBox(width: 12),

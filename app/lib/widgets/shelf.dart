@@ -4,6 +4,7 @@ import '../player/controller.dart';
 import '../src/rust/api/engine.dart' as api;
 import '../theme/glass.dart';
 import 'cover.dart';
+import 'song_actions.dart';
 
 /// A titled horizontal row of songs.
 class SongShelf extends StatelessWidget {
@@ -26,7 +27,11 @@ class SongShelf extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           itemCount: songs.length,
           itemExtent: 148,
-          itemBuilder: (_, i) => SongCard(song: songs[i], onTap: () => (onPlay ?? player.playSong)(songs[i])),
+          itemBuilder: (_, i) => SongCard(
+            song: songs[i],
+            onTap: () => (onPlay ?? player.playSong)(songs[i]),
+            onLongPress: () => showSongSheet(context, player, songs[i]),
+          ),
         ),
       ),
       const SizedBox(height: 14),
@@ -52,9 +57,10 @@ class ShelfHeader extends StatelessWidget {
 }
 
 class SongCard extends StatelessWidget {
-  const SongCard({super.key, required this.song, required this.onTap});
+  const SongCard({super.key, required this.song, required this.onTap, this.onLongPress});
   final api.SongView song;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -62,6 +68,7 @@ class SongCard extends StatelessWidget {
     return InkWell(
       borderRadius: BorderRadius.circular(Radii.tile),
       onTap: onTap,
+      onLongPress: onLongPress,
       child: Padding(
         padding: const EdgeInsets.only(right: 12),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

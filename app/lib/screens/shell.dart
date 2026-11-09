@@ -35,10 +35,7 @@ class _ShellState extends State<Shell> {
     (Icons.tune_rounded, 'Settings'),
   ];
 
-  void _openNowPlaying() => Navigator.of(context).push(PageRouteBuilder(
-        pageBuilder: (_, _, _) => NowPlayingScreen(player: widget.player),
-        transitionsBuilder: (_, a, _, child) => FadeTransition(opacity: a, child: child),
-      ));
+  void _openNowPlaying() => Navigator.of(context).push(MaterialPageRoute(builder: (_) => NowPlayingScreen(player: widget.player)));
 
   @override
   Widget build(BuildContext context) {

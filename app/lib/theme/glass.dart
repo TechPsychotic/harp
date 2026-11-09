@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
+import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
@@ -108,6 +109,14 @@ ThemeData harpTheme(Color accent, Brightness b) {
       thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
     ),
     dividerColor: Colors.transparent,
+    // Android's predictive back gesture previews the screen you are going back to.
+    pageTransitionsTheme: const PageTransitionsTheme(builders: {
+      TargetPlatform.android: PredictiveBackPageTransitionsBuilder(),
+      TargetPlatform.linux: FadeUpwardsPageTransitionsBuilder(),
+      TargetPlatform.windows: FadeUpwardsPageTransitionsBuilder(),
+      TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+      TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+    }),
   );
 }
 
@@ -261,6 +270,7 @@ class GlassCard extends StatelessWidget {
     this.radius = Radii.card,
     this.tint,
     this.onTap,
+    this.onLongPress,
     this.strength = 1,
   });
   final Widget child;
@@ -268,6 +278,7 @@ class GlassCard extends StatelessWidget {
   final double radius;
   final Color? tint;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
   final double strength;
 
   @override
@@ -291,7 +302,7 @@ class GlassCard extends StatelessWidget {
       ),
       child: Material(
         type: MaterialType.transparency,
-        child: InkWell(borderRadius: r, onTap: onTap, child: Padding(padding: padding, child: child)),
+        child: InkWell(borderRadius: r, onTap: onTap, onLongPress: onLongPress, child: Padding(padding: padding, child: child)),
       ),
     );
   }

@@ -5,7 +5,7 @@ use harp_core::recommend::{self, CandidateSource, Request};
 use harp_core::rng::Rng;
 use harp_core::taste::{PlayRecord, PlaySource, SkipReason, Store};
 use harp_core::Song;
-use harp_ytdlp::{install, proxy::Proxy, thumbs, Quality, Tool, YtDlp};
+use harp_ytdlp::{cache, install, lyrics as lrc, proxy::Proxy, thumbs, ytmusic, Quality, Tool, YtDlp};
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
@@ -74,6 +74,7 @@ pub struct EngineConfig {
 struct Engine {
     yt: YtDlp,
     downloads_dir: PathBuf,
+    cache_dir: PathBuf,
     thumbs_dir: PathBuf,
     /// Writes (plays, likes) never wait behind a recommendation's network calls.
     store: Mutex<Store>,
@@ -193,6 +194,7 @@ pub fn start_engine(cfg: EngineConfig) -> Result<(), String> {
 
     let engine = Engine {
         downloads_dir: data.join("downloads"),
+        cache_dir: data.join("cache"),
         thumbs_dir: data.join("thumbs"),
         yt: YtDlp::new(tool),
         store: Mutex::new(Store::open(&db).map_err(e)?),
@@ -212,6 +214,9 @@ pub fn ytdlp_version() -> Result<String, String> {
 pub fn search(query: String) -> Result<Vec<SongView>, String> {
     let en = eng()?;
     let found = en.yt.search_songs(&query, 20).map_err(e)?;
+    if !found.is_empty() {
+        let _ = en.store.lock().unwrap().add_search(&query);
+    }
     Ok(views(en, found.into_iter()))
 }
 
@@ -223,6 +228,11 @@ pub fn resolve_stream(id: String, quality: String) -> Result<StreamView, String>
         if std::path::Path::new(&p).is_file() {
             return Ok(StreamView { url: p, local: true, headers: vec![], expires_at: None });
         }
+    }
+    // A song fetched ahead of time plays from disk: instant, and no network needed.
+    if let Some(p) = cache::find(&en.cache_dir, &id) {
+        cache::touch(&p);
+        return Ok(StreamView { url: p.to_string_lossy().into_owned(), local: true, headers: vec![], expires_at: None });
     }
     let s = en.yt.resolve(&id, Quality::parse(&quality)).map_err(e)?;
     Ok(StreamView { url: s.url, local: false, headers: s.headers.into_iter().collect(), expires_at: s.expires_at })
@@ -791,5 +801,176 @@ mod tests {
         );
         assert_eq!(spotify_embed_url("https://open.spotify.com/track/xyz"), None);
         assert_eq!(spotify_embed_url("https://example.com/playlist/1"), None);
+    }
+}
+
+
+// --- search history ---
+
+pub fn search_history(limit: u32) -> Result<Vec<String>, String> {
+    eng()?.store.lock().unwrap().recent_searches(limit as usize).map_err(e)
+}
+
+pub fn search_history_remove(q: String) -> Result<(), String> {
+    eng()?.store.lock().unwrap().remove_search(&q).map_err(e)
+}
+
+pub fn search_history_clear() -> Result<(), String> {
+    eng()?.store.lock().unwrap().clear_searches().map_err(e)
+}
+
+// --- albums, playlists and podcasts ---
+
+#[derive(Clone, Debug)]
+pub struct CollectionView {
+    pub id: String,
+    pub title: String,
+    pub subtitle: String,
+    pub thumbnail: String,
+    /// "album", "playlist" or "podcast"
+    pub kind: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct CollectionDetail {
+    pub info: CollectionView,
+    pub songs: Vec<SongView>,
+}
+
+fn collection_view(c: ytmusic::Collection) -> CollectionView {
+    CollectionView { id: c.id, title: c.title, subtitle: c.subtitle, thumbnail: c.thumbnail.unwrap_or_default(), kind: c.kind }
+}
+
+/// Search albums, playlists or podcasts (`kind`: "albums", "playlists", "podcasts").
+pub fn search_collections(kind: String, query: String) -> Result<Vec<CollectionView>, String> {
+    let en = eng()?;
+    let k = ytmusic::Kind::parse(&kind);
+    let v = ytmusic::search_collections(k, query.trim(), 24).map_err(e)?;
+    if !v.is_empty() {
+        let _ = en.store.lock().unwrap().add_search(&query);
+    }
+    Ok(v.into_iter().map(collection_view).collect())
+}
+
+/// An album, playlist or podcast show with its songs or episodes.
+pub fn open_collection(id: String) -> Result<CollectionDetail, String> {
+    let en = eng()?;
+    let (c, songs) = ytmusic::open(&id).map_err(e)?;
+    Ok(CollectionDetail { info: collection_view(c), songs: views(en, songs.into_iter()) })
+}
+
+/// Plays a list of songs: the first now, the rest queued after what you already added.
+pub fn queue_play_list(songs: Vec<SongView>, shuffle: bool) -> Result<QueueView, String> {
+    let en = eng()?;
+    let mut list: Vec<Song> = songs.iter().map(song).collect();
+    if shuffle {
+        en.rng.lock().unwrap().shuffle(&mut list);
+    }
+    {
+        let mut q = en.queue.lock().unwrap();
+        q.clear_user();
+        let mut it = list.into_iter();
+        if let Some(first) = it.next() {
+            q.play_now(first);
+            for s in it {
+                q.add_to_queue(s);
+            }
+        }
+    }
+    Ok(queue_view(en))
+}
+
+// --- lyrics ---
+
+#[derive(Clone, Debug)]
+pub struct LyricLineView {
+    pub at_ms: u32,
+    pub text: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct LyricsView {
+    pub synced: bool,
+    pub lines: Vec<LyricLineView>,
+    pub source: String,
+}
+
+fn lyrics_view(l: harp_core::lyrics::Lyrics) -> LyricsView {
+    LyricsView {
+        synced: l.synced,
+        lines: l.lines.into_iter().map(|x| LyricLineView { at_ms: x.at_ms, text: x.text }).collect(),
+        source: l.source,
+    }
+}
+
+/// Lyrics for a song (synced when available): from the saved copy, else LRCLIB.
+/// `None` when there are none. A "none" answer is remembered for three days.
+pub fn lyrics_for(s: SongView, allow_network: bool) -> Result<Option<LyricsView>, String> {
+    let en = eng()?;
+    if let Some((l, at)) = en.store.lock().unwrap().cached_lyrics(&s.id).map_err(e)? {
+        if !l.is_empty() {
+            return Ok(Some(lyrics_view(l)));
+        }
+        if now_secs().saturating_sub(at as u64) < 3 * 86400 {
+            return Ok(None);
+        }
+    }
+    if !allow_network {
+        return Ok(None);
+    }
+    match lrc::fetch(&s.title, &s.artist, s.album.as_deref(), s.duration_secs) {
+        Ok(found) => {
+            let l = found.unwrap_or_default();
+            let _ = en.store.lock().unwrap().save_lyrics(&s.id, &l);
+            Ok((!l.is_empty()).then(|| lyrics_view(l)))
+        }
+        Err(err) => Err(e(err)),
+    }
+}
+
+// --- play cache and prefetching ---
+
+static PREFETCHING: OnceLock<Mutex<std::collections::HashSet<String>>> = OnceLock::new();
+static PREFETCH_TURN: Mutex<()> = Mutex::new(());
+
+/// Fetches songs into the play cache in the background, one at a time, so the
+/// next songs start instantly (and still play if the connection drops). Songs
+/// already downloaded or cached are skipped. `limit_mb` is the cache size cap.
+pub fn prefetch_songs(ids: Vec<String>, quality: String, limit_mb: u32) {
+    let Ok(en) = eng() else { return };
+    if limit_mb == 0 {
+        return;
+    }
+    let inflight = PREFETCHING.get_or_init(|| Mutex::new(Default::default()));
+    for id in ids {
+        if en.store.lock().unwrap().downloaded_path(&id).ok().flatten().is_some() || cache::find(&en.cache_dir, &id).is_some() {
+            continue;
+        }
+        if !inflight.lock().unwrap().insert(id.clone()) {
+            continue;
+        }
+        let q = Quality::parse(&quality);
+        std::thread::spawn(move || {
+            let Ok(en) = eng() else { return };
+            {
+                let _turn = PREFETCH_TURN.lock().unwrap();
+                if cache::find(&en.cache_dir, &id).is_none() {
+                    let _ = en.yt.download(&id, &en.cache_dir, q);
+                }
+                let keep: Vec<String> = vec![id.clone()];
+                cache::trim(&en.cache_dir, limit_mb as u64 * 1_048_576, &keep);
+            }
+            PREFETCHING.get().unwrap().lock().unwrap().remove(&id);
+        });
+    }
+}
+
+pub fn cache_bytes() -> u64 {
+    eng().map(|en| cache::total_bytes(&en.cache_dir)).unwrap_or(0)
+}
+
+pub fn clear_cache() {
+    if let Ok(en) = eng() {
+        cache::clear(&en.cache_dir);
     }
 }

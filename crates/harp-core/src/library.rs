@@ -125,6 +125,56 @@ impl Store {
         Ok(())
     }
 
+    // --- search history ---
+
+    /// Remembers a search (newest first, no repeats).
+    pub fn add_search(&self, q: &str) -> Result<()> {
+        let q = q.trim();
+        if q.len() < 2 {
+            return Ok(());
+        }
+        self.conn.execute("DELETE FROM searches WHERE lower(q)=lower(?)", [q])?;
+        self.conn.execute("INSERT INTO searches(q) VALUES(?)", [q])?;
+        self.conn.execute("DELETE FROM searches WHERE id NOT IN (SELECT id FROM searches ORDER BY id DESC LIMIT 200)", [])?;
+        Ok(())
+    }
+
+    pub fn recent_searches(&self, n: usize) -> Result<Vec<String>> {
+        let mut st = self.conn.prepare("SELECT q FROM searches ORDER BY id DESC LIMIT ?")?;
+        let rows = st.query_map([n as i64], |r| r.get(0))?;
+        Ok(rows.collect::<std::result::Result<_, _>>()?)
+    }
+
+    pub fn remove_search(&self, q: &str) -> Result<()> {
+        self.conn.execute("DELETE FROM searches WHERE lower(q)=lower(?)", [q.trim()])?;
+        Ok(())
+    }
+
+    pub fn clear_searches(&self) -> Result<()> {
+        self.conn.execute("DELETE FROM searches", [])?;
+        Ok(())
+    }
+
+    // --- lyrics cache ---
+
+    /// A saved result and when it was saved (an empty `Lyrics` means "none found").
+    pub fn cached_lyrics(&self, id: &str) -> Result<Option<(crate::lyrics::Lyrics, i64)>> {
+        use rusqlite::OptionalExtension;
+        let row: Option<(String, i64)> = self
+            .conn
+            .query_row("SELECT json, at FROM lyrics WHERE song_id=?", [id], |r| Ok((r.get(0)?, r.get(1)?)))
+            .optional()?;
+        Ok(row.and_then(|(j, at)| serde_json::from_str(&j).ok().map(|l| (l, at))))
+    }
+
+    pub fn save_lyrics(&self, id: &str, l: &crate::lyrics::Lyrics) -> Result<()> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO lyrics(song_id,json) VALUES(?,?)",
+            params![id, serde_json::to_string(l).unwrap_or_default()],
+        )?;
+        Ok(())
+    }
+
     // --- downloads ---
 
     pub fn record_download(&self, song: &Song, path: &str, bytes: u64, quality: &str) -> Result<()> {
@@ -195,6 +245,30 @@ mod tests {
         st.delete_playlist(id).unwrap();
         assert!(st.playlists().unwrap().is_empty());
         assert!(st.playlist_songs(id).unwrap().is_empty(), "items go with the playlist");
+    }
+
+    #[test]
+    fn search_history_is_recent_first_unique_and_clearable() {
+        let st = Store::open_memory().unwrap();
+        for q in ["arijit", "daft punk", "x", "Arijit", "  "] {
+            st.add_search(q).unwrap();
+        }
+        assert_eq!(st.recent_searches(10).unwrap(), ["Arijit", "daft punk"], "short ones skipped, repeats move up");
+        st.remove_search("DAFT PUNK").unwrap();
+        assert_eq!(st.recent_searches(10).unwrap(), ["Arijit"]);
+        st.clear_searches().unwrap();
+        assert!(st.recent_searches(10).unwrap().is_empty());
+    }
+
+    #[test]
+    fn lyrics_cache_roundtrip_including_none() {
+        let st = Store::open_memory().unwrap();
+        assert!(st.cached_lyrics("a").unwrap().is_none());
+        let l = crate::lyrics::from_texts(Some("[00:01.00]hi"), None, "lrclib");
+        st.save_lyrics("a", &l).unwrap();
+        assert_eq!(st.cached_lyrics("a").unwrap().unwrap().0, l);
+        st.save_lyrics("b", &crate::lyrics::Lyrics::default()).unwrap();
+        assert!(st.cached_lyrics("b").unwrap().unwrap().0.is_empty());
     }
 
     #[test]

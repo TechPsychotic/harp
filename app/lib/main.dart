@@ -1,7 +1,14 @@
+import 'dart:io';
+
+import 'package:audio_service/audio_service.dart';
+import 'package:audio_service_mpris/audio_service_mpris.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 
 import 'boot.dart';
+import 'native.dart';
+import 'player/media_session.dart';
 import 'player/controller.dart';
 import 'screens/shell.dart';
 import 'settings.dart';
@@ -11,13 +18,46 @@ import 'theme/logo.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Draw behind the status and navigation bars (edge to edge); screens use SafeArea.
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    systemNavigationBarColor: Colors.transparent,
+    systemNavigationBarContrastEnforced: false,
+  ));
   MediaKit.ensureInitialized();
   await RustLib.init();
-  runApp(const HarpApp());
+  if (Platform.isLinux) {
+    // Shows Harp in the desktop's media controls (GNOME, KDE) and answers media keys.
+    AudioServiceMpris.init(
+      dBusName: 'harp',
+      identity: 'Harp',
+      desktopEntry: 'dev.harp.harp',
+      canGoNext: true,
+      canGoPrevious: true,
+      canPlay: true,
+      canPause: true,
+      canControl: true,
+    );
+  }
+  final session = await AudioService.init(
+    builder: HarpAudioHandler.new,
+    config: const AudioServiceConfig(
+      androidNotificationChannelId: 'dev.harp.harp.playback',
+      androidNotificationChannelName: 'Playback',
+      androidNotificationIcon: 'drawable/ic_stat_harp',
+      // Keep the media service (and so playback) alive while paused or with the screen off.
+      androidStopForegroundOnPause: false,
+      androidNotificationOngoing: false,
+    ),
+  );
+  Native.requestNotifications();
+  runApp(HarpApp(session: session));
 }
 
 class HarpApp extends StatefulWidget {
-  const HarpApp({super.key});
+  const HarpApp({super.key, required this.session});
+  final HarpAudioHandler session;
 
   @override
   State<HarpApp> createState() => _HarpAppState();
@@ -40,7 +80,7 @@ class _HarpAppState extends State<HarpApp> {
       await bootEngine();
       await _settings.load();
       _settings.watchPerformance();
-      final p = PlayerController(_settings);
+      final p = PlayerController(_settings, widget.session);
       await p.init();
       if (mounted) setState(() => _player = p);
     } catch (e) {

@@ -114,6 +114,20 @@ fn format_query(q: &str) -> String {
         .join(" ")
 }
 
+/// What you search for says what you want to hear: now and then (more often
+/// before there is any listening history) a recent search seeds the picks.
+fn searched_query(store: &Store, rng: &mut Rng, has_history: bool) -> Result<Option<String>> {
+    let recent = store.recent_searches(6)?;
+    if recent.is_empty() {
+        return Ok(None);
+    }
+    let rate = if has_history { 0.22 } else { 0.6 };
+    if rng.f64() >= rate {
+        return Ok(None);
+    }
+    Ok(rng.choose(&recent).cloned())
+}
+
 struct Gathered {
     candidates: Vec<Song>,
     reason: String,
@@ -164,6 +178,13 @@ fn gather(store: &Store, src: &dyn CandidateSource, req: &Request, rng: &mut Rng
             (_, true) => format!("You asked for: {label}"),
             _ => format!("Genre: {label}"),
         };
+    } else if let Some(q) = searched_query(store, rng, !seeds.is_empty())? {
+        let mut c = cold(src, &q);
+        if c.is_empty() {
+            c = cold(src, rng.choose(SEED_QUERIES).copied().unwrap_or("pop hits"));
+        }
+        candidates = c;
+        reason = format!("Because you searched for “{q}”");
     } else if seeds.is_empty() || rng.f64() < COLD_INJECT_RATE {
         let q = rng.choose(SEED_QUERIES).copied().unwrap_or("pop hits");
         let mut c = cold(src, q);
@@ -412,6 +433,27 @@ mod tests {
         let ids: HashSet<_> = b.iter().map(|r| r.song.id.clone()).collect();
         assert_eq!(ids.len(), b.len());
         assert_eq!(b.len(), 4);
+    }
+
+    #[test]
+    fn searches_feed_the_picks() {
+        let st = Store::open_memory().unwrap();
+        st.add_search("arijit singh").unwrap();
+        let mut hit = false;
+        for seed in 1..40 {
+            let r = next(&st, &Fake, &Request::default(), &mut Rng::new(seed)).unwrap().unwrap();
+            if r.reason == "Because you searched for “arijit singh”" {
+                assert!(r.song.title.starts_with("arijit singh"), "candidates came from that query: {}", r.song.title);
+                hit = true;
+            }
+        }
+        assert!(hit, "a recent search seeds some picks");
+        // No searches: never mentioned.
+        let empty = Store::open_memory().unwrap();
+        for seed in 1..20 {
+            let r = next(&empty, &Fake, &Request::default(), &mut Rng::new(seed)).unwrap().unwrap();
+            assert!(!r.reason.contains("searched"));
+        }
     }
 
     #[test]

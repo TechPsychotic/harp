@@ -1,24 +1,34 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:media_kit/media_kit.dart';
 
+import '../native.dart';
 import '../settings.dart';
 import '../src/rust/api/engine.dart' as api;
+import '../widgets/cover.dart';
+import 'media_session.dart';
 import 'visualizer.dart';
 
-/// Owns playback: the audio engine (media_kit/libmpv) and the Rust queue and
-/// taste model.
+/// Owns playback: the audio engine (media_kit/libmpv), the Rust queue and taste
+/// model, and the operating system's media session.
 ///
-/// Performance note: playback position changes ~10x a second, so it lives in
-/// its own notifiers; `notifyListeners` fires only for real changes (song,
-/// queue, play/pause, errors), so the whole UI is not rebuilt on every tick.
+/// Ordering rules (these fix songs starting out of order):
+/// * every load gets a number; a load that is no longer the newest is abandoned
+///   before it can start playing;
+/// * rapid skips are coalesced: with five skips queued only the last song is
+///   loaded, the ones in between are stepped over silently;
+/// * an end-of-file event only counts when the song really reached its end.
+///
+/// Performance note: the playback position changes ~10x a second, so it lives
+/// in its own notifiers and `notifyListeners` fires only for real changes.
 class PlayerController extends ChangeNotifier {
-  PlayerController(this.settings) {
+  PlayerController(this.settings, this.session) {
     viz = Visualizer()
       ..position = (() => position.value)
       ..enabled = settings.reactiveBackground && settings.fullEffects;
-    unawaited(viz.attach(_player).then((_) => _applyAudioFx()));
+    unawaited(viz.attach(_player, native: fxSupported).then((_) => _applyAudioFx()));
     _subs.addAll([
       _player.stream.position.listen((p) => position.value = p),
       _player.stream.duration.listen((d) => duration.value = d),
@@ -26,28 +36,47 @@ class PlayerController extends ChangeNotifier {
         playing = p;
         viz.playing = p;
         settings.animating = p && settings.fullEffects;
+        Native.wakeLock(p);
+        _syncSession();
         notifyListeners();
       }),
       _player.stream.completed.listen((done) {
-        if (done && !_loading) _advance(auto: true);
+        // Only a real end counts: not the old file being replaced.
+        final d = duration.value.inMilliseconds;
+        if (done && !_loading && d > 0 && position.value.inMilliseconds >= d - 2500) {
+          _pendingAuto = true;
+          unawaited(_drain());
+        }
       }),
       _player.stream.error.listen(_onPlayerError),
     ]);
-    String lastFx = '${settings.spatial}|${settings.reactiveBackground}|${settings.fullEffects}';
+    String lastFx = _fxKey();
     settings.addListener(() {
       viz.enabled = settings.reactiveBackground && settings.fullEffects;
-      final fx = '${settings.spatial}|${settings.reactiveBackground}|${settings.fullEffects}';
+      final fx = _fxKey();
       if (fx != lastFx) {
         lastFx = fx;
-        _applyAudioFx();
+        unawaited(_applyAudioFx(reopen: true));
       }
     });
+    session.onPlay = () => _player.play();
+    session.onPause = () => _player.pause();
+    session.onNext = next;
+    session.onPrevious = previous;
+    session.onSeek = (d) => _player.seek(d);
+    session.onStop = () => _player.pause();
   }
 
   final AppSettings settings;
+  final HarpAudioHandler session;
   final Player _player = Player();
   late final Visualizer viz;
   final List<StreamSubscription<dynamic>> _subs = [];
+
+  /// Audio filters (spatial effects, loudness analysis) run in libmpv. They are
+  /// verified on Linux; the Android build of libmpv stalls with them, so there
+  /// the background uses its built-in pulse instead.
+  static bool get fxSupported => !Platform.isAndroid && !Platform.isIOS;
 
   final ValueNotifier<Duration> position = ValueNotifier(Duration.zero);
   final ValueNotifier<Duration> duration = ValueNotifier(Duration.zero);
@@ -79,6 +108,12 @@ class PlayerController extends ChangeNotifier {
   String? _mood; // genre / mood key autoplay should stay in
   Timer? _skipChipTimer;
 
+  int _loadGen = 0;
+  int _pendingSkips = 0;
+  bool _pendingAuto = false;
+  bool _draining = false;
+  int _errorStreak = 0;
+
   api.SongView? get current => queue.current;
   double get progress {
     final d = duration.value.inMilliseconds;
@@ -88,11 +123,35 @@ class PlayerController extends ChangeNotifier {
   bool get currentSuperliked => _currentSuperliked;
   String? get currentReason => current == null ? null : reasons[current!.id];
 
-  /// The loudness analyzer only runs when the animated background is on.
-  Future<void> _applyAudioFx() => viz.applyFilters(
-        spatial: settings.spatial,
-        analyze: settings.reactiveBackground && settings.fullEffects,
-      );
+  String _fxKey() => '${settings.spatial}|${settings.reactiveBackground}|${settings.fullEffects}';
+
+  /// The audio filter chain. Changing it mid-song makes libmpv rebuild the audio
+  /// pipeline, which on some systems leaves playback stalled, so after a change
+  /// the song is reopened at the same position (and resumes by itself).
+  Future<void> _applyAudioFx({bool reopen = false}) async {
+    if (!fxSupported) return;
+    await viz.applyFilters(spatial: settings.spatial, analyze: settings.reactiveBackground && settings.fullEffects);
+    if (reopen && current != null && !_loading) {
+      await _reopenAt(position.value);
+    }
+  }
+
+  Future<void> _reopenAt(Duration at) async {
+    final s = current;
+    if (s == null) return;
+    final wasPlaying = playing;
+    final gen = _loadGen;
+    _loading = true;
+    try {
+      final st = await api.resolveStream(id: s.id, quality: settings.streamQuality);
+      if (gen != _loadGen) return;
+      await _player.open(Media(st.url, start: at, httpHeaders: st.local ? null : {for (final (k, v) in st.headers) k: v}), play: wasPlaying);
+    } catch (_) {
+      // Leave the song as it was.
+    } finally {
+      _loading = false;
+    }
+  }
 
   Future<void> init() async {
     queue = await api.queueState();
@@ -101,6 +160,27 @@ class PlayerController extends ChangeNotifier {
   }
 
   void _bump() => libraryRev.value++;
+
+  void _syncSession() {
+    final s = current;
+    if (s == null) {
+      session.setIdle();
+      return;
+    }
+    session.setState(playing: playing, loading: loading, position: position.value);
+  }
+
+  void _publishNowPlaying(api.SongView s) {
+    final local = ThumbCache.peek(s.thumbnail);
+    session.setNowPlaying(
+      id: s.id,
+      title: s.title,
+      artist: s.artist,
+      album: s.album,
+      duration: s.durationSecs == null ? null : Duration(seconds: s.durationSecs!),
+      art: local != null ? Uri.file(local) : Uri.tryParse(s.thumbnail),
+    );
+  }
 
   // --- starting playback ---
 
@@ -137,9 +217,24 @@ class PlayerController extends ChangeNotifier {
 
   Future<void> playPlaylist(int id, {bool shuffle = false}) async {
     _mood = null;
+    await _supersede();
     queue = await api.queuePlayPlaylist(id: id, shuffle: shuffle);
+    await _afterQueueReplaced();
+  }
+
+  /// Plays a list (an album, a podcast, a playlist from a link).
+  Future<void> playList(List<api.SongView> songs, {bool shuffle = false}) async {
+    if (songs.isEmpty) return;
+    _mood = null;
+    await _supersede();
+    queue = await api.queuePlayList(songs: songs, shuffle: shuffle);
+    await _afterQueueReplaced();
+  }
+
+  Future<void> _afterQueueReplaced() async {
     _currentSource = 'queue';
     _currentSuperliked = false;
+    skippedRecently = null;
     await _load();
   }
 
@@ -151,12 +246,7 @@ class PlayerController extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    if (shuffle) d.shuffle();
-    await _start(d.first, 'queue');
-    for (final s in d.skip(1)) {
-      queue = await api.queueAdd(s: s);
-    }
-    notifyListeners();
+    await playList(d, shuffle: shuffle);
   }
 
   Future<void> resume() async {
@@ -165,8 +255,17 @@ class PlayerController extends ChangeNotifier {
     if (s != null) await playSong(s);
   }
 
-  Future<void> _start(api.SongView s, String source) async {
+  /// A direct command (play this, previous...) cancels pending skips and any
+  /// load still in flight.
+  Future<void> _supersede() async {
+    _pendingSkips = 0;
+    _pendingAuto = false;
+    _loadGen++;
     await _finishCurrent(skipped: false);
+  }
+
+  Future<void> _start(api.SongView s, String source) async {
+    await _supersede();
     _currentSource = source;
     _currentSuperliked = false;
     skippedRecently = null;
@@ -178,29 +277,76 @@ class PlayerController extends ChangeNotifier {
   Future<void> _load() async {
     final s = queue.current;
     if (s == null) return;
+    final gen = ++_loadGen;
     _loading = true;
     loading = true;
     error = null;
     position.value = Duration.zero;
     duration.value = Duration.zero;
     viz.songSeed = s.id;
+    _publishNowPlaying(s);
+    _syncSession();
     notifyListeners();
+    var superseded = false;
     try {
       if (settings.offline && !s.downloaded) {
         throw 'Offline mode: this song is not downloaded.';
       }
       final st = await api.resolveStream(id: s.id, quality: settings.streamQuality);
+      if (gen != _loadGen || _pendingSkips > 0) {
+        superseded = true; // a newer song was asked for while this one was resolving
+        return;
+      }
       await _player.open(Media(st.url, httpHeaders: st.local ? null : {for (final (k, v) in st.headers) k: v}));
+      if (gen != _loadGen) {
+        superseded = true;
+        return;
+      }
       _retried = false;
+      _errorStreak = 0;
       unawaited(api.saveLastPlayed(s: s));
       unawaited(_topUpAutoplay());
+      _prefetch();
     } catch (e) {
-      error = "Couldn't play this song: $e";
+      if (gen == _loadGen) {
+        error = "Couldn't play “${s.title}”: ${_friendly('$e')}";
+        _errorStreak++;
+        // A broken song should not stall the queue: move on (a few times at most).
+        if (_errorStreak <= 3 && !settings.offline || _errorStreak <= 1) {
+          Future.delayed(const Duration(milliseconds: 1500), () {
+            if (gen == _loadGen && error != null) unawaited(next());
+          });
+        }
+      }
     } finally {
-      _loading = false;
-      loading = false;
-      notifyListeners();
+      if (!superseded && gen == _loadGen) {
+        _loading = false;
+        loading = false;
+        _syncSession();
+        notifyListeners();
+      }
     }
+  }
+
+  static String _friendly(String e) {
+    final l = e.toLowerCase();
+    if (l.contains('502') || l.contains('tunnel') || l.contains('timed out') || l.contains('urlopen') || l.contains('network')) {
+      return 'the connection dropped. Check your internet and try again.';
+    }
+    if (l.contains('not available') || l.contains('private') || l.contains('removed')) return 'this video is not available.';
+    return e.length > 160 ? '${e.substring(0, 160)}…' : e;
+  }
+
+  /// Fetches the next songs (and this one) into the play cache so skips are
+  /// instant and playback survives a dropped connection or a sleeping screen.
+  void _prefetch() {
+    if (settings.cacheMb <= 0 || settings.offline) return;
+    final ids = <String>[
+      ...queue.user.take(2).map((s) => s.id),
+      ...queue.autoplay.take(3).map((s) => s.id),
+      if (current != null) current!.id,
+    ];
+    if (ids.isNotEmpty) api.prefetchSongs(ids: ids, quality: settings.streamQuality, limitMb: settings.cacheMb);
   }
 
   Future<void> _topUpAutoplay() async {
@@ -218,6 +364,7 @@ class PlayerController extends ChangeNotifier {
         queue = q;
       }
       notifyListeners();
+      _prefetch();
     } catch (_) {
       // Offline or yt-dlp broken: what is queued keeps playing.
     }
@@ -231,29 +378,57 @@ class PlayerController extends ChangeNotifier {
   }
 
   Future<void> seekFraction(double f) => _player.seek(Duration(milliseconds: (duration.value.inMilliseconds * f).round()));
+  Future<void> seekTo(Duration d) => _player.seek(d);
 
-  Future<void> next() => _advance(auto: false);
+  /// Skip. Several quick taps are folded into one jump to the last song.
+  Future<void> next() {
+    _pendingSkips++;
+    return _drain();
+  }
 
   Future<void> previous() async {
     if (position.value.inSeconds > 4) {
       await _player.seek(Duration.zero);
       return;
     }
-    await _finishCurrent(skipped: true, record: false);
+    await _supersede();
     queue = await api.queuePrevious();
     await _load();
   }
 
   /// Jump to an item in the queue, skipping the songs before it.
   Future<void> jumpTo(String section, int index) async {
-    await _finishCurrent(skipped: true);
+    await _supersede();
     queue = await api.queueJump(section: section, index: index);
     _currentSource = section == 'auto' ? 'recommended' : 'queue';
     _currentSuperliked = false;
     await _load();
   }
 
-  Future<void> _advance({required bool auto}) async {
+  /// Runs queued skips (and a natural end of song) one after another, loading
+  /// only the song we end up on.
+  Future<void> _drain() async {
+    if (_draining) return;
+    _draining = true;
+    try {
+      while (_pendingSkips > 0 || _pendingAuto) {
+        final auto = _pendingAuto && _pendingSkips == 0;
+        if (_pendingSkips > 0) {
+          _pendingSkips--;
+        } else {
+          _pendingAuto = false;
+        }
+        await _step(auto: auto);
+        if (_pendingSkips > 0) continue; // more skips arrived: do not load this one
+        await _load();
+      }
+    } finally {
+      _draining = false;
+    }
+  }
+
+  /// Moves the queue on by one song without loading it.
+  Future<void> _step({required bool auto}) async {
     final before = queue;
     await _finishCurrent(skipped: !auto);
     final hadNext = before.user.isNotEmpty || before.autoplay.isNotEmpty || before.repeat != 'off';
@@ -272,7 +447,6 @@ class PlayerController extends ChangeNotifier {
     }
     _currentSource = _sourceOf(queue.current, before);
     _currentSuperliked = false;
-    await _load();
   }
 
   String _sourceOf(api.SongView? s, api.QueueView before) {
@@ -290,7 +464,7 @@ class PlayerController extends ChangeNotifier {
     try {
       await api.recordPlay(s: s, completion: completion, superliked: _currentSuperliked, source: _currentSource);
     } catch (_) {}
-    if (skipped && completion < 0.5) {
+    if (skipped && completion < 0.5 && completion > 0) {
       skippedRecently = s;
       _skipChipTimer?.cancel();
       _skipChipTimer = Timer(const Duration(seconds: 12), () {
@@ -338,7 +512,7 @@ class PlayerController extends ChangeNotifier {
       queue = await api.queueState();
       return null;
     } catch (e) {
-      return "Couldn't download: $e";
+      return "Couldn't download: ${_friendly('$e')}";
     } finally {
       downloading.value = {...downloading.value}..remove(s.id);
       _bump();
@@ -358,11 +532,13 @@ class PlayerController extends ChangeNotifier {
   Future<void> playNext(api.SongView s) async {
     queue = await api.queuePlayNext(s: s);
     notifyListeners();
+    _prefetch();
   }
 
   Future<void> addToQueue(api.SongView s) async {
     queue = await api.queueAdd(s: s);
     notifyListeners();
+    _prefetch();
   }
 
   Future<void> removeFromQueue(int i) async {
@@ -385,6 +561,7 @@ class PlayerController extends ChangeNotifier {
     if (_loading) return;
     final s = current;
     if (s == null) return;
+    // An expired stream URL: resolve again once.
     if (!_retried) {
       _retried = true;
       api.forgetStream(id: s.id).then((_) => _load());

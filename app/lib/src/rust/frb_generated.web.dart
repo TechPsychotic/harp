@@ -36,6 +36,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ImportTrackView dco_decode_box_autoadd_import_track_view(dynamic raw);
 
   @protected
+  LyricsView dco_decode_box_autoadd_lyrics_view(dynamic raw);
+
+  @protected
   Pick dco_decode_box_autoadd_pick(dynamic raw);
 
   @protected
@@ -46,6 +49,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   BigInt dco_decode_box_autoadd_u_64(dynamic raw);
+
+  @protected
+  CollectionDetail dco_decode_collection_detail(dynamic raw);
+
+  @protected
+  CollectionView dco_decode_collection_view(dynamic raw);
 
   @protected
   DownloadView dco_decode_download_view(dynamic raw);
@@ -72,6 +81,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<String> dco_decode_list_String(dynamic raw);
 
   @protected
+  List<CollectionView> dco_decode_list_collection_view(dynamic raw);
+
+  @protected
   List<DownloadView> dco_decode_list_download_view(dynamic raw);
 
   @protected
@@ -79,6 +91,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<ImportTrackView> dco_decode_list_import_track_view(dynamic raw);
+
+  @protected
+  List<LyricLineView> dco_decode_list_lyric_line_view(dynamic raw);
 
   @protected
   List<PlaylistView> dco_decode_list_playlist_view(dynamic raw);
@@ -93,10 +108,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<SongView> dco_decode_list_song_view(dynamic raw);
 
   @protected
+  LyricLineView dco_decode_lyric_line_view(dynamic raw);
+
+  @protected
+  LyricsView dco_decode_lyrics_view(dynamic raw);
+
+  @protected
   MatchView dco_decode_match_view(dynamic raw);
 
   @protected
   String? dco_decode_opt_String(dynamic raw);
+
+  @protected
+  LyricsView? dco_decode_opt_box_autoadd_lyrics_view(dynamic raw);
 
   @protected
   Pick? dco_decode_opt_box_autoadd_pick(dynamic raw);
@@ -160,6 +184,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  LyricsView sse_decode_box_autoadd_lyrics_view(SseDeserializer deserializer);
+
+  @protected
   Pick sse_decode_box_autoadd_pick(SseDeserializer deserializer);
 
   @protected
@@ -170,6 +197,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   BigInt sse_decode_box_autoadd_u_64(SseDeserializer deserializer);
+
+  @protected
+  CollectionDetail sse_decode_collection_detail(SseDeserializer deserializer);
+
+  @protected
+  CollectionView sse_decode_collection_view(SseDeserializer deserializer);
 
   @protected
   DownloadView sse_decode_download_view(SseDeserializer deserializer);
@@ -198,6 +231,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<String> sse_decode_list_String(SseDeserializer deserializer);
 
   @protected
+  List<CollectionView> sse_decode_list_collection_view(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   List<DownloadView> sse_decode_list_download_view(
     SseDeserializer deserializer,
   );
@@ -209,6 +247,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<ImportTrackView> sse_decode_list_import_track_view(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<LyricLineView> sse_decode_list_lyric_line_view(
     SseDeserializer deserializer,
   );
 
@@ -229,10 +272,21 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<SongView> sse_decode_list_song_view(SseDeserializer deserializer);
 
   @protected
+  LyricLineView sse_decode_lyric_line_view(SseDeserializer deserializer);
+
+  @protected
+  LyricsView sse_decode_lyrics_view(SseDeserializer deserializer);
+
+  @protected
   MatchView sse_decode_match_view(SseDeserializer deserializer);
 
   @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
+
+  @protected
+  LyricsView? sse_decode_opt_box_autoadd_lyrics_view(
+    SseDeserializer deserializer,
+  );
 
   @protected
   Pick? sse_decode_opt_box_autoadd_pick(SseDeserializer deserializer);
@@ -303,6 +357,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_box_autoadd_lyrics_view(
+    LyricsView self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_pick(Pick self, SseSerializer serializer);
 
   @protected
@@ -316,6 +376,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_box_autoadd_u_64(BigInt self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_collection_detail(
+    CollectionDetail self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_collection_view(
+    CollectionView self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_download_view(DownloadView self, SseSerializer serializer);
@@ -348,6 +420,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_collection_view(
+    List<CollectionView> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_download_view(
     List<DownloadView> self,
     SseSerializer serializer,
@@ -362,6 +440,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_import_track_view(
     List<ImportTrackView> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_lyric_line_view(
+    List<LyricLineView> self,
     SseSerializer serializer,
   );
 
@@ -387,10 +471,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_list_song_view(List<SongView> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_lyric_line_view(LyricLineView self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_lyrics_view(LyricsView self, SseSerializer serializer);
+
+  @protected
   void sse_encode_match_view(MatchView self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_lyrics_view(
+    LyricsView? self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_opt_box_autoadd_pick(Pick? self, SseSerializer serializer);

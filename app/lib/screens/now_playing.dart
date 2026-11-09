@@ -4,6 +4,7 @@ import '../player/controller.dart';
 import '../src/rust/api/engine.dart' as api;
 import '../theme/glass.dart';
 import '../widgets/cover.dart';
+import '../widgets/lyrics_pane.dart';
 import '../widgets/song_actions.dart';
 import '../widgets/song_tile.dart';
 import 'playlist.dart' show AuroraScaffold;
@@ -14,9 +15,18 @@ String _fmt(Duration d) {
 }
 
 /// Full-screen player, opened from the dock.
-class NowPlayingScreen extends StatelessWidget {
+class NowPlayingScreen extends StatefulWidget {
   const NowPlayingScreen({super.key, required this.player});
   final PlayerController player;
+
+  @override
+  State<NowPlayingScreen> createState() => _NowPlayingScreenState();
+}
+
+class _NowPlayingScreenState extends State<NowPlayingScreen> {
+  bool _lyrics = false;
+
+  PlayerController get player => widget.player;
 
   @override
   Widget build(BuildContext context) {
@@ -31,14 +41,22 @@ class NowPlayingScreen extends StatelessWidget {
               if (s == null) return const Center(child: Text('Nothing playing'));
               return LayoutBuilder(builder: (context, c) {
                 final wide = c.maxWidth > 820;
-                final art = Cover(url: s.thumbnail, seed: s.id, size: wide ? 360 : (c.maxWidth - 64).clamp(180, 380).toDouble(), radius: 14);
-                final controls = _Controls(player: player);
+                final side = wide ? 360.0 : (c.maxWidth - 64).clamp(180, 380).toDouble();
+                final art = _lyrics
+                    ? SizedBox(width: wide ? 420 : double.infinity, height: wide ? 440 : 340, child: LyricsPane(player: player, song: s))
+                    : Cover(url: s.thumbnail, seed: s.id, size: side, radius: 14);
+                final controls = _Controls(player: player, lyricsOn: _lyrics, onLyrics: () => setState(() => _lyrics = !_lyrics));
                 return Column(children: [
                   Padding(
                     padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
                     child: Row(children: [
                       IconButton(icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 30), onPressed: () => Navigator.of(context).pop()),
                       const Spacer(),
+                      IconButton(
+                        tooltip: 'Lyrics',
+                        icon: Icon(Icons.lyrics_rounded, color: _lyrics ? Theme.of(context).colorScheme.primary : null),
+                        onPressed: () => setState(() => _lyrics = !_lyrics),
+                      ),
                       IconButton(tooltip: 'Queue', icon: const Icon(Icons.queue_music_rounded), onPressed: () => showQueueSheet(context, player)),
                     ]),
                   ),
@@ -58,8 +76,10 @@ class NowPlayingScreen extends StatelessWidget {
 }
 
 class _Controls extends StatelessWidget {
-  const _Controls({required this.player});
+  const _Controls({required this.player, required this.lyricsOn, required this.onLyrics});
   final PlayerController player;
+  final bool lyricsOn;
+  final VoidCallback onLyrics;
 
   @override
   Widget build(BuildContext context) {
@@ -156,6 +176,8 @@ class _Controls extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           GlassIconButton(icon: Icons.playlist_add_rounded, tooltip: 'Add to playlist', onPressed: () => addToPlaylistDialog(context, player, [s])),
+          const SizedBox(width: 12),
+          GlassIconButton(icon: Icons.lyrics_rounded, filled: lyricsOn, tooltip: 'Lyrics', onPressed: onLyrics),
         ]),
       ),
       if (player.skippedRecently != null) ...[

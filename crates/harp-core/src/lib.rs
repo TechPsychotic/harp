@@ -6,6 +6,7 @@
 pub mod error;
 pub mod import;
 pub mod library;
+pub mod lyrics;
 pub mod model;
 pub mod queue;
 pub mod recommend;

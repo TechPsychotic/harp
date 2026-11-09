@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../player/controller.dart';
 import '../src/rust/api/engine.dart' as api;
 import '../theme/glass.dart';
+import 'cover.dart';
 
 void toast(BuildContext context, String message) {
   ScaffoldMessenger.of(context)
@@ -78,25 +79,7 @@ class SongMenu extends StatelessWidget {
       icon: Icon(Icons.more_vert_rounded, color: tok.textDim),
       color: context.isDark ? const Color(0xF21B1B2A) : const Color(0xF2FFFFFF),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.tile)),
-      onSelected: (v) async {
-        switch (v) {
-          case 'next':
-            await player.playNext(song);
-          case 'add':
-            await player.addToQueue(song);
-          case 'playlist':
-            await addToPlaylistDialog(context, player, [song]);
-          case 'like':
-            await player.toggleLike(song);
-          case 'download':
-            final err = await player.download(song);
-            if (context.mounted) toast(context, err ?? 'Downloaded “${song.title}”');
-          case 'undownload':
-            await player.removeDownload(song);
-          case 'remove':
-            onRemoveFromList?.call();
-        }
-      },
+      onSelected: (v) => runSongAction(context, player, song, v, onRemove: onRemoveFromList),
       itemBuilder: (_) => [
         _item('next', Icons.playlist_play_rounded, 'Play next'),
         _item('add', Icons.queue_music_rounded, 'Add to queue'),
@@ -113,4 +96,76 @@ class SongMenu extends StatelessWidget {
 
   PopupMenuItem<String> _item(String v, IconData i, String label) =>
       PopupMenuItem(value: v, child: ListTile(leading: Icon(i), title: Text(label), dense: true, contentPadding: EdgeInsets.zero));
+}
+
+/// Runs a song action by name (shared by the ⋮ menu and the long-press sheet).
+Future<void> runSongAction(BuildContext context, PlayerController player, api.SongView song, String action, {VoidCallback? onRemove}) async {
+  switch (action) {
+    case 'next':
+      await player.playNext(song);
+      if (context.mounted) toast(context, 'Playing next');
+    case 'add':
+      await player.addToQueue(song);
+      if (context.mounted) toast(context, 'Added to queue');
+    case 'playlist':
+      await addToPlaylistDialog(context, player, [song]);
+    case 'like':
+      await player.toggleLike(song);
+    case 'download':
+      final err = await player.download(song);
+      if (context.mounted) toast(context, err ?? 'Downloaded “${song.title}”');
+    case 'undownload':
+      await player.removeDownload(song);
+    case 'remove':
+      onRemove?.call();
+  }
+}
+
+/// A bottom sheet of actions for a song: opened by a long press anywhere a song shows.
+Future<void> showSongSheet(BuildContext context, PlayerController player, api.SongView song, {VoidCallback? onRemove, String removeLabel = 'Remove'}) {
+  final tok = context.tok;
+  return showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: Colors.transparent,
+    isScrollControlled: true,
+    builder: (ctx) {
+      Widget item(String action, IconData icon, String label) => ListTile(
+            leading: Icon(icon),
+            title: Text(label),
+            onTap: () {
+              Navigator.pop(ctx);
+              runSongAction(context, player, song, action, onRemove: onRemove);
+            },
+          );
+      return GlassSurface(
+        radius: Radii.sheet,
+        blur: player.settings.fullEffects ? 18 : 0,
+        child: SafeArea(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Row(children: [
+                Cover(url: song.thumbnail, seed: song.id, size: 52),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(song.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                    Text(song.artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: tok.textDim)),
+                  ]),
+                ),
+              ]),
+            ),
+            const Divider(height: 1),
+            item('next', Icons.playlist_play_rounded, 'Play next'),
+            item('add', Icons.queue_music_rounded, 'Add to queue'),
+            item('playlist', Icons.playlist_add_rounded, 'Add to playlist…'),
+            item('like', song.liked ? Icons.favorite_rounded : Icons.favorite_border_rounded, song.liked ? 'Remove from liked' : 'Like'),
+            if (song.downloaded) item('undownload', Icons.delete_outline_rounded, 'Remove download') else item('download', Icons.download_rounded, 'Download'),
+            if (onRemove != null) item('remove', Icons.remove_circle_outline_rounded, removeLabel),
+            const SizedBox(height: 8),
+          ]),
+        ),
+      );
+    },
+  );
 }
