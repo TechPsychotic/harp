@@ -8,6 +8,31 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-09 (M2 step 2): the new audio engine plays everything
+
+Your test passed on the phone (every effect and the live spectrum; only true 3D is missing), so
+**Harp now plays through the new engine (`mpv_audio_kit`) everywhere**. The old player is removed.
+
+**What this brings to Android**
+- **Equalizer presets** (Bass, Vocal, Treble, Loudness), **spatial audio** (Wide stage, Headphone
+  crossfeed, Immersive) and **Even volume** in Settings › Playback now work on the phone too.
+- **Even volume is now proper loudness normalisation** (EBU R128, the broadcast standard), which
+  the old engine couldn't run.
+- **Effects change instantly**, mid-song, without the song restarting.
+- **The player background follows the real music** (its live spectrum, bass counting most) instead
+  of a simulated beat, on the phone and the laptop.
+- "Virtual 3D" is renamed **Immersive (wide + crossfeed)**: the engine has no true 3D (HRTF) filter,
+  so the name was promising too much.
+
+**Checked:** 🧪 all 40 combinations of equalizer × spatial × even volume play without a stall on the
+laptop's engine; the APK carries the new engine and no longer the old one. The equalizer presets
+first failed in that test (this engine has no `volume` filter for their headroom), so the
+headroom now comes from the engine's own volume gain.
+
+**Please test on the phone:** playing and skipping, the notification and lock screen controls,
+unplugging headphones, a long screen-off, and Settings › Playback (equalizer, spatial, even volume).
+The engine check is still in Settings › About if you want to re-run it.
+
 ## 2026-11-09 (M2 step 1): testing the new audio engine
 
 The Android audio engine is under way (roadmap M2). This build adds **a self-check, nothing else

@@ -4,7 +4,6 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   audio_service_win
-  media_kit_libs_windows_audio
   mpv_audio_kit
   url_launcher_windows
 )

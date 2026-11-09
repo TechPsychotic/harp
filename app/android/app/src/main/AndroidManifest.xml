@@ -68,6 +68,12 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- The audio engine (mpv_audio_kit) brings its own media service; Harp's
+             notification and lock-screen controls come from audio_service, so
+             the engine's one is left out (two would confuse Android Auto). -->
+        <service
+            android:name="com.alesdrnz.mpv_audio_kit.media_session.MpvMediaSessionService"
+            tools:node="remove" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

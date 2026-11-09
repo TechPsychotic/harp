@@ -173,7 +173,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 SwitchListTile(
                   title: const Text('Music-reactive background'),
-                  subtitle: Text(Platform.isAndroid ? 'The background pulses with the music (a beat-style pulse on Android). Turn off to save battery.' : 'The background moves with the loudness of what plays. Turn off to save battery.', style: TextStyle(color: tok.textDim)),
+                  subtitle: Text('The player background moves with the music, following its live spectrum. Turn off to save battery.', style: TextStyle(color: tok.textDim)),
                   value: s.reactiveBackground,
                   onChanged: s.setReactiveBackground,
                 ),
@@ -184,9 +184,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   enabled: PlayerController.fxSupported,
                   title: const Text('Spatial audio'),
                   subtitle: Text(
-                    PlayerController.fxSupported
-                        ? '${spatialLabel(s.spatial)} · a virtual stereo effect for headphones and speakers. Not Dolby Atmos.'
-                        : 'Not available on Android yet. Dolby Atmos is not possible with this music source.',
+                    '${spatialLabel(s.spatial)} · a virtual stereo effect for headphones and speakers. Not Dolby Atmos.',
                     style: TextStyle(color: tok.textDim),
                   ),
                   trailing: !PlayerController.fxSupported ? null : PopupMenuButton<String>(
@@ -200,7 +198,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   enabled: PlayerController.fxSupported,
                   title: const Text('Equalizer'),
                   subtitle: Text(
-                    PlayerController.fxSupported ? eqLabel(s.eq) : 'Coming to Android with the new audio engine (roadmap M2).',
+                    eqLabel(s.eq),
                     style: TextStyle(color: tok.textDim),
                   ),
                   trailing: !PlayerController.fxSupported ? null : PopupMenuButton<String>(
@@ -213,7 +211,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 SwitchListTile(
                   title: const Text('Even volume'),
                   subtitle: Text(
-                    PlayerController.fxSupported ? 'Quiet songs come up and loud ones down, so you don’t reach for the volume between songs.' : 'Coming to Android with the new audio engine (roadmap M2).',
+                    'Every song at the same loudness (EBU R128), so you don’t reach for the volume between songs.',
                     style: TextStyle(color: tok.textDim),
                   ),
                   value: s.normalize,
@@ -339,8 +337,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ListTile(title: const Text('yt-dlp'), subtitle: Text(_ytdlp, style: TextStyle(color: tok.textDim))),
                 ListTile(
                   leading: const Icon(Icons.science_rounded),
-                  title: const Text('Test the new audio engine'),
-                  subtitle: Text('About 30 seconds: plays the current song (or your last one) through the engine that will bring the equalizer and spatial audio to Android, and reports what works. Pauses normal playback.', style: TextStyle(color: tok.textDim)),
+                  title: const Text('Test the audio engine'),
+                  subtitle: Text('About 30 seconds: plays the current song (or your last one) through each effect and reports what works. Pauses normal playback.', style: TextStyle(color: tok.textDim)),
                   onTap: () => _probe(context),
                 ),
                 if (Platform.isAndroid)

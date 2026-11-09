@@ -7,15 +7,12 @@
 #include "generated_plugin_registrant.h"
 
 #include <audio_service_win/audio_service_win_plugin_c_api.h>
-#include <media_kit_libs_windows_audio/media_kit_libs_windows_audio_plugin_c_api.h>
 #include <mpv_audio_kit/mpv_audio_kit_plugin_c_api.h>
 #include <url_launcher_windows/url_launcher_windows.h>
 
 void RegisterPlugins(flutter::PluginRegistry* registry) {
   AudioServiceWinPluginCApiRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("AudioServiceWinPluginCApi"));
-  MediaKitLibsWindowsAudioPluginCApiRegisterWithRegistrar(
-      registry->GetRegistrarForPlugin("MediaKitLibsWindowsAudioPluginCApi"));
   MpvAudioKitPluginCApiRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("MpvAudioKitPluginCApi"));
   UrlLauncherWindowsRegisterWithRegistrar(

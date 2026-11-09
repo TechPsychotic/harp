@@ -4,7 +4,7 @@ import 'package:audio_service/audio_service.dart';
 import 'package:audio_service_mpris/audio_service_mpris.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:media_kit/media_kit.dart';
+import 'package:mpv_audio_kit/mpv_audio_kit.dart';
 
 import 'boot.dart';
 import 'native.dart';
@@ -25,7 +25,7 @@ Future<void> main() async {
     systemNavigationBarColor: Colors.transparent,
     systemNavigationBarContrastEnforced: false,
   ));
-  MediaKit.ensureInitialized();
+  MpvAudioKit.ensureInitialized();
   await RustLib.init();
   if (Platform.isLinux) {
     // Shows Harp in the desktop's media controls (GNOME, KDE) and answers media keys.

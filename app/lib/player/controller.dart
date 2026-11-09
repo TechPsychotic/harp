@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/material.dart' show Color;
 import 'package:flutter/foundation.dart';
-import 'package:media_kit/media_kit.dart';
+import 'package:mpv_audio_kit/mpv_audio_kit.dart' as mak;
 
 import '../native.dart';
 import '../settings.dart';
@@ -15,7 +15,8 @@ import '../widgets/cover.dart';
 import 'media_session.dart';
 import 'visualizer.dart';
 
-/// Owns playback: the audio engine (media_kit/libmpv), the Rust queue and taste
+/// Owns playback: the audio engine (mpv_audio_kit: libmpv with FFmpeg's audio
+/// effects, on every platform), the Rust queue and taste
 /// model, and the operating system's media session.
 ///
 /// Ordering rules (these fix songs starting out of order):
@@ -32,7 +33,7 @@ class PlayerController extends ChangeNotifier {
     viz = Visualizer()
       ..position = (() => position.value)
       ..enabled = settings.reactiveBackground && settings.fullEffects;
-    unawaited(viz.attach(_player, native: fxSupported).then((_) => _applyAudioFx()));
+    unawaited(viz.attach(_player).then((_) => _applyAudioFx()));
     _subs.addAll([
       _player.stream.position.listen((p) => position.value = p),
       _player.stream.duration.listen((d) {
@@ -81,7 +82,7 @@ class PlayerController extends ChangeNotifier {
       final fx = _fxKey();
       if (fx != lastFx) {
         lastFx = fx;
-        unawaited(_applyAudioFx(reopen: true));
+        unawaited(_applyAudioFx());
       }
     });
     session.onPlay = () => _player.play();
@@ -130,14 +131,13 @@ class PlayerController extends ChangeNotifier {
 
   final AppSettings settings;
   final HarpAudioHandler session;
-  final Player _player = Player();
+  final mak.Player _player = mak.Player();
   late final Visualizer viz;
   final List<StreamSubscription<dynamic>> _subs = [];
 
-  /// Audio filters (spatial effects, loudness analysis) run in libmpv. They are
-  /// verified on Linux; the Android build of libmpv stalls with them, so there
-  /// the background uses its built-in pulse instead.
-  static bool get fxSupported => !Platform.isAndroid && !Platform.isIOS;
+  /// Audio effects (equalizer, spatial, even volume) run in the engine on every
+  /// platform since the switch to mpv_audio_kit (checked on Android and Linux).
+  static bool get fxSupported => true;
 
   final ValueNotifier<Duration> position = ValueNotifier(Duration.zero);
   final ValueNotifier<Duration> duration = ValueNotifier(Duration.zero);
@@ -205,35 +205,11 @@ class PlayerController extends ChangeNotifier {
   bool get currentSuperliked => _currentSuperliked;
   String? get currentReason => current == null ? null : reasons[current!.id];
 
-  String _fxKey() => '${settings.spatial}|${settings.eq}|${settings.normalize}|${settings.reactiveBackground}|${settings.fullEffects}';
+  String _fxKey() => '${settings.spatial}|${settings.eq}|${settings.normalize}';
 
-  /// The audio filter chain. Changing it mid-song makes libmpv rebuild the audio
-  /// pipeline, which on some systems leaves playback stalled, so after a change
-  /// the song is reopened at the same position (and resumes by itself).
-  Future<void> _applyAudioFx({bool reopen = false}) async {
-    if (!fxSupported) return;
-    await viz.applyFilters(spatial: settings.spatial, analyze: settings.reactiveBackground && settings.fullEffects, eq: settings.eq, normalize: settings.normalize);
-    if (reopen && current != null && !_loading) {
-      await _reopenAt(position.value);
-    }
-  }
-
-  Future<void> _reopenAt(Duration at) async {
-    final s = current;
-    if (s == null) return;
-    final wasPlaying = playing;
-    final gen = _loadGen;
-    _loading = true;
-    try {
-      final st = await api.resolveStream(id: s.id, quality: settings.streamQuality);
-      if (gen != _loadGen) return;
-      await _player.open(Media(st.url, start: at, httpHeaders: st.local ? null : {for (final (k, v) in st.headers) k: v}), play: wasPlaying);
-    } catch (_) {
-      // Leave the song as it was.
-    } finally {
-      _loading = false;
-    }
-  }
+  /// The effects chain. The engine updates it live, mid-song, without a gap.
+  Future<void> _applyAudioFx() =>
+      viz.applyEffects(spatial: settings.spatial, eq: settings.eq, normalize: settings.normalize);
 
   Future<void> init() async {
     // The queue comes back as it was; the song waits, paused, where it stopped.
@@ -474,7 +450,7 @@ class PlayerController extends ChangeNotifier {
           return;
         }
       }
-      await _player.open(Media(st.url, start: resume, httpHeaders: st.local ? null : {for (final (k, v) in st.headers) k: v}));
+      await _player.open(mak.Media(st.url, start: resume, httpHeaders: st.local ? null : {for (final (k, v) in st.headers) k: v}));
       if (gen != _loadGen) {
         superseded = true;
         return;
@@ -564,7 +540,7 @@ class PlayerController extends ChangeNotifier {
       await _load();
       return;
     }
-    await _player.playOrPause();
+    await (playing ? _player.pause() : _player.play());
   }
 
   Future<void> seekFraction(double f) => seekTo(Duration(milliseconds: (duration.value.inMilliseconds * f).round()));
@@ -753,7 +729,10 @@ class PlayerController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _onPlayerError(String message) {
+  void _onPlayerError(mak.PlayerError e) {
+    // The engine also reports mpv's log errors here; only a failed song counts.
+    if (e is! mak.EndFileError || e.reason != mak.MpvEndFileReason.error) return;
+    final message = e.message;
     if (_loading) return;
     final s = current;
     if (s == null) return;

@@ -166,7 +166,13 @@ the music.
   media-session controls. Check: whether `sofalizer` is in its FFmpeg build, that it coexists
   with our `audio_service` session (or replaces it), APK size (+7.7–8.3 MB per ABI vs about 6 MB
   today), Android 7+ (ours is 9+).
-- ☐ Replace `media_kit` behind our `PlayerController` (the rest of the app does not change).
+- ☑ Spike passed on the phone (all effects and the live spectrum; no `sofalizer`).
+- ◐ **Replaced `media_kit` with `mpv_audio_kit`** behind `PlayerController` (the rest of the app is
+  unchanged): equalizer, spatial, even volume (now true EBU R128 `loudnorm`) on every platform,
+  effects change live without reopening the song, the background follows the real spectrum. 🧪 all
+  40 effect combinations play without a stall on the laptop. The engine's own media service is
+  removed (audio_service keeps the notification). **Needs the phone:** playback, notification,
+  lock screen, headphones, screen-off.
 - ☐ **Plan B** if the spike fails: build our own libmpv for Android with FFmpeg's audio filters
   enabled (zevro's script already cross-builds FFmpeg with the NDK), or use Android's
   `DynamicsProcessing` effect (API 28+: multi-band EQ, compressor, limiter; what the open-source

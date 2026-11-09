@@ -55,6 +55,9 @@ if [ "$APK" = 1 ]; then
   unzip -l "$F" | grep -q "lib/arm64-v8a/libpython.so" && unzip -l "$F" | grep -q "libqjs.so" && unzip -l "$F" | grep -q "libharp_ffi.so" && ok "APK: Python, QuickJS and the Rust core bundled" || fail "APK: missing bundled libraries"
   "$AAPT2" dump xmltree --file AndroidManifest.xml "$F" | grep -q "com.ryanheise.audioservice.AudioService" && ok "APK: media service in the manifest" || fail "APK: media service missing"
   unzip -l "$F" | grep -q "assets/yt-dlp.pyz" && ok "APK: fallback yt-dlp bundled" || fail "APK: fallback yt-dlp missing (run scripts/android-tools.sh)"
+  unzip -l "$F" | grep -q "lib/arm64-v8a/libmpv_audio_kit.so" && ok "APK: audio engine (mpv_audio_kit) bundled" || fail "APK: audio engine library missing"
+  unzip -l "$F" | grep -q "lib/arm64-v8a/libmpv.so" && fail "APK: the old player library (libmpv.so) is still inside" || ok "APK: old player library gone"
+  "$AAPT2" dump xmltree --file AndroidManifest.xml "$F" | grep -q "MpvMediaSessionService" && fail "APK: the engine's own media service is still declared" || ok "APK: one media service (audio_service)"
   if [ "$INSTALL" = 1 ]; then
     mkdir -p "$HOME/Downloads/Harp" && cp "$F" "$HOME/Downloads/Harp/app-release.apk" && ok "APK copied to ~/Downloads/Harp/app-release.apk"
   fi

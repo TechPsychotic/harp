@@ -214,7 +214,7 @@ String effectsLabel(String e) => switch (e) {
 String spatialLabel(String s) => switch (s) {
       'wide' => 'Wide stage',
       'headphone' => 'Headphone crossfeed',
-      'immersive' => 'Virtual 3D',
+      'immersive' => 'Immersive (wide + crossfeed)',
       _ => 'Off',
     };
 
