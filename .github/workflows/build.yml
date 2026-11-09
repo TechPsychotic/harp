@@ -85,6 +85,15 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
+      - name: Remember Gradle and the media player's Android libraries between runs
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/wrapper/dists
+            ~/.gradle/caches/modules-2
+            ~/.pub-cache/hosted/pub.dev/media_kit_libs_android_audio-*/android/build
+          key: android-gradle-${{ hashFiles('app/pubspec.lock', 'app/android/gradle/wrapper/gradle-wrapper.properties', 'app/android/**/*.gradle*') }}
+          restore-keys: android-gradle-
       - name: Remember the downloaded Python and QuickJS between runs
         uses: actions/cache@v4
         with:
@@ -102,10 +111,11 @@ jobs:
       - name: Build the APK (retried on temporary download errors)
         working-directory: app
         run: |
-          for attempt in 1 2 3; do
+          # GitHub's release downloads can return 504 for several minutes, so wait it out.
+          for attempt in 1 2 3 4 5 6; do
             flutter build apk --release --target-platform android-arm64 && exit 0
-            echo "attempt $attempt failed; retrying in 30 s"
-            sleep 30
+            echo "attempt $attempt failed; retrying in 90 s"
+            sleep 90
           done
           exit 1
       - name: Check Python and QuickJS are inside the APK

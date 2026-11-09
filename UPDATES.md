@@ -29,9 +29,10 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 - **YouTube / YouTube Music playlist links** now import through YouTube Music (full
   length, proper artists) and fall back to yt-dlp (up to 5000 songs).
 - **`UPDATES.md`** (this file) is kept up to date with every change.
-- **CI**: the Android build now retries, and the Python/QuickJS downloads are cached and
-  retried, because GitHub's own downloads (the media player's Android libraries, then
-  QuickJS) returned temporary 504s and failed two runs. The code was fine.
+- **CI**: GitHub's release downloads (the media player's Android libraries, QuickJS, the
+  Gradle distribution) returned 504s for a stretch and failed several Android builds. The
+  code was fine. The workflow now caches those downloads after the first success and
+  retries the build for ~9 minutes.
 - Tests: 91 Rust and 13 Flutter tests pass, including new ones for playlist paging,
   the artist page, and cover-cache file names matching between Dart and Rust.
 
