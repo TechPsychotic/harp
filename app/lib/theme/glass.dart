@@ -5,24 +5,31 @@ import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
-/// Corner radii. Kept modest: this look is glass, not pills.
+/// Harp's design system: a music app first. Flat backgrounds, artwork-led colour,
+/// plain list rows, big type. (The file keeps its old name; the "glass" is now
+/// used only for the floating player and sheets.)
+
+/// Corner radii.
 class Radii {
-  static const double card = 14;
-  static const double tile = 12;
-  static const double cover = 8;
+  static const double card = 12;
+  static const double tile = 10;
+  static const double cover = 6;
   static const double control = 12;
   static const double sheet = 18;
-  static const double chip = 10;
+  static const double chip = 8;
 }
 
-/// Colors that differ between the dark and light themes.
+/// Colours that differ between the dark and light themes.
 @immutable
 class HarpTokens extends ThemeExtension<HarpTokens> {
   const HarpTokens({
     required this.ink,
+    required this.surface,
+    required this.raised,
     required this.text,
     required this.textDim,
     required this.textFaint,
+    required this.separator,
     required this.glass,
     required this.glassEdge,
     required this.shadow,
@@ -30,34 +37,43 @@ class HarpTokens extends ThemeExtension<HarpTokens> {
   });
 
   final Color ink; // page background
+  final Color surface; // grouped sections, search field
+  final Color raised; // floating player, sheets
   final Color text;
   final Color textDim;
   final Color textFaint;
-  final Color glass; // tint of frosted surfaces
+  final Color separator;
+  final Color glass;
   final Color glassEdge;
   final Color shadow;
   final double orbAlpha;
 
   static const dark = HarpTokens(
-    ink: Color(0xFF07070D),
-    text: Color(0xFFF4F3FA),
-    textDim: Color(0xB3F4F3FA),
-    textFaint: Color(0x80F4F3FA),
+    ink: Color(0xFF0A0A0C),
+    surface: Color(0xFF1C1C1F),
+    raised: Color(0xFF242428),
+    text: Color(0xFFF5F5F7),
+    textDim: Color(0xFFA1A1A6),
+    textFaint: Color(0xFF6E6E73),
+    separator: Color(0x1FFFFFFF),
     glass: Colors.white,
     glassEdge: Colors.white,
     shadow: Colors.black,
-    orbAlpha: 0.42,
+    orbAlpha: 0.35,
   );
 
   static const light = HarpTokens(
-    ink: Color(0xFFF3F1FA),
-    text: Color(0xFF14131C),
-    textDim: Color(0xB314131C),
-    textFaint: Color(0x8014131C),
+    ink: Color(0xFFFFFFFF),
+    surface: Color(0xFFF2F2F7),
+    raised: Color(0xFFFFFFFF),
+    text: Color(0xFF1C1C1E),
+    textDim: Color(0xFF6C6C70),
+    textFaint: Color(0xFFAEAEB2),
+    separator: Color(0x1F000000),
     glass: Colors.white,
-    glassEdge: Color(0xFF2B2A3A),
-    shadow: Color(0xFF3A3560),
-    orbAlpha: 0.30,
+    glassEdge: Color(0xFF3A3A3C),
+    shadow: Color(0xFF000000),
+    orbAlpha: 0.22,
   );
 
   @override
@@ -73,80 +89,93 @@ extension HarpContext on BuildContext {
 }
 
 class HarpColors {
-  /// A stable accent hue for a song (no image decoding needed).
+  /// A stable fallback colour for a song when its artwork colour is not known yet.
   static Color accentFor(String? seed) {
-    if (seed == null || seed.isEmpty) return const Color(0xFFE5484D); // Harp red
+    if (seed == null || seed.isEmpty) return harpRed;
     var h = 0;
     for (final c in seed.codeUnits) {
       h = (h * 31 + c) & 0x7fffffff;
     }
-    return HSLColor.fromAHSL(1, (h % 360).toDouble(), 0.75, 0.58).toColor();
+    return HSLColor.fromAHSL(1, (h % 360).toDouble(), 0.7, 0.55).toColor();
   }
 
+  static const harpRed = Color(0xFFFA2D48); // like a music app's signature red
   static const harpRedLight = Color(0xFFFF6B6B);
   static const harpRedDark = Color(0xFFB3001B);
+
+  /// Keeps an artwork colour readable as an accent on this background.
+  static Color usableAccent(Color c, Brightness b) {
+    final hsl = HSLColor.fromColor(c);
+    final s = hsl.saturation < 0.25 ? 0.0 : hsl.saturation.clamp(0.45, 0.9);
+    final l = b == Brightness.dark ? hsl.lightness.clamp(0.55, 0.72) : hsl.lightness.clamp(0.36, 0.5);
+    return hsl.withSaturation(s.toDouble()).withLightness(l.toDouble()).toColor();
+  }
 }
 
 ThemeData harpTheme(Color accent, Brightness b) {
   final tok = b == Brightness.dark ? HarpTokens.dark : HarpTokens.light;
-  final scheme = ColorScheme.fromSeed(seedColor: accent, brightness: b, surface: tok.ink);
+  final a = HarpColors.usableAccent(accent, b);
+  final scheme = ColorScheme.fromSeed(seedColor: a, brightness: b, surface: tok.ink).copyWith(primary: a);
+  final base = b == Brightness.dark ? ThemeData.dark() : ThemeData.light();
   return ThemeData(
     useMaterial3: true,
     brightness: b,
     colorScheme: scheme,
-    scaffoldBackgroundColor: Colors.transparent,
+    scaffoldBackgroundColor: tok.ink,
+    canvasColor: tok.ink,
     extensions: [tok],
-    textTheme: (b == Brightness.dark ? ThemeData.dark() : ThemeData.light())
-        .textTheme
-        .apply(bodyColor: tok.text, displayColor: tok.text),
+    textTheme: base.textTheme.apply(bodyColor: tok.text, displayColor: tok.text),
     splashFactory: InkSparkle.splashFactory,
     sliderTheme: SliderThemeData(
-      trackHeight: 4,
-      activeTrackColor: accent,
-      inactiveTrackColor: tok.text.withValues(alpha: 0.16),
-      thumbColor: b == Brightness.dark ? Colors.white : accent,
-      overlayColor: accent.withValues(alpha: 0.18),
-      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+      trackHeight: 3,
+      activeTrackColor: tok.text,
+      inactiveTrackColor: tok.text.withValues(alpha: 0.18),
+      thumbColor: tok.text,
+      overlayColor: tok.text.withValues(alpha: 0.1),
+      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
     ),
-    dividerColor: Colors.transparent,
-    // Every control shares one shape (rounded rectangles, never pills) and one weight.
+    dividerTheme: DividerThemeData(color: tok.separator, thickness: 0.6, space: 0.6),
     filledButtonTheme: FilledButtonThemeData(style: FilledButton.styleFrom(
+      backgroundColor: a,
+      foregroundColor: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.control)),
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-      textStyle: const TextStyle(fontWeight: FontWeight.w600),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+      textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
     )),
     outlinedButtonTheme: OutlinedButtonThemeData(style: OutlinedButton.styleFrom(
+      backgroundColor: tok.surface,
+      foregroundColor: a,
+      side: BorderSide.none,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.control)),
-      side: BorderSide(color: tok.glassEdge.withValues(alpha: 0.25)),
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-      foregroundColor: tok.text,
-      textStyle: const TextStyle(fontWeight: FontWeight.w600),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+      textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
     )),
     textButtonTheme: TextButtonThemeData(style: TextButton.styleFrom(
+      foregroundColor: a,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.control)),
       textStyle: const TextStyle(fontWeight: FontWeight.w600),
     )),
-    iconButtonTheme: IconButtonThemeData(style: IconButton.styleFrom(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.control)),
-    )),
+    iconButtonTheme: IconButtonThemeData(style: IconButton.styleFrom(foregroundColor: tok.text)),
     appBarTheme: AppBarTheme(
-      backgroundColor: Colors.transparent,
+      backgroundColor: tok.ink,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       scrolledUnderElevation: 0,
       centerTitle: false,
-      foregroundColor: tok.text,
-      titleTextStyle: TextStyle(color: tok.text, fontSize: 20, fontWeight: FontWeight.w700),
+      foregroundColor: a,
+      titleTextStyle: TextStyle(color: tok.text, fontSize: 17, fontWeight: FontWeight.w700),
     ),
     popupMenuTheme: PopupMenuThemeData(
-      color: b == Brightness.dark ? const Color(0xF21B1B2A) : const Color(0xF2FFFFFF),
+      color: tok.raised,
+      surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.tile)),
     ),
     dialogTheme: DialogThemeData(
-      backgroundColor: b == Brightness.dark ? const Color(0xFF1B1A28) : Colors.white,
+      backgroundColor: tok.raised,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.sheet)),
     ),
+    bottomSheetTheme: BottomSheetThemeData(backgroundColor: tok.raised, surfaceTintColor: Colors.transparent, showDragHandle: false),
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.control)),
@@ -157,12 +186,12 @@ ThemeData harpTheme(Color accent, Brightness b) {
       border: const UnderlineInputBorder(),
     ),
     switchTheme: SwitchThemeData(
-      thumbColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? Colors.white : tok.textDim),
-      trackColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? accent : tok.text.withValues(alpha: 0.18)),
-      trackOutlineColor: WidgetStatePropertyAll(Colors.transparent),
+      thumbColor: const WidgetStatePropertyAll(Colors.white),
+      trackColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? const Color(0xFF34C759) : tok.text.withValues(alpha: 0.16)),
+      trackOutlineColor: const WidgetStatePropertyAll(Colors.transparent),
     ),
-    listTileTheme: const ListTileThemeData(contentPadding: EdgeInsets.symmetric(horizontal: 16)),
-    // Android's predictive back gesture previews the screen you are going back to.
+    listTileTheme: ListTileThemeData(contentPadding: const EdgeInsets.symmetric(horizontal: 16), iconColor: a),
+    progressIndicatorTheme: ProgressIndicatorThemeData(color: a),
     pageTransitionsTheme: const PageTransitionsTheme(builders: {
       TargetPlatform.android: PredictiveBackPageTransitionsBuilder(),
       TargetPlatform.linux: FadeUpwardsPageTransitionsBuilder(),
@@ -173,41 +202,59 @@ ThemeData harpTheme(Color accent, Brightness b) {
   );
 }
 
-/// Drifting colored orbs behind everything, with waves that rise with the music.
-///
-/// It repaints at ~20 fps and only while something is playing; when idle it
-/// draws once and stops, so it costs nothing on a paused app.
-class AuroraBackground extends StatefulWidget {
+/// The page background: plain, with a soft glow of the song's colour at the top.
+/// Static (no animation), so it costs nothing per frame. The old animated aurora
+/// lives on only behind Now Playing (see [ReactiveWaves]).
+class AuroraBackground extends StatelessWidget {
   const AuroraBackground({super.key, required this.accent, required this.child, this.level, this.active = false, this.flat = false});
   final Color accent;
   final Widget child;
-
-  /// Loudness 0..1 of what is playing (see `Visualizer`).
-  final ValueListenable<double>? level;
-
-  /// Animate (a song is playing).
-  final bool active;
-
-  /// Plain background color only (fastest).
+  final ValueListenable<double>? level; // kept for compatibility; unused here
+  final bool active; // kept for compatibility; unused here
   final bool flat;
 
   @override
-  State<AuroraBackground> createState() => _AuroraBackgroundState();
+  Widget build(BuildContext context) {
+    final tok = context.tok;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: tok.ink,
+        gradient: flat
+            ? null
+            : LinearGradient(
+                begin: Alignment.topCenter,
+                end: const Alignment(0, -0.2),
+                colors: [accent.withValues(alpha: context.isDark ? 0.22 : 0.10), tok.ink],
+              ),
+      ),
+      child: child,
+    );
+  }
 }
 
-class _AuroraBackgroundState extends State<AuroraBackground> with SingleTickerProviderStateMixin {
+/// Soft waves along the bottom of Now Playing that rise with the music.
+class ReactiveWaves extends StatefulWidget {
+  const ReactiveWaves({super.key, required this.color, required this.level, required this.active});
+  final Color color;
+  final ValueListenable<double> level;
+  final bool active;
+
+  @override
+  State<ReactiveWaves> createState() => _ReactiveWavesState();
+}
+
+class _ReactiveWavesState extends State<ReactiveWaves> with SingleTickerProviderStateMixin {
   late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(seconds: 60));
   final ValueNotifier<double> _t = ValueNotifier(0);
-  double _lastPaint = 0;
+  double _last = 0;
 
   @override
   void initState() {
     super.initState();
     _c.addListener(() {
-      // ~20 fps is plenty for slow-moving color and keeps weak GPUs cool.
       final v = _c.value * 60;
-      if ((v - _lastPaint).abs() >= 0.05 || v < _lastPaint) {
-        _lastPaint = v;
+      if ((v - _last).abs() >= 0.05 || v < _last) {
+        _last = v;
         _t.value = v;
       }
     });
@@ -215,19 +262,12 @@ class _AuroraBackgroundState extends State<AuroraBackground> with SingleTickerPr
   }
 
   @override
-  void didUpdateWidget(AuroraBackground old) {
+  void didUpdateWidget(ReactiveWaves old) {
     super.didUpdateWidget(old);
     _sync();
   }
 
-  void _sync() {
-    final reduce = WidgetsBinding.instance.platformDispatcher.accessibilityFeatures.disableAnimations;
-    if (widget.active && !reduce && !widget.flat) {
-      if (!_c.isAnimating) _c.repeat();
-    } else {
-      _c.stop();
-    }
-  }
+  void _sync() => widget.active ? (_c.isAnimating ? null : _c.repeat()) : _c.stop();
 
   @override
   void dispose() {
@@ -237,84 +277,41 @@ class _AuroraBackgroundState extends State<AuroraBackground> with SingleTickerPr
   }
 
   @override
-  Widget build(BuildContext context) {
-    final tok = context.tok;
-    return Stack(fit: StackFit.expand, children: [
-      ColoredBox(color: tok.ink),
-      if (!widget.flat)
-        RepaintBoundary(
-          child: CustomPaint(
-            painter: _AuroraPainter(_t, widget.level, widget.accent, tok.orbAlpha, context.isDark),
-          ),
-        ),
-      widget.child,
-    ]);
-  }
+  Widget build(BuildContext context) =>
+      RepaintBoundary(child: CustomPaint(painter: _WavesPainter(_t, widget.level, widget.color), size: Size.infinite));
 }
 
-class _AuroraPainter extends CustomPainter {
-  _AuroraPainter(this.t, this.level, this.accent, this.orbAlpha, this.dark)
-      : super(repaint: Listenable.merge([t, ?level]));
+class _WavesPainter extends CustomPainter {
+  _WavesPainter(this.t, this.level, this.color) : super(repaint: Listenable.merge([t, level]));
   final ValueNotifier<double> t;
-  final ValueListenable<double>? level;
-  final Color accent;
-  final double orbAlpha;
-  final bool dark;
+  final ValueListenable<double> level;
+  final Color color;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final time = t.value;
-    final lv = (level?.value ?? 0).clamp(0.0, 1.0);
-    final hsl = HSLColor.fromColor(accent);
-    final orbs = <(Color, double, double, double)>[
-      (accent, 0.2, 0.15, 0.55),
-      (hsl.withHue((hsl.hue + 70) % 360).toColor(), 0.85, 0.3, 0.5),
-      (hsl.withHue((hsl.hue + 200) % 360).toColor(), 0.4, 0.95, 0.6),
-    ];
-    final r = size.longestSide;
-    for (var i = 0; i < orbs.length; i++) {
-      final (color, x, y, rad) = orbs[i];
-      final a = (time / 60 + i / orbs.length) * 2 * math.pi;
-      final c = Offset(size.width * (x + 0.08 * math.cos(a)), size.height * (y + 0.08 * math.sin(a * 1.3)));
-      // The orbs swell a little with the music.
-      final radius = r * rad * (1 + 0.12 * lv);
-      final paint = Paint()
-        ..shader = RadialGradient(colors: [
-          color.withValues(alpha: (orbAlpha + 0.18 * lv).clamp(0, 0.7)),
-          color.withValues(alpha: 0),
-        ]).createShader(Rect.fromCircle(center: c, radius: radius));
-      canvas.drawCircle(c, radius, paint);
-    }
-
-    if (level == null) return;
-    // Soft waves along the bottom whose height follows the loudness.
-    final baseY = size.height * 0.86;
+    final lv = level.value.clamp(0.0, 1.0);
+    final baseY = size.height * 0.84;
     for (var layer = 0; layer < 3; layer++) {
       final amp = (6 + 46 * lv) * (1 - layer * 0.25);
-      final speed = 1.2 + layer * 0.7;
       final path = Path()..moveTo(0, size.height);
-      const steps = 48;
+      const steps = 40;
       for (var i = 0; i <= steps; i++) {
         final x = size.width * i / steps;
-        final ph = i / steps * (2.2 + layer) * math.pi + time * speed;
-        final y = baseY + layer * 10 - amp * (0.55 * math.sin(ph) + 0.45 * math.sin(ph * 1.9 + layer));
-        path.lineTo(x, y);
+        final ph = i / steps * (2.2 + layer) * math.pi + t.value * (1.2 + layer * 0.7);
+        path.lineTo(x, baseY + layer * 10 - amp * (0.55 * math.sin(ph) + 0.45 * math.sin(ph * 1.9 + layer)));
       }
       path
         ..lineTo(size.width, size.height)
         ..close();
-      canvas.drawPath(
-        path,
-        Paint()..color = accent.withValues(alpha: (dark ? 0.16 : 0.12) - layer * 0.035),
-      );
+      canvas.drawPath(path, Paint()..color = color.withValues(alpha: 0.16 - layer * 0.04));
     }
   }
 
   @override
-  bool shouldRepaint(_AuroraPainter old) => old.accent != accent || old.dark != dark || old.orbAlpha != orbAlpha;
+  bool shouldRepaint(_WavesPainter old) => old.color != color;
 }
 
-/// A translucent panel with a light edge. **No blur**: cheap enough for lists.
+/// A grouped, filled section (settings groups, info boxes). No blur.
 class GlassCard extends StatelessWidget {
   const GlassCard({
     super.key,
@@ -337,34 +334,20 @@ class GlassCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tok = context.tok;
-    final dark = context.isDark;
-    final base = tint ?? tok.glass;
     final r = BorderRadius.circular(radius);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: r,
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            base.withValues(alpha: (dark ? 0.12 : 0.62) * strength),
-            base.withValues(alpha: (dark ? 0.05 : 0.38) * strength),
-          ],
-        ),
-        border: Border.all(color: tok.glassEdge.withValues(alpha: dark ? 0.16 : 0.10)),
-      ),
-      child: Material(
-        type: MaterialType.transparency,
-        child: InkWell(borderRadius: r, onTap: onTap, onLongPress: onLongPress, child: Padding(padding: padding, child: child)),
-      ),
+    final color = tint == null ? tok.surface : Color.alphaBlend(tint!.withValues(alpha: context.isDark ? 0.22 : 0.14), tok.surface);
+    return Material(
+      color: color,
+      borderRadius: r,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(onTap: onTap, onLongPress: onLongPress, child: Padding(padding: padding, child: child)),
     );
   }
 }
 
-/// A real frosted surface (blurs what is behind it). Costly: use only a few,
-/// large, mostly-static ones (the dock, sheets).
+/// A raised surface (the floating player, sheets). Blurs only when [blur] > 0.
 class GlassSurface extends StatelessWidget {
-  const GlassSurface({super.key, required this.child, this.radius = 0, this.blur = 18, this.topBorderOnly = false});
+  const GlassSurface({super.key, required this.child, this.radius = 0, this.blur = 0, this.topBorderOnly = false});
   final Widget child;
   final double radius;
   final double blur;
@@ -373,16 +356,12 @@ class GlassSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tok = context.tok;
-    final dark = context.isDark;
     final r = BorderRadius.circular(radius);
     final blurred = blur > 0;
     final box = DecoratedBox(
       decoration: BoxDecoration(
-        // Without blur the fill is more opaque so text stays readable.
-        color: (dark ? const Color(0xFF14131E) : Colors.white).withValues(alpha: blurred ? (dark ? 0.62 : 0.72) : (dark ? 0.90 : 0.92)),
-        border: topBorderOnly
-            ? Border(top: BorderSide(color: tok.glassEdge.withValues(alpha: dark ? 0.14 : 0.10)))
-            : Border.all(color: tok.glassEdge.withValues(alpha: dark ? 0.16 : 0.10)),
+        color: tok.raised.withValues(alpha: blurred ? 0.82 : 1),
+        border: topBorderOnly ? Border(top: BorderSide(color: tok.separator)) : null,
       ),
       child: child,
     );
@@ -395,7 +374,7 @@ class GlassSurface extends StatelessWidget {
   }
 }
 
-/// A small square icon button.
+/// A plain icon button (music apps use bare glyphs). [filled] draws a solid circle.
 class GlassIconButton extends StatelessWidget {
   const GlassIconButton({
     super.key,
@@ -405,7 +384,7 @@ class GlassIconButton extends StatelessWidget {
     this.filled = false,
     this.color,
     this.tooltip,
-    this.round = false,
+    this.round = true,
   });
   final IconData icon;
   final VoidCallback? onPressed;
@@ -418,28 +397,21 @@ class GlassIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tok = context.tok;
-    final accent = Theme.of(context).colorScheme.primary;
-    final shape = round
-        ? CircleBorder(side: BorderSide(color: tok.glassEdge.withValues(alpha: 0.2)))
-        : RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(Radii.control),
-            side: BorderSide(color: tok.glassEdge.withValues(alpha: 0.18)),
-          );
-    final fg = onPressed == null ? tok.textFaint : (color ?? (filled ? Colors.white : tok.text));
+    final fg = onPressed == null ? tok.textFaint : (color ?? (filled ? tok.ink : tok.text));
     final btn = Material(
-      color: filled ? accent : tok.glass.withValues(alpha: context.isDark ? 0.10 : 0.6),
-      shape: shape,
+      color: filled ? tok.text : Colors.transparent,
+      shape: const CircleBorder(),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onPressed,
-        child: SizedBox(width: size, height: size, child: Icon(icon, size: size * 0.5, color: fg)),
+        child: SizedBox(width: size, height: size, child: Icon(icon, size: size * (filled ? 0.5 : 0.62), color: fg)),
       ),
     );
     return tooltip == null ? btn : Tooltip(message: tooltip!, child: btn);
   }
 }
 
-/// A rounded-rectangle chip.
+/// A filter chip.
 class GlassChip extends StatelessWidget {
   const GlassChip({super.key, required this.label, this.selected = false, this.onTap, this.icon});
   final String label;
@@ -452,19 +424,16 @@ class GlassChip extends StatelessWidget {
     final tok = context.tok;
     final accent = Theme.of(context).colorScheme.primary;
     return Material(
-      color: selected ? accent.withValues(alpha: 0.30) : tok.glass.withValues(alpha: context.isDark ? 0.09 : 0.6),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(Radii.chip),
-        side: BorderSide(color: tok.glassEdge.withValues(alpha: selected ? 0.35 : 0.14)),
-      ),
+      color: selected ? accent : tok.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.chip)),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
-            if (icon != null) ...[Icon(icon, size: 16), const SizedBox(width: 6)],
-            Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+            if (icon != null) ...[Icon(icon, size: 16, color: selected ? Colors.white : tok.text), const SizedBox(width: 6)],
+            Text(label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: selected ? Colors.white : tok.text)),
           ]),
         ),
       ),
@@ -472,21 +441,54 @@ class GlassChip extends StatelessWidget {
   }
 }
 
-/// The big title at the top of every main screen (Apple Music style).
+/// The big title at the top of every main screen.
 class PageTitle extends StatelessWidget {
-  const PageTitle(this.title, {super.key, this.leading, this.actions = const []});
+  const PageTitle(this.title, {super.key, this.leading, this.actions = const [], this.subtitle});
   final String title;
+  final String? subtitle;
   final Widget? leading;
   final List<Widget> actions;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 18, 8, 8),
+      padding: const EdgeInsets.fromLTRB(16, 14, 8, 6),
       child: Row(children: [
         if (leading != null) ...[leading!, const SizedBox(width: 12)],
-        Expanded(child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, height: 1.1))),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+            if (subtitle != null)
+              Text(subtitle!.toUpperCase(), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 0.6, color: context.tok.textDim)),
+            Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w800, height: 1.15, letterSpacing: -0.6)),
+          ]),
+        ),
         ...actions,
+      ]),
+    );
+  }
+}
+
+/// A section heading, optionally with an action on the right ("See all").
+class SectionHeader extends StatelessWidget {
+  const SectionHeader(this.title, {super.key, this.subtitle, this.action, this.onAction});
+  final String title;
+  final String? subtitle;
+  final String? action;
+  final VoidCallback? onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final tok = context.tok;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 18, 8, 10),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, letterSpacing: -0.3)),
+            if (subtitle != null) Text(subtitle!, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: tok.textDim)),
+          ]),
+        ),
+        if (action != null) TextButton(onPressed: onAction, child: Text(action!)),
       ]),
     );
   }
@@ -505,9 +507,9 @@ class EmptyState extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, size: 40, color: tok.textFaint),
+          Icon(icon, size: 44, color: tok.textFaint),
           const SizedBox(height: 12),
-          Text(text, textAlign: TextAlign.center, style: TextStyle(color: tok.textDim)),
+          Text(text, textAlign: TextAlign.center, style: TextStyle(color: tok.textDim, fontSize: 15)),
         ]),
       ),
     );

@@ -7,9 +7,9 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `collection_view`, `e`, `eng`, `import_view`, `lyrics_view`, `queue_view`, `request`, `serde_json_string`, `song_from_json`, `song`, `spotify_embed_url`, `view`, `views`, `youtube_list_id`
+// These functions are ignored because they are not marked as `pub`: `collection_view`, `e`, `eng`, `export_songs`, `import_view`, `lyrics_view`, `queue_view`, `request`, `serde_json_string`, `song_from_json`, `song`, `spotify_embed_url`, `spotify_token`, `view`, `views`, `youtube_list_id`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Engine`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// Starts the engine: opens the database, makes sure yt-dlp is installed.
 /// Safe to call again (does nothing the second time).
@@ -233,6 +233,10 @@ Future<MatchView> importMatch({required ImportTrackView t}) =>
 Future<List<String>> searchHistory({required int limit}) =>
     RustLib.instance.api.crateApiEngineSearchHistory(limit: limit);
 
+/// Saves a search: called when you press search / enter, or open a result.
+Future<void> searchHistoryAdd({required String q}) =>
+    RustLib.instance.api.crateApiEngineSearchHistoryAdd(q: q);
+
 Future<void> searchHistoryRemove({required String q}) =>
     RustLib.instance.api.crateApiEngineSearchHistoryRemove(q: q);
 
@@ -288,6 +292,53 @@ Future<void> prefetchSongs({
 Future<BigInt> cacheBytes() => RustLib.instance.api.crateApiEngineCacheBytes();
 
 Future<void> clearCache() => RustLib.instance.api.crateApiEngineClearCache();
+
+/// Songs, episodes, artists, albums and podcasts, ranked by YouTube Music's relevance.
+Future<List<SearchHitView>> searchAll({required String query}) =>
+    RustLib.instance.api.crateApiEngineSearchAll(query: query);
+
+/// A playlist as a file: "csv" (Exportify columns), "m3u" or "json".
+Future<ExportFile> playlistExport({
+  required PlatformInt64 id,
+  required String format,
+}) => RustLib.instance.api.crateApiEnginePlaylistExport(id: id, format: format);
+
+/// Liked songs as a file.
+Future<ExportFile> likedExport({required String format}) =>
+    RustLib.instance.api.crateApiEngineLikedExport(format: format);
+
+/// The address to add to your Spotify app's Redirect URIs.
+Future<String> spotifyRedirectUri() =>
+    RustLib.instance.api.crateApiEngineSpotifyRedirectUri();
+
+Future<String?> spotifyClientId() =>
+    RustLib.instance.api.crateApiEngineSpotifyClientId();
+
+Future<bool> spotifyConnected() =>
+    RustLib.instance.api.crateApiEngineSpotifyConnected();
+
+/// Starts signing in: returns the address to open in the browser.
+Future<String> spotifyConnect({required String clientId}) =>
+    RustLib.instance.api.crateApiEngineSpotifyConnect(clientId: clientId);
+
+/// Waits (up to 5 minutes) for the browser sign-in to finish, then saves the tokens.
+Future<void> spotifyWait() => RustLib.instance.api.crateApiEngineSpotifyWait();
+
+Future<void> spotifyCancel() =>
+    RustLib.instance.api.crateApiEngineSpotifyCancel();
+
+Future<void> spotifyDisconnect() =>
+    RustLib.instance.api.crateApiEngineSpotifyDisconnect();
+
+/// Your Spotify playlists (Liked Songs first), with how many songs each has.
+Future<List<SpotifyPlaylistView>> spotifyPlaylists() =>
+    RustLib.instance.api.crateApiEngineSpotifyPlaylists();
+
+/// Every song of one of your Spotify playlists ("liked" for Liked Songs), ready to match.
+Future<ImportPlaylistView> spotifyFetch({
+  required String id,
+  required String name,
+}) => RustLib.instance.api.crateApiEngineSpotifyFetch(id: id, name: name);
 
 class CollectionDetail {
   final CollectionView info;
@@ -425,6 +476,24 @@ class EngineConfig {
           quickjs == other.quickjs &&
           caDir == other.caDir &&
           ytdlpOverride == other.ytdlpOverride;
+}
+
+class ExportFile {
+  final String fileName;
+  final String contents;
+
+  const ExportFile({required this.fileName, required this.contents});
+
+  @override
+  int get hashCode => fileName.hashCode ^ contents.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ExportFile &&
+          runtimeType == other.runtimeType &&
+          fileName == other.fileName &&
+          contents == other.contents;
 }
 
 class HomeFeed {
@@ -683,6 +752,27 @@ class QueueView {
           repeat == other.repeat;
 }
 
+class SearchHitView {
+  /// "song", "episode", "artist", "album" or "podcast"
+  final String kind;
+  final SongView? song;
+  final CollectionView? collection;
+
+  const SearchHitView({required this.kind, this.song, this.collection});
+
+  @override
+  int get hashCode => kind.hashCode ^ song.hashCode ^ collection.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SearchHitView &&
+          runtimeType == other.runtimeType &&
+          kind == other.kind &&
+          song == other.song &&
+          collection == other.collection;
+}
+
 class SongView {
   final String id;
   final String title;
@@ -732,6 +822,34 @@ class SongView {
           thumbnail == other.thumbnail &&
           liked == other.liked &&
           downloaded == other.downloaded;
+}
+
+class SpotifyPlaylistView {
+  final String id;
+  final String name;
+  final int total;
+  final String owner;
+
+  const SpotifyPlaylistView({
+    required this.id,
+    required this.name,
+    required this.total,
+    required this.owner,
+  });
+
+  @override
+  int get hashCode =>
+      id.hashCode ^ name.hashCode ^ total.hashCode ^ owner.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SpotifyPlaylistView &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          name == other.name &&
+          total == other.total &&
+          owner == other.owner;
 }
 
 class StreamView {

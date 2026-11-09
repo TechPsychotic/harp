@@ -10,6 +10,7 @@ import '../theme/glass.dart';
 import '../widgets/cover.dart';
 import '../widgets/song_actions.dart';
 import 'playlist.dart' show AuroraScaffold;
+import 'spotify_screen.dart';
 
 /// Bring playlists over from Spotify, Apple Music, Amazon Music or YouTube.
 class ImportScreen extends StatefulWidget {
@@ -160,9 +161,28 @@ class _ImportScreenState extends State<ImportScreen> {
               Text('Bring your playlists over. Nothing is uploaded and no account is needed.', style: TextStyle(color: tok.textDim)),
               const SizedBox(height: 16),
               _Card(
+                icon: Icons.account_circle_rounded,
+                title: 'From your Spotify account',
+                subtitle: 'Every playlist and Liked Songs, no 100-song limit (like Exportify)',
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: FilledButton.icon(
+                    onPressed: _busy
+                        ? null
+                        : () async {
+                            final pl = await Navigator.of(context).push<api.ImportPlaylistView>(MaterialPageRoute(builder: (_) => const SpotifyScreen()));
+                            if (pl == null || !mounted) return;
+                            setState(() { _found = [pl]; _afterFound(); });
+                          },
+                    icon: const Icon(Icons.login_rounded),
+                    label: const Text('Open Spotify'),
+                  ),
+                ),
+              ),
+              _Card(
                 icon: Icons.link_rounded,
                 title: 'From a link',
-                subtitle: 'Public Spotify, YouTube or YouTube Music playlist',
+                subtitle: 'Public Spotify (first 100 songs), Apple Music, YouTube or YouTube Music playlist',
                 child: Row(children: [
                   Expanded(child: TextField(controller: _link, decoration: const InputDecoration(hintText: 'https://open.spotify.com/playlist/…'))),
                   const SizedBox(width: 8),
@@ -188,7 +208,7 @@ class _ImportScreenState extends State<ImportScreen> {
               if (_busy) const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator())),
               if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, style: const TextStyle(color: Color(0xFFFF8A8A)))),
               const SizedBox(height: 8),
-              Text('Spotify: open the playlist ⋯ › Share › Copy link (it must be public), or request your data export at spotify.com/account/privacy. Apple Music: File › Library › Export Playlist.', style: TextStyle(color: tok.textFaint, fontSize: 12.5)),
+              Text('Spotify: Share › Copy link (public playlists), or connect your account above for everything. Apple Music: Share › Copy Link, or File › Library › Export Playlist. Amazon Music shares nothing with other apps, so paste its song list.', style: TextStyle(color: tok.textFaint, fontSize: 12.5)),
             ]),
           _Step.pick => ListView(padding: const EdgeInsets.all(16), children: [
               const Text('Which playlist?', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),

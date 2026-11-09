@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/material.dart' show Color;
 import 'package:flutter/foundation.dart';
 import 'package:media_kit/media_kit.dart';
 
 import '../native.dart';
 import '../settings.dart';
+import '../theme/art_color.dart';
+import '../theme/glass.dart';
 import '../src/rust/api/engine.dart' as api;
 import '../widgets/cover.dart';
 import 'media_session.dart';
@@ -83,6 +86,9 @@ class PlayerController extends ChangeNotifier {
 
   /// Bumped when likes, playlists or downloads change, so screens reload.
   final ValueNotifier<int> libraryRev = ValueNotifier(0);
+
+  /// The playing song's artwork colour (the app tints itself with it).
+  final ValueNotifier<Color> accent = ValueNotifier(HarpColors.harpRed);
 
   /// Song ids being downloaded right now.
   final ValueNotifier<Set<String>> downloading = ValueNotifier({});
@@ -168,6 +174,13 @@ class PlayerController extends ChangeNotifier {
       return;
     }
     session.setState(playing: playing, loading: loading, position: position.value);
+  }
+
+  Future<void> _updateAccent(api.SongView s) async {
+    final path = ThumbCache.peek(s.thumbnail) ?? await ThumbCache.path(s.thumbnail);
+    if (path.isEmpty) return;
+    final c = await ArtColor.of(path);
+    if (c != null && current?.id == s.id) accent.value = c;
   }
 
   void _publishNowPlaying(api.SongView s) {
@@ -285,6 +298,7 @@ class PlayerController extends ChangeNotifier {
     duration.value = Duration.zero;
     viz.songSeed = s.id;
     _publishNowPlaying(s);
+    unawaited(_updateAccent(s));
     _syncSession();
     notifyListeners();
     var superseded = false;
@@ -583,6 +597,7 @@ class PlayerController extends ChangeNotifier {
     duration.dispose();
     libraryRev.dispose();
     downloading.dispose();
+    accent.dispose();
     super.dispose();
   }
 }

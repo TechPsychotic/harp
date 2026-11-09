@@ -8,6 +8,41 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-09 (latest): redesign, search the way music apps do it, Spotify and Apple Music import
+
+**Search**
+- **History is saved only when you search on purpose**: pressing search / enter, or opening a
+  result (song, album, artist, podcast). Typing still shows results as you go, but nothing is
+  saved for every keystroke.
+- **"All" is the default**, ranked by YouTube Music's own relevance: a top result, then songs,
+  artists, albums and podcasts. Videos, playlists and profiles are left out. 🧪 on real responses.
+- Filters are **All, Songs, Albums, Artists, Podcasts** (Playlists removed).
+
+**Redesign** (to feel like a music app)
+- The app takes its colour from the playing song's artwork.
+- Plain list rows instead of boxed cards; big titles; section headers with "See All".
+- A floating mini player above a tab bar (Listen Now, Search, Library, Settings); a sidebar on
+  wide windows.
+- Now Playing: the artwork's colour and a blurred copy of it as the backdrop, big artwork that
+  shrinks a little when paused, bare controls, a remaining-time counter, big bold lyrics in
+  place of the artwork, the queue with shuffle and repeat in its own sheet.
+- Album, artist, podcast and playlist pages: centred artwork (round for artists, a 2×2 mosaic for
+  your playlists), Play and Shuffle buttons, numbered tracks on albums, more shelves for artists.
+- Library is a list (Liked Songs, Downloaded, Recently Played, Bring Your Music Over) with your
+  playlists as a grid.
+- The animated background now runs only behind Now Playing (less work for the GPU elsewhere).
+- 🧪 16 Flutter tests pass (including the artwork-colour picker). 🖥️📱 not yet seen on your
+  devices.
+
+**Bringing music over**
+- **Spotify account, like Exportify**, is in the app: Library › Bring Your Music Over › From your
+  Spotify account (or Settings › Spotify). Every playlist and Liked Songs, no 100-song cap.
+  📱🖥️ not yet tried with a real Spotify account.
+- **Export** any playlist or Liked Songs as CSV (Exportify columns), M3U or JSON.
+- **Apple Music links** now import (public playlists and albums). 🧪 on a saved copy of a real
+  Apple Music page.
+- Amazon Music: still not possible (no API, no songs in its shared pages); paste the list.
+
 ## 2026-11-09 (late night): Exportify-style tools (core), roadmap rewrite
 
 **Added (in the Rust core, tested; not yet on any screen)**

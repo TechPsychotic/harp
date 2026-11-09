@@ -39,7 +39,7 @@ the idea and the code. `UPDATES.md` is the dated log of changes; this file is th
 
 ## 1. Tracker: everything you reported or asked for
 
-### 1a. Problems you reported (18)
+### 1a. Problems you reported (19)
 
 | # | Problem | Status | What was done / what is left |
 |---|---|---|---|
@@ -60,11 +60,12 @@ the idea and the code. `UPDATES.md` is the dated log of changes; this file is th
 | B15 | The app crashed on the phone | 🟡 | Likely cause found and fixed: the media-notification icon was stripped from the APK by the resource shrinker (confirmed absent, now confirmed present). Crash reporter added (Settings › About › Last crash report). Not confirmed that it was the whole cause. |
 | B16 | No Spotify-style controls in the notification | 🟡 | Same cause as B15. Not confirmed. |
 | B17 | Two settings entries (Home header + tab) | ✅ | The Home gear is gone. |
+| B19 | Search history saved every keystroke | ✅ | History is saved only when you press search / enter or open a result (song, album, artist, podcast), like Spotify. Typing still searches as you go, but saves nothing. |
 | B18 | Android builds failing on GitHub | 🟡 | GitHub's release downloads returned 504 for hours. CI now caches and retries; local building works (✅). CI not yet green again. |
 
-**Problems: 4 fixed and checked, 13 fixed but waiting for your confirmation, 1 partly fixed.**
+**Problems (19): 5 fixed and checked, 13 fixed but waiting for your confirmation, 1 partly fixed.**
 
-### 1b. Features you asked for (33)
+### 1b. Features you asked for (35)
 
 | # | Feature | Status | Notes |
 |---|---|---|---|
@@ -93,18 +94,20 @@ the idea and the code. `UPDATES.md` is the dated log of changes; this file is th
 | F23 | Snappier app | 🟡 | See B3. |
 | F24 | Recommendations that use your searches | ✅ | "Because you searched for …". |
 | F25 | Synced lyrics (SongSync / BetterLyrics style) | 🔧 | Line-synced lyrics from LRCLIB, tap to seek, cached. **Word-by-word (BetterLyrics-style) not done.** |
-| F26 | UI like Apple Music, with Apple Music / Spotify features | ⬜ | Only the consistency pass is done. Needs a real design pass (see section 2). |
+| F26 | UI like Apple Music, with Apple Music / Spotify features | 🟡 | **Redesigned** (2026-11-09): artwork-coloured theme, plain list rows, big titles, floating mini player over a tab bar (sidebar on wide screens), artwork-backdrop Now Playing with big lyrics, album/artist/playlist pages with headers and Play/Shuffle, Library as categories. Not yet seen on your devices; more Apple/Spotify features remain (see backlog). |
 | F27 | Android: edge-to-edge, predictive back, adaptive icons, Live Updates / Now Bar | 🔧 | Edge-to-edge 🟡, predictive back 🟡, adaptive icon ✅. Live Updates / Now Bar: nothing built beyond the standard media notification (which Samsung's Now Bar uses); not confirmed. |
 | F28 | Search for artists | ✅ | Artist page with all songs, albums, playlists, similar artists. Checked live. |
 | F29 | Keep `UPDATES.md` | ✅ | Updated with every change. |
 | F30 | Build the APK on the laptop | ✅ | Memory-guarded script. |
-| F31 | Exportify-like tools inside the app | 🔧 | **Built and tested in the core:** Spotify sign-in (PKCE, your own Client ID, no secret), all playlists and Liked Songs with no 100-song cap (tested reading 250 songs and waiting out a rate limit), and saving any playlist as Exportify-style CSV, M3U or JSON (round-trip tested). **Not done:** connecting this to the app's screens. |
-| F32 | The same for Apple Music | 🔧 / ⛔ | Reading *your Apple Music account* needs a MusicKit developer token, which needs a paid Apple Developer membership (⛔ without one). **Public Apple Music playlist links are readable** with no key: the page carries the track list (checked: 50 songs in its structured data, more in its page data). Not built yet. File exports (text, M3U) already import. *(Earlier I said Apple links could not be read; that was wrong.)* |
+| F31 | Exportify-like tools inside the app | 🟡 | **In the app now** (Library › Bring Your Music Over › From your Spotify account; Settings › Spotify; Export on playlists and Liked Songs). **Core tested:** Spotify sign-in (PKCE, your own Client ID, no secret), all playlists and Liked Songs with no 100-song cap (tested reading 250 songs and waiting out a rate limit), and saving any playlist as Exportify-style CSV, M3U or JSON (round-trip tested). The real Spotify sign-in has not been tried with a real account yet. |
+| F32 | The same for Apple Music | 🟡 / ⛔ | Reading *your Apple Music account* needs a MusicKit developer token, which needs a paid Apple Developer membership (⛔ without one). **Public Apple Music playlist links are readable** with no key: the page carries the track list (checked: 50 songs in its structured data, more in its page data). **Link import is now built** (tested on a saved copy of a real page). File exports (text, M3U) already import. *(Earlier I said Apple links could not be read; that was wrong.)* |
+| F34 | Search: "All" by default, ranked by relevance | ✅ | All results in YouTube Music's own relevance order: top result, then songs, artists, albums, podcasts (videos, playlists and profiles left out). Tested on real responses. |
+| F35 | Remove the Playlists search filter | ✅ | Filters: All, Songs, Albums, Artists, Podcasts. |
 | F33 | The same for Amazon Music | ⛔ | No public API for listeners (Amazon's web API is invite-only), and shared playlist pages are a JavaScript app with no songs in the page (checked). Workarounds: paste the list, or a CSV from a converter such as TuneMyMusic (already imports). |
 
-**Features: 20 done and checked, 6 done but waiting for your confirmation, 5 in progress,
-1 not started, 1 not possible (Amazon Music); plus parts that are not possible (Dolby Atmos,
-Apple Music account access without a paid developer key).**
+**Features (35): 22 done and checked, 9 done but waiting for your confirmation, 3 in progress,
+1 not possible (Amazon Music); plus parts that are not possible (Dolby Atmos, Apple Music
+account access without a paid developer key).**
 
 ---
 
@@ -113,15 +116,13 @@ Apple Music account access without a paid developer key).**
 **P0: make what exists reliable on your phone**
 1. Confirm on the phone: no crash, notification controls, screen-off playback, yt-dlp streaming
    (B7, B11, B12, B15, B16). If anything fails, the crash report and frame times give data.
-2. Finish the Spotify account connection (F31): Client ID setup screen, browser sign-in,
-   playlist picker, then the existing matching and review.
-3. Playlist export buttons (CSV / M3U / JSON) on playlists and Liked Songs (F31).
-4. Apple Music public playlist links (F32).
-5. Get CI green again (B18) so every commit produces an APK.
+2. Try the Spotify account connection with a real account (F31) and an Apple Music link (F32).
+3. Review the redesign on the phone and the laptop, and adjust (F26).
+4. Get CI green again (B18) so every commit produces an APK.
 
 **P1: the experience**
-6. Apple-Music-style redesign (F26): large-artwork Now Playing with a swipe-down sheet, lyrics as
-   a first-class view, album/artist pages with headers, a proper mini player, consistent motion.
+6. Redesign, second pass (F26): swipe-down to close Now Playing, motion between mini player and
+   Now Playing, an Apple-style "Browse" of charts and new releases.
 7. Measure and fix lag on the phone with frame-time numbers (B3).
 8. Gapless playback and crossfade (in the original roadmap, not done).
 9. Persist the whole queue across restarts (today only the last song is remembered).

@@ -522,6 +522,148 @@ pub fn parse_page(v: &Value, browse_id: &str) -> (Collection, Vec<Song>) {
     (collection, songs)
 }
 
+
+// --- "All" search: everything, in YouTube Music's own relevance order ---
+
+/// One result of an "All" search.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Hit {
+    Song(Song),
+    /// A podcast episode (playable like a song).
+    Episode(Song),
+    /// An artist, album (or single / EP) or podcast show.
+    Collection(Collection),
+}
+
+impl Hit {
+    fn id(&self) -> &str {
+        match self {
+            Hit::Song(s) | Hit::Episode(s) => &s.id,
+            Hit::Collection(c) => &c.id,
+        }
+    }
+}
+
+/// Songs, episodes, artists, albums and podcasts matching a query, ranked by YouTube
+/// Music. Videos, playlists and profiles are left out.
+pub fn search_all(query: &str, limit: usize) -> Result<Vec<Hit>> {
+    let v = post("search", json!({"query": query}))?;
+    let mut hits = parse_all(&v);
+    hits.truncate(limit);
+    Ok(hits)
+}
+
+/// Splits "Song • Artist • Album • 3:45" into the kind label and the runs after it.
+fn label_and_rest(runs: &[Value]) -> (String, Vec<Value>) {
+    match runs.iter().position(|r| text(r) == Some(" • ")) {
+        Some(i) => (runs[..i].iter().filter_map(text).collect::<String>(), runs[i + 1..].to_vec()),
+        None => (runs.iter().filter_map(text).collect::<String>(), vec![]),
+    }
+}
+
+fn runs_text(runs: &[Value]) -> String {
+    runs.iter().filter_map(text).collect()
+}
+
+/// Makes a hit from a title, the subtitle runs, where it leads, and its picture.
+fn hit_from(title: String, sub: &[Value], video: Option<&str>, browse: Option<&str>, thumbnail: Option<String>) -> Option<Hit> {
+    let (label, rest) = label_and_rest(sub);
+    let label = label.trim().to_lowercase();
+    // A song page id is "MPED" + the video id.
+    let video = video.map(String::from).or_else(|| browse.and_then(|b| b.strip_prefix("MPED")).filter(|v| v.len() == 11).map(String::from));
+    match label.as_str() {
+        "song" | "episode" => {
+            let id = video?;
+            let b = byline(&rest);
+            if label == "song" {
+                Some(Hit::Song(Song { id, title, artist: if b.artist.is_empty() { "Unknown".into() } else { b.artist }, artist_id: b.artist_id, album: b.album, duration_secs: b.secs, thumbnail }))
+            } else {
+                // "Mar 23, 2013 • The Show": the last part names the show.
+                let show = rest.split(|r| text(r) == Some(" • ")).last().map(runs_text).unwrap_or_default();
+                Some(Hit::Episode(Song { id, title, artist: if show.is_empty() { "Podcast".into() } else { show }, artist_id: None, album: None, duration_secs: b.secs, thumbnail }))
+            }
+        }
+        "artist" | "album" | "single" | "ep" | "podcast" => {
+            let id = browse?.to_string();
+            let kind = match label.as_str() {
+                "artist" => "artist",
+                "podcast" => "podcast",
+                _ => "album",
+            };
+            if kind_of_id(&id) != Some(kind) {
+                return None;
+            }
+            let subtitle = if kind == "album" { runs_text(sub) } else { runs_text(&rest) };
+            Some(Hit::Collection(Collection { id, title, subtitle, thumbnail, kind: kind.into() }))
+        }
+        _ => None, // videos, playlists, profiles
+    }
+}
+
+fn hit_from_row(it: &Value) -> Option<Hit> {
+    let cols = it.get("flexColumns")?.as_array()?;
+    let col = |i: usize| cols.get(i).and_then(|c| c.pointer("/musicResponsiveListItemFlexColumnRenderer/text/runs")).and_then(Value::as_array);
+    let title = runs_text(col(0)?);
+    if title.is_empty() {
+        return None;
+    }
+    let sub = col(1).cloned().unwrap_or_default();
+    let video = it.pointer("/playlistItemData/videoId").and_then(Value::as_str);
+    let browse = it.pointer("/navigationEndpoint/browseEndpoint/browseId").and_then(Value::as_str);
+    let mut h = hit_from(title, &sub, video, browse, thumb(it))?;
+    // Rows show the length in a fixed column for some kinds.
+    if let Hit::Song(s) | Hit::Episode(s) = &mut h {
+        if s.duration_secs.is_none() {
+            s.duration_secs = it
+                .pointer("/fixedColumns/0/musicResponsiveListItemFixedColumnRenderer/text/runs/0/text")
+                .and_then(Value::as_str)
+                .and_then(parse_clock);
+        }
+    }
+    Some(h)
+}
+
+pub fn parse_all(v: &Value) -> Vec<Hit> {
+    let mut sections = vec![];
+    find_all(v, "sectionListRenderer", &mut sections);
+    let Some(list) = sections.first().and_then(|s| s.get("contents")).and_then(Value::as_array) else { return vec![] };
+    let mut out: Vec<Hit> = vec![];
+    let mut seen = std::collections::HashSet::new();
+    let mut push = |h: Hit, out: &mut Vec<Hit>| {
+        if seen.insert(h.id().to_string()) {
+            out.push(h);
+        }
+    };
+    for sec in list {
+        if let Some(card) = sec.get("musicCardShelfRenderer") {
+            // The top result, then the songs shown inside it.
+            let runs = card.pointer("/title/runs").and_then(Value::as_array).cloned().unwrap_or_default();
+            let nav = runs.first().and_then(|r| r.get("navigationEndpoint")).or_else(|| card.get("onTap"));
+            let video = nav.and_then(|n| n.pointer("/watchEndpoint/videoId")).and_then(Value::as_str);
+            let browse = nav.and_then(|n| n.pointer("/browseEndpoint/browseId")).and_then(Value::as_str);
+            let sub = card.pointer("/subtitle/runs").and_then(Value::as_array).cloned().unwrap_or_default();
+            if let Some(h) = hit_from(runs_text(&runs), &sub, video, browse, thumb(card)) {
+                push(h, &mut out);
+            }
+            for row in card.get("contents").and_then(Value::as_array).into_iter().flatten() {
+                if let Some(h) = row.get("musicResponsiveListItemRenderer").and_then(hit_from_row) {
+                    push(h, &mut out);
+                }
+            }
+        }
+        let rows = sec
+            .pointer("/itemSectionRenderer/contents")
+            .or_else(|| sec.pointer("/musicShelfRenderer/contents"))
+            .and_then(Value::as_array);
+        for row in rows.into_iter().flatten() {
+            if let Some(h) = row.get("musicResponsiveListItemRenderer").and_then(hit_from_row) {
+                push(h, &mut out);
+            }
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -637,6 +779,48 @@ mod tests {
         let kinds: std::collections::HashSet<_> = related.iter().map(|c| c.kind.as_str()).collect();
         assert!(kinds.contains("album") && kinds.contains("playlist") && kinds.contains("artist"), "{kinds:?}");
         assert!(related.iter().all(|c| !c.title.is_empty() && c.id != "UCDxKh1gFWeYsqePvgVzmPoQ"));
+    }
+
+    fn kinds(h: &[Hit]) -> Vec<String> {
+        h.iter()
+            .map(|h| match h {
+                Hit::Song(s) => format!("song:{}", s.title),
+                Hit::Episode(s) => format!("episode:{}", s.artist),
+                Hit::Collection(c) => format!("{}:{}", c.kind, c.title),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn all_search_keeps_youtube_music_order_and_drops_videos_and_playlists() {
+        let h = parse_all(&fixture(include_str!("../tests/fixtures/ytm_all_artist.json")));
+        let k = kinds(&h);
+        assert_eq!(k[0], "artist:Arijit Singh", "the top result comes first");
+        assert!(k[1].starts_with("song:"), "then the songs inside the top-result card: {k:?}");
+        assert!(!k.iter().any(|x| x.contains("Spotlight") || x.contains("Lofi")), "no playlists or videos: {k:?}");
+        let pos = |p: &str| k.iter().position(|x| x == p).unwrap();
+        assert!(pos("artist:Atif Aslam") < pos("album:The Arijit Singh Collection"), "relevance order is kept");
+        let ids: std::collections::HashSet<_> = h.iter().map(|x| x.id().to_string()).collect();
+        assert_eq!(ids.len(), h.len(), "no duplicates");
+        if let Hit::Song(s) = &h[1] {
+            assert_eq!(s.id.len(), 11);
+            assert!(!s.artist.is_empty() && s.artist != "Unknown");
+        }
+    }
+
+    #[test]
+    fn all_search_for_a_song_and_for_a_podcast() {
+        let h = parse_all(&fixture(include_str!("../tests/fixtures/ytm_all_song.json")));
+        let k = kinds(&h);
+        // YouTube Music itself labels this top result an "Episode" (dated, by the singer).
+        assert_eq!(k[0], "episode:Arijit Singh", "{k:?}");
+        assert!(k[1].starts_with("song:Tum Hi Ho"), "{k:?}");
+        assert!(k.iter().any(|x| x.starts_with("album:")), "singles count as albums: {k:?}");
+        assert!(k.iter().any(|x| x == "artist:Arijit Singh"));
+        let p = kinds(&parse_all(&fixture(include_str!("../tests/fixtures/ytm_all_podcast.json"))));
+        assert!(p[0].starts_with("episode:"), "{p:?}");
+        assert!(p.iter().any(|x| x == "artist:Joe Rogan"));
+        assert!(parse_all(&json!({"x": 1})).is_empty());
     }
 
     #[test]

@@ -1,3 +1,7 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../player/controller.dart';
@@ -169,3 +173,28 @@ Future<void> showSongSheet(BuildContext context, PlayerController player, api.So
     },
   );
 }
+
+/// Asks where to save an exported playlist and writes it there.
+Future<void> saveExport(BuildContext context, api.ExportFile f) async {
+  final mime = f.fileName.endsWith('.csv') ? 'text/csv' : (f.fileName.endsWith('.json') ? 'application/json' : 'audio/x-mpegurl');
+  try {
+    final where = await FilePicker.saveFile(fileName: f.fileName, bytes: Uint8List.fromList(utf8.encode(f.contents)), mimeType: mime, dialogTitle: 'Save ${f.fileName}');
+    if (context.mounted) toast(context, where == null ? 'Not saved' : 'Saved ${f.fileName}');
+  } catch (e) {
+    if (context.mounted) toast(context, "Couldn't save: $e");
+  }
+}
+
+/// Lets you pick CSV (Exportify columns), M3U or JSON.
+Future<String?> pickExportFormat(BuildContext context) => showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Padding(padding: EdgeInsets.fromLTRB(16, 16, 16, 8), child: Text('Export as', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700))),
+          ListTile(leading: const Icon(Icons.table_chart_rounded), title: const Text('CSV'), subtitle: const Text('Exportify columns: opens in spreadsheets, imports anywhere'), onTap: () => Navigator.pop(ctx, 'csv')),
+          ListTile(leading: const Icon(Icons.queue_music_rounded), title: const Text('M3U'), subtitle: const Text('A playlist file most players understand'), onTap: () => Navigator.pop(ctx, 'm3u')),
+          ListTile(leading: const Icon(Icons.data_object_rounded), title: const Text('JSON'), subtitle: const Text('Like Spotify’s own data export'), onTap: () => Navigator.pop(ctx, 'json')),
+          const SizedBox(height: 8),
+        ]),
+      ),
+    );

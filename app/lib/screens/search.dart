@@ -6,6 +6,7 @@ import '../player/controller.dart';
 import '../src/rust/api/engine.dart' as api;
 import '../theme/glass.dart';
 import '../widgets/cover.dart';
+import '../widgets/shelf.dart';
 import '../widgets/song_tile.dart';
 import 'collection.dart';
 
@@ -17,20 +18,24 @@ class SearchScreen extends StatefulWidget {
   State<SearchScreen> createState() => _SearchScreenState();
 }
 
-const _kinds = [('songs', 'Songs'), ('artists', 'Artists'), ('albums', 'Albums'), ('playlists', 'Playlists'), ('podcasts', 'Podcasts')];
+/// "All" is the default: everything, ranked by relevance. The others narrow it down.
+const _kinds = [('all', 'All'), ('songs', 'Songs'), ('albums', 'Albums'), ('artists', 'Artists'), ('podcasts', 'Podcasts')];
 
 class _SearchScreenState extends State<SearchScreen> {
   final _ctl = TextEditingController();
+  final _focus = FocusNode();
   Timer? _debounce;
   int _gen = 0;
-  String _kind = 'songs';
+  String _kind = 'all';
+  List<api.SearchHitView> _all = [];
   List<api.SongView> _songs = [];
   List<api.CollectionView> _collections = [];
   List<String> _history = [];
   bool _busy = false;
   String? _error;
 
-  bool get _offline => widget.player.settings.offline;
+  PlayerController get p => widget.player;
+  bool get _offline => p.settings.offline;
   bool get _hasQuery => _ctl.text.trim().length >= 2;
 
   @override
@@ -40,17 +45,33 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Future<void> _loadHistory() async {
-    final h = await api.searchHistory(limit: 12);
+    final h = await api.searchHistory(limit: 15);
     if (mounted) setState(() => _history = h);
+  }
+
+  /// Saves the search to history: only when you press search or open a result,
+  /// never just because you typed.
+  Future<void> _remember() async {
+    final q = _ctl.text.trim();
+    if (q.length < 2) return;
+    await api.searchHistoryAdd(q: q);
+    _loadHistory();
   }
 
   void _onChanged(String q) {
     _debounce?.cancel();
+    setState(() {});
     if (q.trim().length < 2) {
-      setState(() { _songs = []; _collections = []; _busy = false; _error = null; });
+      setState(() { _all = []; _songs = []; _collections = []; _busy = false; _error = null; });
       return;
     }
-    _debounce = Timer(const Duration(milliseconds: 450), () => _run(q));
+    _debounce = Timer(const Duration(milliseconds: 400), () => _run(q));
+  }
+
+  void _submit(String q) {
+    _debounce?.cancel();
+    _remember();
+    _run(q);
   }
 
   Future<void> _run(String q) async {
@@ -58,27 +79,26 @@ class _SearchScreenState extends State<SearchScreen> {
     if (q.trim().length < 2) return;
     setState(() { _busy = true; _error = null; });
     try {
-      List<api.SongView> songs = [];
-      List<api.CollectionView> cols = [];
-      if (_kind == 'songs') {
-        if (_offline) {
-          final needle = q.trim().toLowerCase();
-          songs = (await api.downloads())
-              .map((d) => d.song)
-              .where((s) => s.title.toLowerCase().contains(needle) || s.artist.toLowerCase().contains(needle))
-              .toList();
-        } else {
-          songs = await api.search(query: q.trim());
-          ThumbCache.precache(songs.map((s) => s.thumbnail));
-        }
+      var all = <api.SearchHitView>[];
+      var songs = <api.SongView>[];
+      var cols = <api.CollectionView>[];
+      if (_offline) {
+        final needle = q.trim().toLowerCase();
+        songs = (await api.downloads())
+            .map((d) => d.song)
+            .where((s) => s.title.toLowerCase().contains(needle) || s.artist.toLowerCase().contains(needle))
+            .toList();
+      } else if (_kind == 'all') {
+        all = await api.searchAll(query: q.trim());
+        ThumbCache.precache(all.map((h) => h.song?.thumbnail ?? h.collection?.thumbnail ?? ''));
+      } else if (_kind == 'songs') {
+        songs = await api.search(query: q.trim());
+        ThumbCache.precache(songs.map((s) => s.thumbnail));
       } else {
         cols = await api.searchCollections(kind: _kind, query: q.trim());
         ThumbCache.precache(cols.map((c) => c.thumbnail));
       }
-      if (gen == _gen && mounted) {
-        setState(() { _songs = songs; _collections = cols; _busy = false; });
-        _loadHistory();
-      }
+      if (gen == _gen && mounted) setState(() { _all = all; _songs = songs; _collections = cols; _busy = false; });
     } catch (e) {
       if (gen == _gen && mounted) setState(() { _error = '$e'; _busy = false; });
     }
@@ -87,53 +107,66 @@ class _SearchScreenState extends State<SearchScreen> {
   void _useHistory(String q) {
     _ctl.text = q;
     _ctl.selection = TextSelection.collapsed(offset: q.length);
-    _run(q);
+    _submit(q);
+  }
+
+  void _playSong(api.SongView s) {
+    _remember();
+    p.playSearchResult(s);
+  }
+
+  void _open(api.CollectionView c) {
+    _remember();
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => CollectionScreen(player: p, info: c)));
   }
 
   @override
   void dispose() {
     _debounce?.cancel();
     _ctl.dispose();
+    _focus.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final tok = context.tok;
-    final p = widget.player;
-    final hasResults = _kind == 'songs' ? _songs.isNotEmpty : _collections.isNotEmpty;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       const PageTitle('Search'),
       Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-        child: GlassCard(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+        child: Container(
+          height: 44,
+          decoration: BoxDecoration(color: tok.surface, borderRadius: BorderRadius.circular(Radii.control)),
           child: Row(children: [
-            Icon(Icons.search_rounded, color: tok.textDim),
             const SizedBox(width: 10),
+            Icon(Icons.search_rounded, color: tok.textDim),
+            const SizedBox(width: 8),
             Expanded(
               child: TextField(
                 controller: _ctl,
+                focusNode: _focus,
                 onChanged: _onChanged,
-                onSubmitted: _run,
+                onSubmitted: _submit,
                 textInputAction: TextInputAction.search,
+                style: const TextStyle(fontSize: 16),
                 decoration: InputDecoration(
-                  hintText: _offline ? 'Search your downloads' : 'Songs, artists, albums, playlists, podcasts',
+                  isCollapsed: true,
+                  hintText: _offline ? 'Your downloads' : 'Artists, songs, albums, podcasts',
                   border: InputBorder.none,
-                  filled: false,
                 ),
               ),
             ),
             if (_busy)
-              const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+              const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)))
             else if (_ctl.text.isNotEmpty)
-              IconButton(icon: const Icon(Icons.close_rounded), onPressed: () { _ctl.clear(); _onChanged(''); }),
+              IconButton(icon: Icon(Icons.cancel_rounded, color: tok.textFaint, size: 20), onPressed: () { _ctl.clear(); _onChanged(''); }),
           ]),
         ),
       ),
-      if (!_offline)
+      if (!_offline && _hasQuery)
         SizedBox(
-          height: 40,
+          height: 36,
           child: ListView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -145,49 +178,74 @@ class _SearchScreenState extends State<SearchScreen> {
                     label: label,
                     selected: _kind == key,
                     onTap: () {
-                      setState(() { _kind = key; _songs = []; _collections = []; });
-                      if (_hasQuery) _run(_ctl.text);
+                      setState(() { _kind = key; _all = []; _songs = []; _collections = []; });
+                      _run(_ctl.text);
                     },
                   ),
                 ),
             ],
           ),
         ),
-      const SizedBox(height: 4),
-      Expanded(
-        child: _error != null
-            ? Center(child: Padding(padding: const EdgeInsets.all(24), child: Text(_error!, style: const TextStyle(color: Color(0xFFFF8A8A)))))
-            : !_hasQuery
-                ? _historyView(tok)
-                : !hasResults
-                    ? (_busy ? const SizedBox.shrink() : const EmptyState(icon: Icons.search_off_rounded, text: 'No results'))
-                    : _kind == 'songs'
-                        ? ListView.builder(
-                            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                            itemCount: _songs.length,
-                            itemBuilder: (_, i) => SongTile(song: _songs[i], player: p),
-                          )
-                        : ListView.builder(
-                            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                            itemCount: _collections.length,
-                            itemBuilder: (_, i) => _CollectionRow(c: _collections[i], player: p),
-                          ),
-      ),
+      Expanded(child: _results(tok)),
+    ]);
+  }
+
+  Widget _results(HarpTokens tok) {
+    if (_error != null) return EmptyState(icon: Icons.wifi_off_rounded, text: 'Search didn’t work.\n$_error');
+    if (!_hasQuery) return _historyView(tok);
+    final empty = _all.isEmpty && _songs.isEmpty && _collections.isEmpty;
+    if (empty) return _busy ? const SizedBox.shrink() : const EmptyState(icon: Icons.search_off_rounded, text: 'No results');
+    if (_offline || _kind == 'songs') {
+      return ListView.builder(
+        padding: const EdgeInsets.only(top: 6, bottom: 16),
+        itemCount: _songs.length,
+        itemBuilder: (_, i) => SongTile(song: _songs[i], player: p, onPlay: () => _playSong(_songs[i])),
+      );
+    }
+    if (_kind != 'all') {
+      return ListView.builder(
+        padding: const EdgeInsets.only(top: 6, bottom: 16),
+        itemCount: _collections.length,
+        itemBuilder: (_, i) => _CollectionRow(c: _collections[i], onTap: () => _open(_collections[i])),
+      );
+    }
+    return _allView(tok);
+  }
+
+  /// All results: the top one, then sections in the order YouTube Music ranked them.
+  Widget _allView(HarpTokens tok) {
+    final top = _all.first;
+    final rest = _all.skip(1).toList();
+    final songs = rest.where((h) => h.song != null).map((h) => (h.song!, h.kind)).toList();
+    List<api.CollectionView> of(String kind) => rest.where((h) => h.kind == kind && h.collection != null).map((h) => h.collection!).toList();
+    final artists = of('artist'), albums = of('album'), podcasts = of('podcast');
+    return ListView(padding: const EdgeInsets.only(top: 6, bottom: 16), children: [
+      const SectionHeader('Top Result'),
+      Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: _TopResult(hit: top, onPlay: _playSong, onOpen: _open)),
+      if (songs.isNotEmpty) ...[
+        SectionHeader('Songs', action: 'See All', onAction: () { setState(() { _kind = 'songs'; }); _run(_ctl.text); }),
+        for (final (s, kind) in songs.take(5)) SongTile(song: s, player: p, subtitle: kind == 'episode' ? 'Episode' : null, onPlay: () => _playSong(s)),
+      ],
+      CollectionShelf(title: 'Artists', items: artists, onOpen: _open, size: 120),
+      CollectionShelf(title: 'Albums', items: albums, onOpen: _open),
+      CollectionShelf(title: 'Podcasts', items: podcasts, onOpen: _open),
     ]);
   }
 
   Widget _historyView(HarpTokens tok) {
     if (_history.isEmpty) {
-      return EmptyState(icon: Icons.search_rounded, text: _offline ? 'Offline: searching downloaded songs' : 'Search for songs, artists, albums, playlists and podcasts');
+      return EmptyState(icon: Icons.search_rounded, text: _offline ? 'Offline: search your downloaded songs' : 'Find artists, songs, albums and podcasts');
     }
-    return ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 16), children: [
-      Row(children: [
-        Expanded(child: Text('Recent searches', style: TextStyle(fontWeight: FontWeight.w700, color: tok.textDim))),
-        TextButton(onPressed: () async { await api.searchHistoryClear(); _loadHistory(); }, child: const Text('Clear')),
-      ]),
-      for (final q in _history)
+    return ListView(padding: const EdgeInsets.only(top: 4, bottom: 16), children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
+        child: Row(children: [
+          const Expanded(child: Text('Recently Searched', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700))),
+          TextButton(onPressed: () async { await api.searchHistoryClear(); _loadHistory(); }, child: const Text('Clear')),
+        ]),
+      ),
+      for (final q in _history) ...[
         ListTile(
-          contentPadding: EdgeInsets.zero,
           leading: Icon(Icons.history_rounded, color: tok.textDim),
           title: Text(q),
           trailing: IconButton(
@@ -196,32 +254,63 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
           onTap: () => _useHistory(q),
         ),
+        const Divider(indent: 56),
+      ],
     ]);
   }
 }
 
-class _CollectionRow extends StatelessWidget {
-  const _CollectionRow({required this.c, required this.player});
-  final api.CollectionView c;
-  final PlayerController player;
+class _TopResult extends StatelessWidget {
+  const _TopResult({required this.hit, required this.onPlay, required this.onOpen});
+  final api.SearchHitView hit;
+  final void Function(api.SongView) onPlay;
+  final void Function(api.CollectionView) onOpen;
 
   @override
   Widget build(BuildContext context) {
     final tok = context.tok;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: GlassCard(
-        padding: const EdgeInsets.all(8),
-        radius: Radii.tile,
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CollectionScreen(player: player, info: c))),
+    final s = hit.song, c = hit.collection;
+    final title = s?.title ?? c?.title ?? '';
+    final kind = switch (hit.kind) { 'song' => 'Song', 'episode' => 'Episode', 'artist' => 'Artist', 'album' => 'Album', 'podcast' => 'Podcast', _ => '' };
+    final sub = s != null ? '$kind · ${s.artist}' : (c!.kind == 'artist' ? kind : '$kind · ${c.subtitle}');
+    return GlassCard(
+      padding: const EdgeInsets.all(14),
+      onTap: () => s != null ? onPlay(s) : onOpen(c!),
+      child: Row(children: [
+        Cover(url: s?.thumbnail ?? c!.thumbnail, seed: s?.id ?? c!.id, size: 92, radius: Radii.tile, round: c?.kind == 'artist'),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 4),
+            Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: tok.textDim, fontSize: 14)),
+          ]),
+        ),
+        if (s != null) Icon(Icons.play_circle_fill_rounded, size: 44, color: Theme.of(context).colorScheme.primary),
+      ]),
+    );
+  }
+}
+
+class _CollectionRow extends StatelessWidget {
+  const _CollectionRow({required this.c, required this.onTap});
+  final api.CollectionView c;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tok = context.tok;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
         child: Row(children: [
           Cover(url: c.thumbnail, seed: c.id, size: 56, round: c.kind == 'artist'),
           const SizedBox(width: 12),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(c.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-              const SizedBox(height: 2),
-              Text(c.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: tok.textDim, fontSize: 13)),
+              Text(c.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16)),
+              if (c.subtitle.isNotEmpty) Text(c.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: tok.textDim, fontSize: 13.5)),
             ]),
           ),
           Icon(Icons.chevron_right_rounded, color: tok.textFaint),

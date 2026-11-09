@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
 
+import '../perf.dart';
 import '../player/controller.dart';
 import '../theme/glass.dart';
 import '../theme/logo.dart';
 import '../widgets/cover.dart';
-import '../perf.dart';
 import 'home.dart';
 import 'library.dart';
 import 'now_playing.dart';
 import 'search.dart';
 import 'settings_screen.dart';
 
-/// Adaptive shell: a side rail on wide windows, a docked bar on phones. The
-/// dock (mini player + navigation) is attached to the bottom edge.
+/// The app frame. Phones: a floating mini player above a tab bar. Wide windows:
+/// a sidebar, with the mini player along the bottom. Everything is tinted with
+/// the playing song's artwork colour.
 class Shell extends StatefulWidget {
   const Shell({super.key, required this.player});
   final PlayerController player;
@@ -30,73 +31,129 @@ class _ShellState extends State<Shell> {
     SettingsScreen(player: widget.player, embedded: true),
   ];
   static const _items = [
-    (Icons.home_rounded, 'Home'),
+    (Icons.play_circle_fill_rounded, 'Listen Now'),
     (Icons.search_rounded, 'Search'),
     (Icons.library_music_rounded, 'Library'),
-    (Icons.tune_rounded, 'Settings'),
+    (Icons.settings_rounded, 'Settings'),
   ];
 
-  void _openNowPlaying() => Navigator.of(context).push(MaterialPageRoute(builder: (_) => NowPlayingScreen(player: widget.player)));
+  void _openNowPlaying() => Navigator.of(context).push(MaterialPageRoute(fullscreenDialog: true, builder: (_) => NowPlayingScreen(player: widget.player)));
 
   @override
   Widget build(BuildContext context) {
     final p = widget.player;
-    return ListenableBuilder(
-      listenable: p,
-      builder: (context, _) {
-        final accent = HarpColors.accentFor(p.current?.id);
-        return AuroraBackground(
-          accent: accent,
-          active: p.playing && p.settings.fullEffects,
-          flat: p.settings.flatBackground,
-          level: p.settings.reactiveBackground && p.settings.fullEffects ? p.viz.level : null,
-          child: LayoutBuilder(builder: (context, c) {
+    final brightness = Theme.of(context).brightness;
+    return ValueListenableBuilder<Color>(
+      valueListenable: p.accent,
+      builder: (context, accent, _) => Theme(
+        data: harpTheme(accent, brightness),
+        child: Builder(builder: (context) {
+          return LayoutBuilder(builder: (context, c) {
             final wide = c.maxWidth >= 760;
             final content = IndexedStack(index: _tab, children: _pages);
+            final mini = _MiniPlayer(player: p, onOpen: _openNowPlaying, floating: !wide);
             return Scaffold(
               body: Stack(children: [
-                SafeArea(
-                bottom: false,
-                child: Column(children: [
-                  Expanded(
+                AuroraBackground(
+                  accent: accent,
+                  flat: p.settings.flatBackground,
+                  child: SafeArea(
+                    bottom: false,
                     child: wide
                         ? Row(children: [
-                            _Rail(tab: _tab, onTap: (i) => setState(() => _tab = i)),
-                            Expanded(child: content),
+                            _Sidebar(tab: _tab, onTap: (i) => setState(() => _tab = i)),
+                            VerticalDivider(width: 0.6, thickness: 0.6, color: context.tok.separator),
+                            Expanded(child: Column(children: [Expanded(child: content), mini])),
                           ])
                         : content,
                   ),
-                  _Dock(player: p, blur: p.settings.fullEffects, onOpen: _openNowPlaying, nav: wide ? null : _NavBar(tab: _tab, onTap: (i) => setState(() => _tab = i))),
-                ]),
                 ),
                 if (p.settings.perfOverlay) Positioned(top: MediaQuery.paddingOf(context).top + 4, right: 8, child: const FrameMeter()),
               ]),
+              bottomNavigationBar: wide
+                  ? null
+                  : Column(mainAxisSize: MainAxisSize.min, children: [
+                      mini,
+                      _TabBar(tab: _tab, onTap: (i) => setState(() => _tab = i), blur: p.settings.fullEffects),
+                    ]),
             );
-          }),
-        );
-      },
+          });
+        }),
+      ),
     );
   }
 }
 
-class _Rail extends StatelessWidget {
-  const _Rail({required this.tab, required this.onTap});
+class _Sidebar extends StatelessWidget {
+  const _Sidebar({required this.tab, required this.onTap});
   final int tab;
   final ValueChanged<int> onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 12, 0, 12),
-      child: GlassCard(
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 6),
+    final tok = context.tok;
+    final accent = Theme.of(context).colorScheme.primary;
+    return SizedBox(
+      width: 220,
+      child: ListView(padding: const EdgeInsets.fromLTRB(10, 16, 10, 16), children: [
+        const Padding(
+          padding: EdgeInsets.fromLTRB(8, 0, 8, 18),
+          child: Row(children: [HarpLogo(size: 30), SizedBox(width: 10), Text('Harp', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800))]),
+        ),
+        for (var i = 0; i < _ShellState._items.length; i++)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 2),
+            child: Material(
+              color: tab == i ? tok.surface : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () => onTap(i),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                  child: Row(children: [
+                    Icon(_ShellState._items[i].$1, size: 20, color: accent),
+                    const SizedBox(width: 12),
+                    Text(_ShellState._items[i].$2, style: TextStyle(fontSize: 15, fontWeight: tab == i ? FontWeight.w600 : FontWeight.w400)),
+                  ]),
+                ),
+              ),
+            ),
+          ),
+      ]),
+    );
+  }
+}
+
+class _TabBar extends StatelessWidget {
+  const _TabBar({required this.tab, required this.onTap, required this.blur});
+  final int tab;
+  final ValueChanged<int> onTap;
+  final bool blur;
+
+  @override
+  Widget build(BuildContext context) {
+    final tok = context.tok;
+    final accent = Theme.of(context).colorScheme.primary;
+    return GlassSurface(
+      topBorderOnly: true,
+      blur: blur ? 20 : 0,
+      child: SafeArea(
+        top: false,
         child: SizedBox(
-          width: 80,
-          child: Column(children: [
-            const HarpLogo(size: 40),
-            const SizedBox(height: 22),
+          height: 56,
+          child: Row(children: [
             for (var i = 0; i < _ShellState._items.length; i++)
-              _NavItem(icon: _ShellState._items[i].$1, label: _ShellState._items[i].$2, selected: tab == i, onTap: () => onTap(i)),
+              Expanded(
+                child: InkResponse(
+                  onTap: () => onTap(i),
+                  child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Icon(_ShellState._items[i].$1, size: 25, color: tab == i ? accent : tok.textFaint),
+                    const SizedBox(height: 2),
+                    Text(_ShellState._items[i].$2, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w500, color: tab == i ? accent : tok.textFaint)),
+                  ]),
+                ),
+              ),
           ]),
         ),
       ),
@@ -104,120 +161,70 @@ class _Rail extends StatelessWidget {
   }
 }
 
-class _NavBar extends StatelessWidget {
-  const _NavBar({required this.tab, required this.onTap});
-  final int tab;
-  final ValueChanged<int> onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
-        for (var i = 0; i < _ShellState._items.length; i++)
-          _NavItem(icon: _ShellState._items[i].$1, label: _ShellState._items[i].$2, selected: tab == i, onTap: () => onTap(i)),
-      ]),
-    );
-  }
-}
-
-class _NavItem extends StatelessWidget {
-  const _NavItem({required this.icon, required this.label, required this.selected, required this.onTap});
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final tok = context.tok;
-    final accent = Theme.of(context).colorScheme.primary;
-    final fg = selected ? tok.text : tok.textDim;
-    return InkWell(
-      borderRadius: BorderRadius.circular(Radii.control),
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-        decoration: BoxDecoration(borderRadius: BorderRadius.circular(Radii.control), color: selected ? accent.withValues(alpha: 0.22) : Colors.transparent),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, color: fg),
-          const SizedBox(height: 2),
-          Text(label, style: TextStyle(fontSize: 11, color: fg)),
-        ]),
-      ),
-    );
-  }
-}
-
-/// The bottom dock: the mini player, then the navigation (on phones). One
-/// frosted surface attached to the bottom edge of the window.
-class _Dock extends StatelessWidget {
-  const _Dock({required this.player, required this.onOpen, this.nav, this.blur = true});
+/// The mini player. Floats as a card above the tab bar on phones.
+class _MiniPlayer extends StatelessWidget {
+  const _MiniPlayer({required this.player, required this.onOpen, required this.floating});
   final PlayerController player;
-  final bool blur;
   final VoidCallback onOpen;
-  final Widget? nav;
+  final bool floating;
 
   @override
   Widget build(BuildContext context) {
-    final s = player.current;
-    if (s == null && nav == null) return const SizedBox.shrink();
-    return GlassSurface(
-      topBorderOnly: true,
-      blur: blur ? 18 : 0,
-      child: SafeArea(
-        top: false,
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          if (s != null)
-            InkWell(
-              onTap: onOpen,
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                  child: Row(children: [
-                    Cover(url: s.thumbnail, seed: s.id, size: 42, radius: Radii.cover),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(s.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
-                        Text(s.artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: context.tok.textDim, fontSize: 12.5)),
-                      ]),
-                    ),
-                    GlassIconButton(
-                      icon: s.liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                      color: s.liked ? const Color(0xFFFF6B9A) : null,
-                      size: 38,
-                      onPressed: player.toggleLike,
-                    ),
-                    const SizedBox(width: 8),
-                    GlassIconButton(
-                      icon: player.loading ? Icons.hourglass_top_rounded : (player.playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
-                      size: 42,
-                      filled: true,
-                      round: true,
-                      onPressed: player.togglePlay,
-                    ),
-                    const SizedBox(width: 8),
-                    GlassIconButton(icon: Icons.skip_next_rounded, size: 38, onPressed: player.next),
-                  ]),
-                ),
-                // Only the thin progress bar rebuilds on every tick.
-                ValueListenableBuilder<Duration>(
-                  valueListenable: player.position,
-                  builder: (_, pos, _) => ValueListenableBuilder<Duration>(
-                    valueListenable: player.duration,
-                    builder: (_, dur, _) => LinearProgressIndicator(
-                      value: dur.inMilliseconds == 0 ? 0 : (pos.inMilliseconds / dur.inMilliseconds).clamp(0.0, 1.0),
-                      minHeight: 2,
-                      backgroundColor: Colors.transparent,
-                    ),
+    return ListenableBuilder(
+      listenable: player,
+      builder: (context, _) {
+        final s = player.current;
+        if (s == null) return const SizedBox.shrink();
+        final tok = context.tok;
+        final bar = Material(
+          color: tok.raised,
+          elevation: floating ? 8 : 0,
+          shadowColor: Colors.black54,
+          borderRadius: BorderRadius.circular(floating ? 14 : 0),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onOpen,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 8, 4, 8),
+                child: Row(children: [
+                  Hero(tag: 'np-art', child: Cover(url: s.thumbnail, seed: s.id, size: 44, radius: Radii.cover)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(s.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+                      Text(
+                        player.error != null ? 'Couldn’t play this song' : s.artist,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: player.error != null ? Colors.redAccent : tok.textDim, fontSize: 13),
+                      ),
+                    ]),
+                  ),
+                  if (player.loading)
+                    const SizedBox(width: 44, height: 44, child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(strokeWidth: 2)))
+                  else
+                    GlassIconButton(icon: player.playing ? Icons.pause_rounded : Icons.play_arrow_rounded, size: 44, onPressed: player.togglePlay),
+                  GlassIconButton(icon: Icons.fast_forward_rounded, size: 44, onPressed: player.next),
+                ]),
+              ),
+              ValueListenableBuilder<Duration>(
+                valueListenable: player.position,
+                builder: (_, pos, _) => ValueListenableBuilder<Duration>(
+                  valueListenable: player.duration,
+                  builder: (_, dur, _) => LinearProgressIndicator(
+                    value: dur.inMilliseconds == 0 ? 0 : (pos.inMilliseconds / dur.inMilliseconds).clamp(0.0, 1.0),
+                    minHeight: 2,
+                    backgroundColor: Colors.transparent,
+                    color: tok.text.withValues(alpha: 0.6),
                   ),
                 ),
-              ]),
-            ),
-          ?nav,
-        ]),
-      ),
+              ),
+            ]),
+          ),
+        );
+        return floating ? Padding(padding: const EdgeInsets.fromLTRB(8, 0, 8, 6), child: bar) : bar;
+      },
     );
   }
 }

@@ -30,6 +30,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool dco_decode_bool(dynamic raw);
 
   @protected
+  CollectionView dco_decode_box_autoadd_collection_view(dynamic raw);
+
+  @protected
   EngineConfig dco_decode_box_autoadd_engine_config(dynamic raw);
 
   @protected
@@ -61,6 +64,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   EngineConfig dco_decode_engine_config(dynamic raw);
+
+  @protected
+  ExportFile dco_decode_export_file(dynamic raw);
 
   @protected
   double dco_decode_f_64(dynamic raw);
@@ -105,7 +111,13 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<(String, String)> dco_decode_list_record_string_string(dynamic raw);
 
   @protected
+  List<SearchHitView> dco_decode_list_search_hit_view(dynamic raw);
+
+  @protected
   List<SongView> dco_decode_list_song_view(dynamic raw);
+
+  @protected
+  List<SpotifyPlaylistView> dco_decode_list_spotify_playlist_view(dynamic raw);
 
   @protected
   LyricLineView dco_decode_lyric_line_view(dynamic raw);
@@ -118,6 +130,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   String? dco_decode_opt_String(dynamic raw);
+
+  @protected
+  CollectionView? dco_decode_opt_box_autoadd_collection_view(dynamic raw);
 
   @protected
   LyricsView? dco_decode_opt_box_autoadd_lyrics_view(dynamic raw);
@@ -147,7 +162,13 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   (String, String) dco_decode_record_string_string(dynamic raw);
 
   @protected
+  SearchHitView dco_decode_search_hit_view(dynamic raw);
+
+  @protected
   SongView dco_decode_song_view(dynamic raw);
+
+  @protected
+  SpotifyPlaylistView dco_decode_spotify_playlist_view(dynamic raw);
 
   @protected
   StreamView dco_decode_stream_view(dynamic raw);
@@ -172,6 +193,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   bool sse_decode_bool(SseDeserializer deserializer);
+
+  @protected
+  CollectionView sse_decode_box_autoadd_collection_view(
+    SseDeserializer deserializer,
+  );
 
   @protected
   EngineConfig sse_decode_box_autoadd_engine_config(
@@ -209,6 +235,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   EngineConfig sse_decode_engine_config(SseDeserializer deserializer);
+
+  @protected
+  ExportFile sse_decode_export_file(SseDeserializer deserializer);
 
   @protected
   double sse_decode_f_64(SseDeserializer deserializer);
@@ -269,7 +298,17 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  List<SearchHitView> sse_decode_list_search_hit_view(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   List<SongView> sse_decode_list_song_view(SseDeserializer deserializer);
+
+  @protected
+  List<SpotifyPlaylistView> sse_decode_list_spotify_playlist_view(
+    SseDeserializer deserializer,
+  );
 
   @protected
   LyricLineView sse_decode_lyric_line_view(SseDeserializer deserializer);
@@ -282,6 +321,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
+
+  @protected
+  CollectionView? sse_decode_opt_box_autoadd_collection_view(
+    SseDeserializer deserializer,
+  );
 
   @protected
   LyricsView? sse_decode_opt_box_autoadd_lyrics_view(
@@ -315,7 +359,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  SearchHitView sse_decode_search_hit_view(SseDeserializer deserializer);
+
+  @protected
   SongView sse_decode_song_view(SseDeserializer deserializer);
+
+  @protected
+  SpotifyPlaylistView sse_decode_spotify_playlist_view(
+    SseDeserializer deserializer,
+  );
 
   @protected
   StreamView sse_decode_stream_view(SseDeserializer deserializer);
@@ -343,6 +395,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_bool(bool self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_collection_view(
+    CollectionView self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_box_autoadd_engine_config(
@@ -394,6 +452,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_engine_config(EngineConfig self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_export_file(ExportFile self, SseSerializer serializer);
 
   @protected
   void sse_encode_f_64(double self, SseSerializer serializer);
@@ -468,7 +529,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_search_hit_view(
+    List<SearchHitView> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_song_view(List<SongView> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_spotify_playlist_view(
+    List<SpotifyPlaylistView> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_lyric_line_view(LyricLineView self, SseSerializer serializer);
@@ -481,6 +554,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_collection_view(
+    CollectionView? self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_opt_box_autoadd_lyrics_view(
@@ -519,7 +598,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_search_hit_view(SearchHitView self, SseSerializer serializer);
+
+  @protected
   void sse_encode_song_view(SongView self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_spotify_playlist_view(
+    SpotifyPlaylistView self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_stream_view(StreamView self, SseSerializer serializer);

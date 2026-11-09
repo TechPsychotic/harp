@@ -1,11 +1,13 @@
 use crate::home_cache::{now_secs, HomeCache, HOME_TTL_SECS};
+use crate::spotify_state::{PendingSignIn, SPOTIFY_CANCEL, SPOTIFY_PENDING};
 use harp_core::import as imp;
 use harp_core::queue::{Queue, Repeat};
 use harp_core::recommend::{self, CandidateSource, Request};
 use harp_core::rng::Rng;
 use harp_core::taste::{PlayRecord, PlaySource, SkipReason, Store};
 use harp_core::Song;
-use harp_ytdlp::{cache, install, lyrics as lrc, proxy::Proxy, thumbs, ytmusic, Quality, Tool, YtDlp};
+use harp_core::export;
+use harp_ytdlp::{cache, install, lyrics as lrc, proxy::Proxy, spotify, thumbs, ytmusic, Quality, Tool, YtDlp};
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
@@ -213,10 +215,9 @@ pub fn ytdlp_version() -> Result<String, String> {
 
 pub fn search(query: String) -> Result<Vec<SongView>, String> {
     let en = eng()?;
+    // Not saved to history here: typing is not searching. The app saves a search when
+    // you submit it or open one of its results (`search_history_add`).
     let found = en.yt.search_songs(&query, 20).map_err(e)?;
-    if !found.is_empty() {
-        let _ = en.store.lock().unwrap().add_search(&query);
-    }
     Ok(views(en, found.into_iter()))
 }
 
@@ -795,10 +796,20 @@ pub fn import_link(url: String) -> Result<Vec<ImportPlaylistView>, String> {
         }
         return Ok(vec![ImportPlaylistView { name, tracks: vec![], resolved, notice: None }]);
     }
-    if url.contains("music.apple.com") || url.contains("amazon.") {
-        return Err("Apple Music and Amazon Music don't share playlist contents in links. Export it (Apple Music: File > Library > Export Playlist) or paste the song list.".into());
+    if url.contains("music.apple.com") {
+        let html = thumbs::get_text(&url).map_err(e)?;
+        let p = imp::parse_apple_music_page(&html).ok_or("Couldn't read that Apple Music page (is the playlist public?).")?;
+        let capped = p.tracks.len() >= 100;
+        let mut v = import_view(p);
+        if capped {
+            v.notice = Some("Apple Music's public page may not list every song of a long playlist. For the whole playlist, export it from the Music app (File › Library › Export Playlist) and import the file.".into());
+        }
+        return Ok(vec![v]);
     }
-    Err("Paste a Spotify, YouTube or YouTube Music playlist link.".into())
+    if url.contains("amazon.") {
+        return Err("Amazon Music doesn't share playlist contents in links or to other apps. Paste the song list (Artist - Title per line), or import a CSV made by a converter.".into());
+    }
+    Err("Paste a Spotify, Apple Music, YouTube or YouTube Music playlist link.".into())
 }
 
 /// Finds the best match for a track on YouTube Music, with alternatives for the review screen.
@@ -854,6 +865,11 @@ pub fn search_history(limit: u32) -> Result<Vec<String>, String> {
     eng()?.store.lock().unwrap().recent_searches(limit as usize).map_err(e)
 }
 
+/// Saves a search: called when you press search / enter, or open a result.
+pub fn search_history_add(q: String) -> Result<(), String> {
+    eng()?.store.lock().unwrap().add_search(&q).map_err(e)
+}
+
 pub fn search_history_remove(q: String) -> Result<(), String> {
     eng()?.store.lock().unwrap().remove_search(&q).map_err(e)
 }
@@ -890,10 +906,8 @@ fn collection_view(c: ytmusic::Collection) -> CollectionView {
 pub fn search_collections(kind: String, query: String) -> Result<Vec<CollectionView>, String> {
     let en = eng()?;
     let k = ytmusic::Kind::parse(&kind);
+    let _ = en;
     let v = ytmusic::search_collections(k, query.trim(), 24).map_err(e)?;
-    if !v.is_empty() {
-        let _ = en.store.lock().unwrap().add_search(&query);
-    }
     Ok(v.into_iter().map(collection_view).collect())
 }
 
@@ -1027,4 +1041,158 @@ pub fn clear_cache() {
     if let Ok(en) = eng() {
         cache::clear(&en.cache_dir);
     }
+}
+
+
+// --- "All" search ---
+
+#[derive(Clone, Debug)]
+pub struct SearchHitView {
+    /// "song", "episode", "artist", "album" or "podcast"
+    pub kind: String,
+    pub song: Option<SongView>,
+    pub collection: Option<CollectionView>,
+}
+
+/// Songs, episodes, artists, albums and podcasts, ranked by YouTube Music's relevance.
+pub fn search_all(query: String) -> Result<Vec<SearchHitView>, String> {
+    let en = eng()?;
+    let hits = ytmusic::search_all(query.trim(), 40).map_err(e)?;
+    Ok(hits
+        .into_iter()
+        .map(|h| match h {
+            ytmusic::Hit::Song(s) => SearchHitView { kind: "song".into(), song: Some(views(en, std::iter::once(s)).remove(0)), collection: None },
+            ytmusic::Hit::Episode(s) => SearchHitView { kind: "episode".into(), song: Some(views(en, std::iter::once(s)).remove(0)), collection: None },
+            ytmusic::Hit::Collection(c) => SearchHitView { kind: c.kind.clone(), song: None, collection: Some(collection_view(c)) },
+        })
+        .collect())
+}
+
+// --- exporting playlists (Exportify-style files) ---
+
+#[derive(Clone, Debug)]
+pub struct ExportFile {
+    pub file_name: String,
+    pub contents: String,
+}
+
+fn export_songs(name: &str, songs: &[Song], format: &str) -> ExportFile {
+    let (ext, contents) = match format {
+        "m3u" => ("m3u", export::to_m3u(songs)),
+        "json" => ("json", export::to_json(name, songs)),
+        _ => ("csv", export::to_csv(songs)),
+    };
+    ExportFile { file_name: export::file_name(name, ext), contents }
+}
+
+/// A playlist as a file: "csv" (Exportify columns), "m3u" or "json".
+pub fn playlist_export(id: i64, format: String) -> Result<ExportFile, String> {
+    let st = eng()?.store.lock().unwrap();
+    let name = st.playlists().map_err(e)?.into_iter().find(|p| p.id == id).map(|p| p.name).unwrap_or_else(|| "playlist".into());
+    let songs = st.playlist_songs(id).map_err(e)?;
+    Ok(export_songs(&name, &songs, &format))
+}
+
+/// Liked songs as a file.
+pub fn liked_export(format: String) -> Result<ExportFile, String> {
+    let songs = eng()?.store.lock().unwrap().liked_songs().map_err(e)?;
+    Ok(export_songs("Liked songs", &songs, &format))
+}
+
+// --- Spotify account (like Exportify) ---
+
+#[derive(Clone, Debug)]
+pub struct SpotifyPlaylistView {
+    pub id: String,
+    pub name: String,
+    pub total: u32,
+    pub owner: String,
+}
+
+/// The address to add to your Spotify app's Redirect URIs.
+pub fn spotify_redirect_uri() -> String {
+    spotify::redirect_uri()
+}
+
+pub fn spotify_client_id() -> Result<Option<String>, String> {
+    eng()?.store.lock().unwrap().kv_get("spotify:client_id").map_err(e)
+}
+
+pub fn spotify_connected() -> bool {
+    eng().ok().and_then(|en| en.store.lock().unwrap().kv_get("spotify:tokens").ok().flatten()).is_some()
+}
+
+/// Starts signing in: returns the address to open in the browser.
+pub fn spotify_connect(client_id: String) -> Result<String, String> {
+    let client_id = client_id.trim().to_string();
+    if client_id.len() < 16 || !client_id.chars().all(|c| c.is_ascii_alphanumeric()) {
+        return Err("That doesn't look like a Spotify Client ID (32 letters and digits from your app's dashboard).".into());
+    }
+    // A previous unfinished sign-in holds the port: drop it first.
+    if let Some(c) = SPOTIFY_CANCEL.lock().unwrap().take() {
+        c.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+    *SPOTIFY_PENDING.lock().unwrap() = None;
+    std::thread::sleep(std::time::Duration::from_millis(250));
+    let callback = spotify::Callback::listen().map_err(e)?;
+    let verifier = spotify::new_verifier();
+    let state = spotify::new_state();
+    let url = spotify::authorize_url(&client_id, &spotify::challenge(&verifier), &state);
+    *SPOTIFY_CANCEL.lock().unwrap() = Some(callback.canceller());
+    *SPOTIFY_PENDING.lock().unwrap() = Some(PendingSignIn { client_id, verifier, state, callback });
+    Ok(url)
+}
+
+/// Waits (up to 5 minutes) for the browser sign-in to finish, then saves the tokens.
+pub fn spotify_wait() -> Result<(), String> {
+    let p = SPOTIFY_PENDING.lock().unwrap().take().ok_or("Start the Spotify sign-in first.")?;
+    let code = p.callback.wait_for_code(&p.state, std::time::Duration::from_secs(300)).map_err(e)?;
+    let tokens = spotify::Api::default().exchange(&p.client_id, &code, &p.verifier).map_err(e)?;
+    let st = eng()?.store.lock().unwrap();
+    st.kv_set("spotify:client_id", &p.client_id).map_err(e)?;
+    st.kv_set("spotify:tokens", &tokens.to_json()).map_err(e)?;
+    Ok(())
+}
+
+pub fn spotify_cancel() {
+    if let Some(c) = SPOTIFY_CANCEL.lock().unwrap().take() {
+        c.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+pub fn spotify_disconnect() -> Result<(), String> {
+    let st = eng()?.store.lock().unwrap();
+    st.kv_set("spotify:tokens", "").map_err(e)?;
+    Ok(())
+}
+
+/// A valid access token, refreshed if it is about to expire.
+fn spotify_token() -> Result<String, String> {
+    let en = eng()?;
+    let (raw, cid) = {
+        let st = en.store.lock().unwrap();
+        (st.kv_get("spotify:tokens").map_err(e)?.unwrap_or_default(), st.kv_get("spotify:client_id").map_err(e)?.unwrap_or_default())
+    };
+    let t = spotify::Tokens::from_json(&raw).ok_or("Not connected to Spotify.")?;
+    if t.is_fresh(now_secs()) {
+        return Ok(t.access);
+    }
+    let refresh = t.refresh.ok_or("Spotify sign-in expired: connect again.")?;
+    let fresh = spotify::Api::default().refresh(&cid, &refresh).map_err(e)?;
+    en.store.lock().unwrap().kv_set("spotify:tokens", &fresh.to_json()).map_err(e)?;
+    Ok(fresh.access)
+}
+
+/// Your Spotify playlists (Liked Songs first), with how many songs each has.
+pub fn spotify_playlists() -> Result<Vec<SpotifyPlaylistView>, String> {
+    let token = spotify_token()?;
+    let v = spotify::Api::default().playlists(&token).map_err(e)?;
+    Ok(v.into_iter().map(|p| SpotifyPlaylistView { id: p.id, name: p.name, total: p.total, owner: p.owner }).collect())
+}
+
+/// Every song of one of your Spotify playlists ("liked" for Liked Songs), ready to match.
+pub fn spotify_fetch(id: String, name: String) -> Result<ImportPlaylistView, String> {
+    let token = spotify_token()?;
+    let p = spotify::Api::default().tracks(&token, &id, &name).map_err(e)?;
+    Ok(import_view(p))
 }

@@ -119,10 +119,11 @@ class _LyricsPaneState extends State<LyricsPane> {
               child: AnimatedDefaultTextStyle(
                 duration: const Duration(milliseconds: 250),
                 style: TextStyle(
-                  fontSize: on ? 24 : 20,
-                  height: 1.35,
-                  fontWeight: on ? FontWeight.w800 : FontWeight.w600,
-                  color: l.synced ? (on ? tok.text : tok.text.withValues(alpha: past ? 0.38 : 0.55)) : tok.text.withValues(alpha: 0.85),
+                  fontSize: on ? 28 : 24,
+                  height: 1.3,
+                  letterSpacing: -0.3,
+                  fontWeight: FontWeight.w800,
+                  color: l.synced ? (on ? tok.text : tok.text.withValues(alpha: past ? 0.30 : 0.42)) : tok.text.withValues(alpha: 0.85),
                 ),
                 child: Padding(padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8), child: Text(line.text.isEmpty ? '♪' : line.text)),
               ),

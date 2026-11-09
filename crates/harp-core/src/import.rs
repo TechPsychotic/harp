@@ -209,6 +209,51 @@ pub fn parse_spotify_embed(html: &str) -> Option<ImportedPlaylist> {
     Some(ImportedPlaylist { name: name.into(), tracks })
 }
 
+/// Tracks of a public Apple Music playlist or album page. The page carries its tracks
+/// in a JSON block (`serialized-server-data`), and its name in structured data.
+pub fn parse_apple_music_page(html: &str) -> Option<ImportedPlaylist> {
+    let block = |marker: &str| -> Option<&str> {
+        let at = html.find(marker)?;
+        let open = html[at..].find('>')? + at + 1;
+        let close = html[open..].find("</script>")? + open;
+        Some(&html[open..close])
+    };
+    let data: Value = serde_json::from_str(block("id=\"serialized-server-data\"")?).ok()?;
+    let name = block("application/ld+json")
+        .and_then(|j| serde_json::from_str::<Value>(j).ok())
+        .and_then(|v| v.get("name").and_then(Value::as_str).map(String::from))
+        .unwrap_or_else(|| "Apple Music playlist".into());
+    let mut tracks = Vec::new();
+    fn walk(v: &Value, out: &mut Vec<ImportTrack>) {
+        match v {
+            Value::Object(m) => {
+                // A track row has a title, an artist name and a length in milliseconds.
+                if let (Some(title), Some(artist), Some(ms)) = (
+                    m.get("title").and_then(Value::as_str),
+                    m.get("artistName").and_then(Value::as_str),
+                    m.get("duration").and_then(Value::as_u64),
+                ) {
+                    let album = m
+                        .get("tertiaryLinks")
+                        .and_then(Value::as_array)
+                        .and_then(|a| a.first())
+                        .and_then(|l| l.get("title"))
+                        .and_then(Value::as_str);
+                    if let Some(t) = track(title, artist, album, Some((ms / 1000) as u32)) {
+                        out.push(t);
+                    }
+                    return;
+                }
+                m.values().for_each(|x| walk(x, out));
+            }
+            Value::Array(a) => a.iter().for_each(|x| walk(x, out)),
+            _ => {}
+        }
+    }
+    walk(&data, &mut tracks);
+    (!tracks.is_empty()).then(|| ImportedPlaylist { name, tracks })
+}
+
 // --- matching ---
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -381,6 +426,17 @@ mod tests {
         assert_eq!(p.tracks[0].duration_secs, Some(295));
         assert_eq!(p.tracks[1].artist, "Radiohead");
         assert!(parse_spotify_embed("<html></html>").is_none());
+    }
+
+    #[test]
+    fn apple_music_playlist_page() {
+        let p = parse_apple_music_page(include_str!("../tests/apple_playlist.html")).unwrap();
+        assert_eq!(p.name, "Today’s Hits");
+        assert_eq!(p.tracks.len(), 3);
+        assert_eq!(p.tracks[0].title, "Choosin' Texas");
+        assert_eq!(p.tracks[0].artist, "Ella Langley");
+        assert_eq!(p.tracks[0].duration_secs, Some(232));
+        assert!(parse_apple_music_page("<html></html>").is_none());
     }
 
     fn it(title: &str, artist: &str, secs: Option<u32>) -> ImportTrack {

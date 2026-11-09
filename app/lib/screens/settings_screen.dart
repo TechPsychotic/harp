@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../native.dart';
+import 'spotify_screen.dart';
 import '../player/controller.dart';
 import '../settings.dart';
 import '../src/rust/api/engine.dart' as api;
@@ -178,6 +179,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
               ]),
+              _Section('Spotify', [
+                ListTile(
+                  leading: const Icon(Icons.account_circle_rounded),
+                  title: const Text('Spotify account'),
+                  subtitle: Text('Read every playlist and Liked Songs to bring them over', style: TextStyle(color: tok.textDim)),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SpotifyScreen())),
+                ),
+              ]),
               _Section('Performance', [
                 SwitchListTile(
                   title: const Text('Show frame times'),
@@ -241,7 +251,7 @@ class _Section extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(top: 16),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Padding(padding: const EdgeInsets.fromLTRB(4, 0, 4, 8), child: Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700))),
+        Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 6), child: Text(title.toUpperCase(), style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, letterSpacing: 0.4, color: context.tok.textDim))),
         GlassCard(padding: EdgeInsets.zero, child: Column(children: children)),
       ]),
     );

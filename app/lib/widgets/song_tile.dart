@@ -12,7 +12,8 @@ String fmtDuration(int? secs) {
   return '$m:${s.toString().padLeft(2, '0')}';
 }
 
-/// A song row: tap plays it, the menu queues / downloads it.
+/// A song row, as in a music app's lists: artwork, title, artist, and a "…" menu.
+/// Tap plays, long-press opens the actions.
 class SongTile extends StatelessWidget {
   const SongTile({
     super.key,
@@ -23,6 +24,8 @@ class SongTile extends StatelessWidget {
     this.onRemoveFromList,
     this.removeLabel = 'Remove',
     this.trailing,
+    this.index,
+    this.showArt = true,
   });
   final api.SongView song;
   final PlayerController player;
@@ -32,35 +35,52 @@ class SongTile extends StatelessWidget {
   final String removeLabel;
   final Widget? trailing;
 
+  /// A track number instead of artwork (album pages).
+  final int? index;
+  final bool showArt;
+
   @override
   Widget build(BuildContext context) {
     final tok = context.tok;
+    final accent = Theme.of(context).colorScheme.primary;
     final playing = player.current?.id == song.id;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: GlassCard(
-        padding: const EdgeInsets.all(8),
-        radius: Radii.tile,
-        tint: playing ? Theme.of(context).colorScheme.primary : null,
-        onTap: onPlay ?? () => player.playSong(song),
-        onLongPress: () => showSongSheet(context, player, song, onRemove: onRemoveFromList, removeLabel: removeLabel),
+    final sub = [song.artist, subtitle ?? fmtDuration(song.durationSecs)].where((e) => e.isNotEmpty).join(' · ');
+    return InkWell(
+      onTap: onPlay ?? () => player.playSong(song),
+      onLongPress: () => showSongSheet(context, player, song, onRemove: onRemoveFromList, removeLabel: removeLabel),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
         child: Row(children: [
-          Cover(url: song.thumbnail, seed: song.id, size: 48),
+          if (index != null)
+            SizedBox(
+              width: 28,
+              child: playing
+                  ? Icon(Icons.graphic_eq_rounded, size: 18, color: accent)
+                  : Text('$index', textAlign: TextAlign.center, style: TextStyle(color: tok.textDim, fontSize: 15)),
+            )
+          else if (showArt)
+            Stack(children: [
+              Cover(url: song.thumbnail, seed: song.id, size: 50),
+              if (playing)
+                Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(color: Colors.black45, borderRadius: BorderRadius.circular(Radii.cover)),
+                    child: const Icon(Icons.graphic_eq_rounded, color: Colors.white, size: 22),
+                  ),
+                ),
+            ]),
           const SizedBox(width: 12),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(song.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+              Text(song.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 16, color: playing ? accent : tok.text)),
               const SizedBox(height: 2),
-              Text(
-                [song.artist, subtitle ?? fmtDuration(song.durationSecs)].where((e) => e.isNotEmpty).join(' · '),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: tok.textDim, fontSize: 13),
-              ),
+              Row(children: [
+                if (song.downloaded) Padding(padding: const EdgeInsets.only(right: 4), child: Icon(Icons.arrow_circle_down_rounded, size: 14, color: tok.textDim)),
+                Expanded(child: Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: tok.textDim, fontSize: 13.5))),
+              ]),
             ]),
           ),
-          if (song.downloaded) Padding(padding: const EdgeInsets.only(right: 4), child: Icon(Icons.download_done_rounded, size: 18, color: tok.textDim)),
-          if (song.liked) const Padding(padding: EdgeInsets.only(right: 2), child: Icon(Icons.favorite_rounded, size: 17, color: Color(0xFFFF6B9A))),
+          if (song.liked) Padding(padding: const EdgeInsets.only(left: 6), child: Icon(Icons.favorite_rounded, size: 15, color: accent)),
           trailing ?? SongMenu(song: song, player: player, onRemoveFromList: onRemoveFromList, removeLabel: removeLabel),
         ]),
       ),

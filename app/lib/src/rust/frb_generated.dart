@@ -67,7 +67,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => -149442165;
+  int get rustContentHash => -553082942;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -125,6 +125,8 @@ abstract class RustLibApi extends BaseApi {
 
   Future<SongView?> crateApiEngineLastPlayed();
 
+  Future<ExportFile> crateApiEngineLikedExport({required String format});
+
   Future<List<SongView>> crateApiEngineLikedSongs();
 
   Future<LyricsView?> crateApiEngineLyricsFor({
@@ -144,6 +146,11 @@ abstract class RustLibApi extends BaseApi {
   Future<PlatformInt64> crateApiEnginePlaylistCreate({required String name});
 
   Future<void> crateApiEnginePlaylistDelete({required PlatformInt64 id});
+
+  Future<ExportFile> crateApiEnginePlaylistExport({
+    required PlatformInt64 id,
+    required String format,
+  });
 
   Future<void> crateApiEnginePlaylistMove({
     required PlatformInt64 id,
@@ -237,12 +244,16 @@ abstract class RustLibApi extends BaseApi {
 
   Future<List<SongView>> crateApiEngineSearch({required String query});
 
+  Future<List<SearchHitView>> crateApiEngineSearchAll({required String query});
+
   Future<List<CollectionView>> crateApiEngineSearchCollections({
     required String kind,
     required String query,
   });
 
   Future<List<String>> crateApiEngineSearchHistory({required int limit});
+
+  Future<void> crateApiEngineSearchHistoryAdd({required String q});
 
   Future<void> crateApiEngineSearchHistoryClear();
 
@@ -259,6 +270,27 @@ abstract class RustLibApi extends BaseApi {
     required SongView s,
     required String reason,
   });
+
+  Future<void> crateApiEngineSpotifyCancel();
+
+  Future<String?> crateApiEngineSpotifyClientId();
+
+  Future<String> crateApiEngineSpotifyConnect({required String clientId});
+
+  Future<bool> crateApiEngineSpotifyConnected();
+
+  Future<void> crateApiEngineSpotifyDisconnect();
+
+  Future<ImportPlaylistView> crateApiEngineSpotifyFetch({
+    required String id,
+    required String name,
+  });
+
+  Future<List<SpotifyPlaylistView>> crateApiEngineSpotifyPlaylists();
+
+  Future<String> crateApiEngineSpotifyRedirectUri();
+
+  Future<void> crateApiEngineSpotifyWait();
 
   Future<void> crateApiEngineStartEngine({required EngineConfig cfg});
 
@@ -748,6 +780,34 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "last_played", argNames: []);
 
   @override
+  Future<ExportFile> crateApiEngineLikedExport({required String format}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(format, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 17,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_export_file,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiEngineLikedExportConstMeta,
+        argValues: [format],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiEngineLikedExportConstMeta =>
+      const TaskConstMeta(debugName: "liked_export", argNames: ["format"]);
+
+  @override
   Future<List<SongView>> crateApiEngineLikedSongs() {
     return handler.executeNormal(
       NormalTask(
@@ -756,7 +816,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 17,
+            funcId: 18,
             port: port_,
           );
         },
@@ -788,7 +848,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 18,
+            funcId: 19,
             port: port_,
           );
         },
@@ -817,7 +877,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 19,
+            funcId: 20,
             port: port_,
           );
         },
@@ -845,7 +905,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 20,
+            funcId: 21,
             port: port_,
           );
         },
@@ -877,7 +937,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 21,
+            funcId: 22,
             port: port_,
           );
         },
@@ -905,7 +965,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 22,
+            funcId: 23,
             port: port_,
           );
         },
@@ -933,7 +993,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 23,
+            funcId: 24,
             port: port_,
           );
         },
@@ -952,6 +1012,41 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "playlist_delete", argNames: ["id"]);
 
   @override
+  Future<ExportFile> crateApiEnginePlaylistExport({
+    required PlatformInt64 id,
+    required String format,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(id, serializer);
+          sse_encode_String(format, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 25,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_export_file,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiEnginePlaylistExportConstMeta,
+        argValues: [id, format],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiEnginePlaylistExportConstMeta =>
+      const TaskConstMeta(
+        debugName: "playlist_export",
+        argNames: ["id", "format"],
+      );
+
+  @override
   Future<void> crateApiEnginePlaylistMove({
     required PlatformInt64 id,
     required int from,
@@ -967,7 +1062,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 24,
+            funcId: 26,
             port: port_,
           );
         },
@@ -1001,7 +1096,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 25,
+            funcId: 27,
             port: port_,
           );
         },
@@ -1036,7 +1131,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 26,
+            funcId: 28,
             port: port_,
           );
         },
@@ -1069,7 +1164,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 27,
+            funcId: 29,
             port: port_,
           );
         },
@@ -1096,7 +1191,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 28,
+            funcId: 30,
             port: port_,
           );
         },
@@ -1124,7 +1219,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 29,
+            funcId: 31,
             port: port_,
           );
         },
@@ -1158,7 +1253,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 30,
+            funcId: 32,
             port: port_,
           );
         },
@@ -1189,7 +1284,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 31,
+            funcId: 33,
             port: port_,
           );
         },
@@ -1216,7 +1311,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 32,
+            funcId: 34,
             port: port_,
           );
         },
@@ -1248,7 +1343,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 33,
+            funcId: 35,
             port: port_,
           );
         },
@@ -1282,7 +1377,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 34,
+            funcId: 36,
             port: port_,
           );
         },
@@ -1310,7 +1405,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 35,
+            funcId: 37,
             port: port_,
           );
         },
@@ -1342,7 +1437,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 36,
+            funcId: 38,
             port: port_,
           );
         },
@@ -1373,7 +1468,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 37,
+            funcId: 39,
             port: port_,
           );
         },
@@ -1401,7 +1496,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 38,
+            funcId: 40,
             port: port_,
           );
         },
@@ -1433,7 +1528,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 39,
+            funcId: 41,
             port: port_,
           );
         },
@@ -1463,7 +1558,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 40,
+            funcId: 42,
             port: port_,
           );
         },
@@ -1491,7 +1586,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 41,
+            funcId: 43,
             port: port_,
           );
         },
@@ -1521,7 +1616,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 42,
+            funcId: 44,
             port: port_,
           );
         },
@@ -1549,7 +1644,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 43,
+            funcId: 45,
             port: port_,
           );
         },
@@ -1576,7 +1671,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 44,
+            funcId: 46,
             port: port_,
           );
         },
@@ -1603,7 +1698,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 45,
+            funcId: 47,
             port: port_,
           );
         },
@@ -1632,7 +1727,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 46,
+            funcId: 48,
             port: port_,
           );
         },
@@ -1671,7 +1766,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 47,
+            funcId: 49,
             port: port_,
           );
         },
@@ -1705,7 +1800,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 48,
+            funcId: 50,
             port: port_,
           );
         },
@@ -1736,7 +1831,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 49,
+            funcId: 51,
             port: port_,
           );
         },
@@ -1764,7 +1859,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 50,
+            funcId: 52,
             port: port_,
           );
         },
@@ -1783,6 +1878,34 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "search", argNames: ["query"]);
 
   @override
+  Future<List<SearchHitView>> crateApiEngineSearchAll({required String query}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(query, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 53,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_search_hit_view,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiEngineSearchAllConstMeta,
+        argValues: [query],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiEngineSearchAllConstMeta =>
+      const TaskConstMeta(debugName: "search_all", argNames: ["query"]);
+
+  @override
   Future<List<CollectionView>> crateApiEngineSearchCollections({
     required String kind,
     required String query,
@@ -1796,7 +1919,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 51,
+            funcId: 54,
             port: port_,
           );
         },
@@ -1827,7 +1950,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 52,
+            funcId: 55,
             port: port_,
           );
         },
@@ -1846,6 +1969,34 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "search_history", argNames: ["limit"]);
 
   @override
+  Future<void> crateApiEngineSearchHistoryAdd({required String q}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(q, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 56,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiEngineSearchHistoryAddConstMeta,
+        argValues: [q],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiEngineSearchHistoryAddConstMeta =>
+      const TaskConstMeta(debugName: "search_history_add", argNames: ["q"]);
+
+  @override
   Future<void> crateApiEngineSearchHistoryClear() {
     return handler.executeNormal(
       NormalTask(
@@ -1854,7 +2005,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 53,
+            funcId: 57,
             port: port_,
           );
         },
@@ -1882,7 +2033,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 54,
+            funcId: 58,
             port: port_,
           );
         },
@@ -1910,7 +2061,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 55,
+            funcId: 59,
             port: port_,
           );
         },
@@ -1942,7 +2093,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 56,
+            funcId: 60,
             port: port_,
           );
         },
@@ -1974,7 +2125,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 57,
+            funcId: 61,
             port: port_,
           );
         },
@@ -1993,6 +2144,255 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "skip_reason", argNames: ["s", "reason"]);
 
   @override
+  Future<void> crateApiEngineSpotifyCancel() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 62,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiEngineSpotifyCancelConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiEngineSpotifyCancelConstMeta =>
+      const TaskConstMeta(debugName: "spotify_cancel", argNames: []);
+
+  @override
+  Future<String?> crateApiEngineSpotifyClientId() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 63,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_opt_String,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiEngineSpotifyClientIdConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiEngineSpotifyClientIdConstMeta =>
+      const TaskConstMeta(debugName: "spotify_client_id", argNames: []);
+
+  @override
+  Future<String> crateApiEngineSpotifyConnect({required String clientId}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(clientId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 64,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiEngineSpotifyConnectConstMeta,
+        argValues: [clientId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiEngineSpotifyConnectConstMeta =>
+      const TaskConstMeta(debugName: "spotify_connect", argNames: ["clientId"]);
+
+  @override
+  Future<bool> crateApiEngineSpotifyConnected() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 65,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bool,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiEngineSpotifyConnectedConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiEngineSpotifyConnectedConstMeta =>
+      const TaskConstMeta(debugName: "spotify_connected", argNames: []);
+
+  @override
+  Future<void> crateApiEngineSpotifyDisconnect() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 66,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiEngineSpotifyDisconnectConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiEngineSpotifyDisconnectConstMeta =>
+      const TaskConstMeta(debugName: "spotify_disconnect", argNames: []);
+
+  @override
+  Future<ImportPlaylistView> crateApiEngineSpotifyFetch({
+    required String id,
+    required String name,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(id, serializer);
+          sse_encode_String(name, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 67,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_import_playlist_view,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiEngineSpotifyFetchConstMeta,
+        argValues: [id, name],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiEngineSpotifyFetchConstMeta =>
+      const TaskConstMeta(debugName: "spotify_fetch", argNames: ["id", "name"]);
+
+  @override
+  Future<List<SpotifyPlaylistView>> crateApiEngineSpotifyPlaylists() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 68,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_spotify_playlist_view,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiEngineSpotifyPlaylistsConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiEngineSpotifyPlaylistsConstMeta =>
+      const TaskConstMeta(debugName: "spotify_playlists", argNames: []);
+
+  @override
+  Future<String> crateApiEngineSpotifyRedirectUri() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 69,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiEngineSpotifyRedirectUriConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiEngineSpotifyRedirectUriConstMeta =>
+      const TaskConstMeta(debugName: "spotify_redirect_uri", argNames: []);
+
+  @override
+  Future<void> crateApiEngineSpotifyWait() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 70,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiEngineSpotifyWaitConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiEngineSpotifyWaitConstMeta =>
+      const TaskConstMeta(debugName: "spotify_wait", argNames: []);
+
+  @override
   Future<void> crateApiEngineStartEngine({required EngineConfig cfg}) {
     return handler.executeNormal(
       NormalTask(
@@ -2002,7 +2402,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 58,
+            funcId: 71,
             port: port_,
           );
         },
@@ -2029,7 +2429,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 59,
+            funcId: 72,
             port: port_,
           );
         },
@@ -2056,7 +2456,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 60,
+            funcId: 73,
             port: port_,
           );
         },
@@ -2084,7 +2484,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 61,
+            funcId: 74,
             port: port_,
           );
         },
@@ -2111,7 +2511,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 62,
+            funcId: 75,
             port: port_,
           );
         },
@@ -2139,6 +2539,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   bool dco_decode_bool(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as bool;
+  }
+
+  @protected
+  CollectionView dco_decode_box_autoadd_collection_view(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_collection_view(raw);
   }
 
   @protected
@@ -2237,6 +2643,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       quickjs: dco_decode_opt_String(arr[3]),
       caDir: dco_decode_opt_String(arr[4]),
       ytdlpOverride: dco_decode_opt_String(arr[5]),
+    );
+  }
+
+  @protected
+  ExportFile dco_decode_export_file(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return ExportFile(
+      fileName: dco_decode_String(arr[0]),
+      contents: dco_decode_String(arr[1]),
     );
   }
 
@@ -2353,9 +2771,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<SearchHitView> dco_decode_list_search_hit_view(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_search_hit_view).toList();
+  }
+
+  @protected
   List<SongView> dco_decode_list_song_view(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_song_view).toList();
+  }
+
+  @protected
+  List<SpotifyPlaylistView> dco_decode_list_spotify_playlist_view(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>)
+        .map(dco_decode_spotify_playlist_view)
+        .toList();
   }
 
   @protected
@@ -2401,6 +2833,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   String? dco_decode_opt_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_String(raw);
+  }
+
+  @protected
+  CollectionView? dco_decode_opt_box_autoadd_collection_view(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_collection_view(raw);
   }
 
   @protected
@@ -2483,6 +2921,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  SearchHitView dco_decode_search_hit_view(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return SearchHitView(
+      kind: dco_decode_String(arr[0]),
+      song: dco_decode_opt_box_autoadd_song_view(arr[1]),
+      collection: dco_decode_opt_box_autoadd_collection_view(arr[2]),
+    );
+  }
+
+  @protected
   SongView dco_decode_song_view(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -2498,6 +2949,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       thumbnail: dco_decode_String(arr[6]),
       liked: dco_decode_bool(arr[7]),
       downloaded: dco_decode_bool(arr[8]),
+    );
+  }
+
+  @protected
+  SpotifyPlaylistView dco_decode_spotify_playlist_view(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return SpotifyPlaylistView(
+      id: dco_decode_String(arr[0]),
+      name: dco_decode_String(arr[1]),
+      total: dco_decode_u_32(arr[2]),
+      owner: dco_decode_String(arr[3]),
     );
   }
 
@@ -2563,6 +3028,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   bool sse_decode_bool(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getUint8() != 0;
+  }
+
+  @protected
+  CollectionView sse_decode_box_autoadd_collection_view(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_collection_view(deserializer));
   }
 
   @protected
@@ -2667,6 +3140,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       caDir: var_caDir,
       ytdlpOverride: var_ytdlpOverride,
     );
+  }
+
+  @protected
+  ExportFile sse_decode_export_file(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_fileName = sse_decode_String(deserializer);
+    var var_contents = sse_decode_String(deserializer);
+    return ExportFile(fileName: var_fileName, contents: var_contents);
   }
 
   @protected
@@ -2854,6 +3335,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<SearchHitView> sse_decode_list_search_hit_view(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <SearchHitView>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_search_hit_view(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   List<SongView> sse_decode_list_song_view(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -2861,6 +3356,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var ans_ = <SongView>[];
     for (var idx_ = 0; idx_ < len_; ++idx_) {
       ans_.add(sse_decode_song_view(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<SpotifyPlaylistView> sse_decode_list_spotify_playlist_view(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <SpotifyPlaylistView>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_spotify_playlist_view(deserializer));
     }
     return ans_;
   }
@@ -2903,6 +3412,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
     if (sse_decode_bool(deserializer)) {
       return (sse_decode_String(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  CollectionView? sse_decode_opt_box_autoadd_collection_view(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_collection_view(deserializer));
     } else {
       return null;
     }
@@ -3008,6 +3530,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  SearchHitView sse_decode_search_hit_view(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_kind = sse_decode_String(deserializer);
+    var var_song = sse_decode_opt_box_autoadd_song_view(deserializer);
+    var var_collection = sse_decode_opt_box_autoadd_collection_view(
+      deserializer,
+    );
+    return SearchHitView(
+      kind: var_kind,
+      song: var_song,
+      collection: var_collection,
+    );
+  }
+
+  @protected
   SongView sse_decode_song_view(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_id = sse_decode_String(deserializer);
@@ -3029,6 +3566,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       thumbnail: var_thumbnail,
       liked: var_liked,
       downloaded: var_downloaded,
+    );
+  }
+
+  @protected
+  SpotifyPlaylistView sse_decode_spotify_playlist_view(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_name = sse_decode_String(deserializer);
+    var var_total = sse_decode_u_32(deserializer);
+    var var_owner = sse_decode_String(deserializer);
+    return SpotifyPlaylistView(
+      id: var_id,
+      name: var_name,
+      total: var_total,
+      owner: var_owner,
     );
   }
 
@@ -3095,6 +3649,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void sse_encode_bool(bool self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putUint8(self ? 1 : 0);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_collection_view(
+    CollectionView self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_collection_view(self, serializer);
   }
 
   @protected
@@ -3192,6 +3755,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_String(self.quickjs, serializer);
     sse_encode_opt_String(self.caDir, serializer);
     sse_encode_opt_String(self.ytdlpOverride, serializer);
+  }
+
+  @protected
+  void sse_encode_export_file(ExportFile self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.fileName, serializer);
+    sse_encode_String(self.contents, serializer);
   }
 
   @protected
@@ -3347,6 +3917,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_search_hit_view(
+    List<SearchHitView> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_search_hit_view(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_list_song_view(
     List<SongView> self,
     SseSerializer serializer,
@@ -3355,6 +3937,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_song_view(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_spotify_playlist_view(
+    List<SpotifyPlaylistView> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_spotify_playlist_view(item, serializer);
     }
   }
 
@@ -3392,6 +3986,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_String(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_collection_view(
+    CollectionView? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_collection_view(self, serializer);
     }
   }
 
@@ -3486,6 +4093,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_search_hit_view(
+    SearchHitView self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.kind, serializer);
+    sse_encode_opt_box_autoadd_song_view(self.song, serializer);
+    sse_encode_opt_box_autoadd_collection_view(self.collection, serializer);
+  }
+
+  @protected
   void sse_encode_song_view(SongView self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.id, serializer);
@@ -3497,6 +4115,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.thumbnail, serializer);
     sse_encode_bool(self.liked, serializer);
     sse_encode_bool(self.downloaded, serializer);
+  }
+
+  @protected
+  void sse_encode_spotify_playlist_view(
+    SpotifyPlaylistView self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_String(self.name, serializer);
+    sse_encode_u_32(self.total, serializer);
+    sse_encode_String(self.owner, serializer);
   }
 
   @protected
