@@ -24,6 +24,18 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
   closes, and Android's own record of why it last exited is read back. Settings › About ›
   *Last crash report* shows it with Copy and Clear. Nothing is sent anywhere. If it
   crashes again, that screen gives the actual error. 📱
+- **A fixed APK, built on the laptop.** GitHub's release downloads kept returning 504 and
+  failed the online Android build five times, so the APK was built locally with
+  `scripts/safe-build-apk.sh`: it waits for ~6 GB of free RAM, runs capped at 6 GB in its own
+  memory group (so a runaway build is stopped instead of freezing the laptop), and
+  freezes itself if the machine starts thrashing. Result: built in ~6 min, lowest free
+  memory 5.6 GB, no freeze. ✅ checked in the APK with `aapt2`: the notification icon is
+  present (it was absent before), the media service, media-button receiver, the music-app
+  category, predictive back and the crash reporter are in the manifest, and Python and
+  QuickJS are bundled. 📱 not yet run on a phone.
+- **What probably froze the laptop.** Another heavy build (warptron's Gradle) was running at
+  the same time (load 9, CPU package 97 °C, 3.5 GB held by one Java process). Several
+  builds at once is the likeliest trigger. The kernel is still 6.17.1.
 - **"Two settings".** The gear on the Home header was left over from the first layout.
   It is gone; Settings is only the tab. (The build on your phone predates that removal.)
 
