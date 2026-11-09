@@ -35,6 +35,14 @@ class HarpAudioHandler extends BaseAudioHandler with SeekHandler {
     mediaItem.add(MediaItem(id: id, title: title, artist: artist, album: album, duration: duration, artUri: art));
   }
 
+  /// Fills in the length once the player knows it (only for the song still showing).
+  void setDuration(String id, Duration d) {
+    final m = mediaItem.value;
+    if (m == null || m.id != id) return;
+    if (m.duration != null && (m.duration! - d).abs() < const Duration(seconds: 1)) return;
+    mediaItem.add(m.copyWith(duration: d));
+  }
+
   void setState({required bool playing, required bool loading, required Duration position, bool hasNext = true, bool hasPrevious = true}) {
     playbackState.add(PlaybackState(
       controls: [

@@ -14,6 +14,7 @@ pub mod recommend;
 pub mod rng;
 pub mod taste;
 pub mod tidy;
+pub mod translit;
 
 pub use error::{Error, Result};
 pub use model::Song;

@@ -4,6 +4,7 @@ import '../player/controller.dart';
 import '../src/rust/api/engine.dart' as api;
 import '../theme/glass.dart';
 import '../widgets/cover.dart';
+import '../widgets/playlist_art.dart';
 import '../widgets/shelf.dart';
 import 'import_screen.dart';
 import 'playlist.dart';
@@ -306,7 +307,6 @@ class PlaylistCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = moodColor('pl${pl.id}');
     return GestureDetector(
       onTap: onTap,
       child: Padding(
@@ -314,15 +314,7 @@ class PlaylistCard extends StatelessWidget {
         child: SizedBox(
           width: 150,
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Container(
-              width: 150,
-              height: 150,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(Radii.tile),
-                gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [c, HSLColor.fromColor(c).withLightness(0.25).toColor()]),
-              ),
-              child: const Icon(Icons.music_note_rounded, size: 56, color: Colors.white70),
-            ),
+            PlaylistArt(covers: pl.covers, seed: 'pl${pl.id}', size: 150),
             const SizedBox(height: 7),
             Text(pl.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14)),
             Text('${pl.count} songs', style: TextStyle(color: context.tok.textDim, fontSize: 13)),

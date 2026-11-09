@@ -39,7 +39,7 @@ the idea and the code. `UPDATES.md` is the dated log of changes; this file is th
 
 ## 1. Tracker: everything you reported or asked for
 
-### 1a. Problems you reported (19)
+### 1a. Problems you reported (23)
 
 | # | Problem | Status | What was done / what is left |
 |---|---|---|---|
@@ -61,11 +61,15 @@ the idea and the code. `UPDATES.md` is the dated log of changes; this file is th
 | B16 | No Spotify-style controls in the notification | 🟡 | Same cause as B15. Not confirmed. |
 | B17 | Two settings entries (Home header + tab) | ✅ | The Home gear is gone. |
 | B19 | Search history saved every keystroke | ✅ | History is saved only when you press search / enter or open a result (song, album, artist, podcast), like Spotify. Typing still searches as you go, but saves nothing. |
+| B20 | The mini player disappears inside a playlist (or any opened page) | 🟡 | Each tab now has its own page stack, so playlists, albums and lists open inside the tab with the mini player and tab bar still showing. Back closes the tab's pages first; tapping the open tab goes back to its start. Analyzer clean; not yet tried on the phone. |
+| B21 | Doesn't pause when the output changes (earphones out, Bluetooth off) | 🟡 | Android: pauses when the output would switch to the speaker, pauses for calls and resumes after, lowers the volume while navigation speaks. Needs the phone to confirm. Desktop systems don't report this, so not on Linux yet. |
+| B22 | Notification sometimes has no progress bar | 🟡 | Cause: songs from search often come without a length, and the notification only draws progress when it knows the length; it was never told the real one. Now the player's length is passed on as soon as it is known, and seeks are reported too. Needs the phone. |
+| B23 | Playlists: no picture, wasteful layout, no pinning | 🟡 | Covers (first song, or a 2×2 mosaic from four songs) on Library and Home; Library lists playlists as compact rows; pin to top from the … menu or a long press (pinned first, saved in the database). 🧪 database tests. |
 | B18 | Android builds failing on GitHub | 🟡 | GitHub's release downloads returned 504 for hours. Day-to-day CI now runs on the laptop (`scripts/ci-local.sh`, ✅); GitHub Actions only for releases or by hand, with caches and retries. |
 
-**Problems (19): 5 fixed and checked, 13 fixed but waiting for your confirmation, 1 partly fixed.**
+**Problems (23): 5 fixed and checked, 17 fixed but waiting for your confirmation, 1 partly fixed.**
 
-### 1b. Features you asked for (35)
+### 1b. Features you asked for (38)
 
 | # | Feature | Status | Notes |
 |---|---|---|---|
@@ -103,9 +107,12 @@ the idea and the code. `UPDATES.md` is the dated log of changes; this file is th
 | F32 | The same for Apple Music | 🟡 / ⛔ | Reading *your Apple Music account* needs a MusicKit developer token, which needs a paid Apple Developer membership (⛔ without one). **Public Apple Music playlist links are readable** with no key: the page carries the track list (checked: 50 songs in its structured data, more in its page data). **Link import is now built** (tested on a saved copy of a real page). File exports (text, M3U) already import. *(Earlier I said Apple links could not be read; that was wrong.)* |
 | F34 | Search: "All" by default, ranked by relevance | ✅ | All results in YouTube Music's own relevance order: top result, then songs, artists, albums, podcasts (videos, playlists and profiles left out). Tested on real responses. |
 | F35 | Remove the Playlists search filter | ✅ | Filters: All, Songs, Albums, Artists, Podcasts. |
+| F36 | Hindi, Urdu, Punjabi… lyrics in English letters (Hinglish) | 🟡 | Built into Harp's core (no service, works offline): Devanagari, Gurmukhi, Bengali, Gujarati, Odia, Tamil, Telugu, Kannada, Malayalam, and Urdu approximately. Drops the silent "a" the way people type ("tum hi ho", "aankhein", "dil"). The lyrics view has a switch: original / both / English letters. 🧪 Urdu is rougher than the rest, because Urdu script leaves most vowels out. |
+| F37 | Downloads grouped by playlist | 🟡 | Downloaded songs that belong to playlists show under each playlist ("12 of 40 songs downloaded", with Play and Shuffle); the rest under Songs. |
+| F38 | Recommendations learn from saved playlists | ✅ | Songs in your playlists now seed picks ("Because … is in your playlist …"). 🧪 |
 | F33 | The same for Amazon Music | ⛔ | No public API for listeners (Amazon's web API is invite-only), and shared playlist pages are a JavaScript app with no songs in the page (checked). Workarounds: paste the list, or a CSV from a converter such as TuneMyMusic (already imports). |
 
-**Features (35): 22 done and checked, 9 done but waiting for your confirmation, 3 in progress,
+**Features (38): 23 done and checked, 11 done but waiting for your confirmation, 3 in progress,
 1 not possible (Amazon Music); plus parts that are not possible (Dolby Atmos, Apple Music
 account access without a paid developer key).**
 

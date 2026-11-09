@@ -10,6 +10,9 @@ pub struct PlaylistInfo {
     pub id: i64,
     pub name: String,
     pub count: u32,
+    pub pinned: bool,
+    /// Artwork of the first (up to) four songs, for a cover mosaic.
+    pub covers: Vec<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -46,11 +49,35 @@ impl Store {
 
     pub fn playlists(&self) -> Result<Vec<PlaylistInfo>> {
         let mut st = self.conn.prepare(
-            "SELECT p.id, p.name, (SELECT COUNT(*) FROM playlist_items i WHERE i.playlist_id=p.id)
-             FROM playlists p ORDER BY p.created DESC, p.id DESC",
+            "SELECT p.id, p.name, (SELECT COUNT(*) FROM playlist_items i WHERE i.playlist_id=p.id), p.pinned
+             FROM playlists p ORDER BY p.pinned DESC, p.created DESC, p.id DESC",
         )?;
-        let rows = st.query_map([], |r| Ok(PlaylistInfo { id: r.get(0)?, name: r.get(1)?, count: r.get(2)? }))?;
-        Ok(rows.collect::<std::result::Result<_, _>>()?)
+        let rows = st.query_map([], |r| {
+            Ok(PlaylistInfo { id: r.get(0)?, name: r.get(1)?, count: r.get(2)?, pinned: r.get::<_, i64>(3)? != 0, covers: vec![] })
+        })?;
+        let mut out: Vec<PlaylistInfo> = rows.collect::<std::result::Result<_, _>>()?;
+        let mut cov = self.conn.prepare("SELECT song_json FROM playlist_items WHERE playlist_id=? ORDER BY pos LIMIT 4")?;
+        for p in &mut out {
+            let songs = cov.query_map([p.id], |r| r.get::<_, String>(0))?;
+            p.covers = songs.filter_map(|s| s.ok()).filter_map(from_json).map(|s| s.thumbnail_or_default()).collect();
+        }
+        Ok(out)
+    }
+
+    pub fn pin_playlist(&self, id: i64, pinned: bool) -> Result<()> {
+        self.conn.execute("UPDATE playlists SET pinned=? WHERE id=?", params![pinned as i64, id])?;
+        Ok(())
+    }
+
+    /// A random handful of songs from your playlists, with the playlist each came from:
+    /// what you saved says what you like, so these seed recommendations too.
+    pub fn playlist_seeds(&self, n: usize) -> Result<Vec<(Song, String)>> {
+        let mut st = self.conn.prepare(
+            "SELECT i.song_json, p.name FROM playlist_items i JOIN playlists p ON p.id=i.playlist_id
+             ORDER BY random() LIMIT ?",
+        )?;
+        let rows = st.query_map([n as i64], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
+        Ok(rows.filter_map(|r| r.ok()).filter_map(|(j, name)| from_json(j).map(|s| (s, name))).collect())
     }
 
     pub fn playlist_songs(&self, id: i64) -> Result<Vec<Song>> {
@@ -241,7 +268,16 @@ mod tests {
         assert_eq!(ids(&st.playlist_songs(id).unwrap()), ["c", "b", "d"]);
         st.rename_playlist(id, "Trips").unwrap();
         let p = st.playlists().unwrap();
-        assert_eq!(p, vec![PlaylistInfo { id, name: "Trips".into(), count: 3 }]);
+        assert_eq!((p[0].id, p[0].name.as_str(), p[0].count, p[0].pinned), (id, "Trips", 3, false));
+        assert_eq!(p[0].covers.len(), 3, "a mosaic of the first songs' artwork");
+        let other = st.create_playlist("Other").unwrap();
+        assert_eq!(st.playlists().unwrap()[0].id, other, "newest first");
+        st.pin_playlist(id, true).unwrap();
+        assert_eq!(st.playlists().unwrap()[0].id, id, "pinned ones come first");
+        assert!(st.playlists().unwrap()[0].pinned);
+        assert_eq!(st.playlist_seeds(10).unwrap().len(), 3);
+        assert!(st.playlist_seeds(10).unwrap().iter().all(|(_, n)| n == "Trips"));
+        st.delete_playlist(other).unwrap();
         st.delete_playlist(id).unwrap();
         assert!(st.playlists().unwrap().is_empty());
         assert!(st.playlist_songs(id).unwrap().is_empty(), "items go with the playlist");

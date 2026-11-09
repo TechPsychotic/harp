@@ -23,6 +23,10 @@ class _LyricsPaneState extends State<LyricsPane> {
   final _scroll = ScrollController();
   List<GlobalKey> _keys = [];
 
+  /// Each line in English letters ("" where the line is already in them).
+  List<String> _roman = [];
+  bool get _hasRoman => _roman.any((r) => r.isNotEmpty);
+
   @override
   void initState() {
     super.initState();
@@ -48,6 +52,7 @@ class _LyricsPaneState extends State<LyricsPane> {
       setState(() {
         _lyrics = l;
         _keys = List.generate(l?.lines.length ?? 0, (_) => GlobalKey());
+        _roman = l == null ? [] : api.romanizeLines(lines: [for (final x in l.lines) x.text]);
         _loading = false;
       });
     } catch (e) {
@@ -96,7 +101,9 @@ class _LyricsPaneState extends State<LyricsPane> {
     if (l == null || l.lines.isEmpty) {
       return Center(child: Text('No lyrics found for this song.', style: TextStyle(color: tok.textDim)));
     }
-    return ValueListenableBuilder<Duration>(
+    final settings = widget.player.settings;
+    final mode = _hasRoman ? settings.lyricsScript : 'original';
+    final list = ValueListenableBuilder<Duration>(
       valueListenable: widget.player.position,
       builder: (context, pos, _) {
         final idx = l.synced ? _indexAt(pos.inMilliseconds) : -1;
@@ -107,7 +114,8 @@ class _LyricsPaneState extends State<LyricsPane> {
           itemCount: l.lines.length + 1,
           itemBuilder: (_, i) {
             if (i == l.lines.length) {
-              return Padding(padding: const EdgeInsets.only(top: 24), child: Text('Lyrics from ${l.source}', textAlign: TextAlign.center, style: TextStyle(color: tok.textFaint, fontSize: 12)));
+              final note = mode == 'original' ? '' : '\nEnglish letters are spelled out by Harp, so they may differ from the usual spelling.';
+              return Padding(padding: const EdgeInsets.only(top: 24), child: Text('Lyrics from ${l.source}$note', textAlign: TextAlign.center, style: TextStyle(color: tok.textFaint, fontSize: 12)));
             }
             final line = l.lines[i];
             final on = i == idx;
@@ -125,12 +133,49 @@ class _LyricsPaneState extends State<LyricsPane> {
                   fontWeight: FontWeight.w800,
                   color: l.synced ? (on ? tok.text : tok.text.withValues(alpha: past ? 0.30 : 0.42)) : tok.text.withValues(alpha: 0.85),
                 ),
-                child: Padding(padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8), child: Text(line.text.isEmpty ? '♪' : line.text)),
+                child: Padding(padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8), child: _line(line.text, i < _roman.length ? _roman[i] : '', mode)),
               ),
             );
           },
         );
       },
     );
+    if (!_hasRoman) return list;
+    return Stack(children: [
+      list,
+      Positioned(
+        top: 4,
+        right: 8,
+        child: ListenableBuilder(
+          listenable: settings,
+          builder: (_, _) => SegmentedButton<String>(
+            showSelectedIcon: false,
+            style: const ButtonStyle(visualDensity: VisualDensity.compact, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+            segments: const [
+              ButtonSegment(value: 'original', label: Text('अ'), tooltip: 'Original script'),
+              ButtonSegment(value: 'both', label: Text('अ+A'), tooltip: 'Both'),
+              ButtonSegment(value: 'roman', label: Text('A'), tooltip: 'English letters'),
+            ],
+            selected: {settings.lyricsScript},
+            onSelectionChanged: (v) {
+              settings.setLyricsScript(v.first);
+              setState(() {});
+            },
+          ),
+        ),
+      ),
+    ]);
+  }
+
+  /// A line as the chosen script setting asks: original, English letters, or
+  /// the original with English letters under it.
+  Widget _line(String text, String roman, String mode) {
+    if (text.isEmpty) return const Text('♪');
+    if (roman.isEmpty || mode == 'original') return Text(text);
+    if (mode == 'roman') return Text(roman);
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(text),
+      Text(roman, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600, height: 1.25)),
+    ]);
   }
 }

@@ -8,6 +8,39 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-09 (late night): mini player everywhere, pause on unplug, Hinglish lyrics, playlist covers
+
+**Fixed**
+- **The mini player no longer disappears** when you open a playlist, album, artist or list. Each
+  tab keeps its own pages, so the player and tab bar stay on screen. Back closes pages in the tab
+  first; tapping the tab you're on goes back to its start. Song menus open above the tab bar.
+- **Pauses when headphones are unplugged or Bluetooth disconnects** (Android), instead of
+  playing out of the speaker. Pauses for calls and resumes after; ducks for navigation prompts. 📱
+- **Missing progress bar in the notification, explained and fixed.** Songs found through search
+  often arrive without a length, and Android only draws the bar when it knows the length; Harp
+  never told it the real one once playback started. Now it does, as soon as the player knows,
+  and also tells it about seeks so the bar doesn't drift. That's why it happened only sometimes
+  (songs that came with a length were fine). 📱
+- **Playlists have pictures:** the first song's cover, or a 2×2 mosaic once there are four songs,
+  in Library and on Listen Now.
+- **Library playlists are compact rows** (cover, name, count) instead of the oversized grid.
+
+**Added**
+- **Pin playlists** to the top of the Library: … menu or long press. Saved in the database (the
+  database now upgrades itself in place; 🧪 an old database upgrades without losing anything).
+- **Lyrics in English letters (Hinglish).** Hindi, Urdu, Punjabi, Bengali, Gujarati, Tamil, Telugu,
+  Kannada, Malayalam and Odia lyrics can show as typed in English letters: "तुम ही हो" → "tum hi
+  ho". A switch at the top of the lyrics (अ / अ+A / A) picks original, both, or English letters only;
+  it is remembered. Done on the device, no service needed. 🧪 Urdu is approximate (its script leaves
+  out most vowels), and spellings may differ from how a song is usually written.
+- **Downloads grouped by playlist:** each playlist with downloaded songs shows as its own group
+  ("12 of 40 songs downloaded", Play, Shuffle); songs downloaded on their own are listed under Songs.
+- **Recommendations learn from your saved playlists:** songs in them seed picks, with the reason
+  shown. 🧪
+
+**Tested:** ✅ 62 core tests, Flutter analyzer clean, 16 widget tests. **Not verified:** everything
+marked 📱 needs your phone; output-change pausing is Android-only for now (Linux doesn't report it).
+
 ## 2026-11-09 (night, research): milestone map; a hanging test fixed
 
 - **Milestone map** in `ROADMAP.md` (M1–M8): reliability on the phone; a new audio engine with real

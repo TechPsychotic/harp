@@ -130,6 +130,7 @@ Future<void> showSongSheet(BuildContext context, PlayerController player, api.So
   final tok = context.tok;
   return showModalBottomSheet<void>(
     context: context,
+    useRootNavigator: true,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     builder: (ctx) {
@@ -188,6 +189,7 @@ Future<void> saveExport(BuildContext context, api.ExportFile f) async {
 /// Lets you pick CSV (Exportify columns), M3U or JSON.
 Future<String?> pickExportFormat(BuildContext context) => showModalBottomSheet<String>(
       context: context,
+      useRootNavigator: true,
       builder: (ctx) => SafeArea(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           const Padding(padding: EdgeInsets.fromLTRB(16, 16, 16, 8), child: Text('Export as', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700))),

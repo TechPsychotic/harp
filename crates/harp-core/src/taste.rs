@@ -114,6 +114,21 @@ CREATE TABLE IF NOT EXISTS downloads(
   at INTEGER NOT NULL DEFAULT (strftime('%s','now')));
 ";
 
+/// Schema changes after the first release, in order. Each runs once; the database
+/// remembers how far it got (`PRAGMA user_version`). Never edit an entry, only append.
+const MIGRATIONS: &[&str] = &[
+    // 1: playlists can be pinned to the top.
+    "ALTER TABLE playlists ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;",
+];
+
+pub(crate) fn migrate(conn: &Connection) -> Result<()> {
+    let done: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+    for (i, sql) in MIGRATIONS.iter().enumerate().skip(done.max(0) as usize) {
+        conn.execute_batch(&format!("BEGIN; {sql} PRAGMA user_version = {}; COMMIT;", i + 1))?;
+    }
+    Ok(())
+}
+
 fn from_json(s: String) -> Option<Song> {
     serde_json::from_str(&s).ok()
 }
@@ -123,6 +138,7 @@ impl Store {
         let conn = Connection::open(path)?;
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
         conn.execute_batch(SCHEMA)?;
+        migrate(&conn)?;
         Ok(Store { conn })
     }
 
@@ -130,6 +146,7 @@ impl Store {
         let conn = Connection::open_in_memory()?;
         conn.execute_batch("PRAGMA foreign_keys=ON;")?;
         conn.execute_batch(SCHEMA)?;
+        migrate(&conn)?;
         Ok(Store { conn })
     }
 
@@ -344,6 +361,28 @@ mod tests {
         let h: Vec<_> = st.history(10).unwrap().into_iter().map(|s| s.id).collect();
         assert_eq!(h, ["a", "b"]);
         assert_eq!(st.recent_ids(2).unwrap(), ["a", "b"]);
+    }
+
+    #[test]
+    fn old_databases_are_upgraded_in_place() {
+        let dir = std::env::temp_dir().join(format!("harp-migrate-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("old.db");
+        let _ = std::fs::remove_file(&path);
+        {
+            // A database as the first release made it: no `pinned` column, version 0.
+            let c = Connection::open(&path).unwrap();
+            c.execute_batch("CREATE TABLE playlists(id INTEGER PRIMARY KEY, name TEXT NOT NULL, created INTEGER NOT NULL DEFAULT 0);").unwrap();
+            c.execute("INSERT INTO playlists(name) VALUES('Kept')", []).unwrap();
+        }
+        let st = Store::open(&path).unwrap();
+        let v: i64 = st.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert_eq!(v as usize, MIGRATIONS.len());
+        let p = st.playlists().unwrap();
+        assert_eq!((p[0].name.as_str(), p[0].pinned), ("Kept", false));
+        drop(st);
+        // Opening again runs nothing twice.
+        assert!(Store::open(&path).is_ok());
     }
 
     #[test]

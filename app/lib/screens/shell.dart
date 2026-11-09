@@ -24,12 +24,32 @@ class Shell extends StatefulWidget {
 
 class _ShellState extends State<Shell> {
   int _tab = 0;
-  late final List<Widget> _pages = [
+  // Each tab has its own navigator, so playlists, albums and the rest open
+  // inside the tab and the mini player and tab bar stay on screen.
+  final _navs = List.generate(4, (_) => GlobalKey<NavigatorState>());
+  late final List<Widget> _roots = [
     HomeScreen(player: widget.player),
     SearchScreen(player: widget.player),
     LibraryScreen(player: widget.player),
     SettingsScreen(player: widget.player, embedded: true),
   ];
+  late final List<Widget> _pages = [
+    for (var i = 0; i < 4; i++)
+      Navigator(
+        key: _navs[i],
+        observers: [HeroController()],
+        onGenerateRoute: (_) => MaterialPageRoute(builder: (_) => _roots[i]),
+      ),
+  ];
+
+  /// Tapping the tab you are on goes back to its first page.
+  void _select(int i) {
+    if (i == _tab) {
+      _navs[i].currentState?.popUntil((r) => r.isFirst);
+    } else {
+      setState(() => _tab = i);
+    }
+  }
   static const _items = [
     (Icons.play_circle_fill_rounded, 'Listen Now'),
     (Icons.search_rounded, 'Search'),
@@ -50,7 +70,11 @@ class _ShellState extends State<Shell> {
         child: Builder(builder: (context) {
           return LayoutBuilder(builder: (context, c) {
             final wide = c.maxWidth >= 760;
-            final content = IndexedStack(index: _tab, children: _pages);
+            // Back pops the open tab's own pages first, then leaves the app as usual.
+            final content = NavigatorPopHandler(
+              onPopWithResult: (_) => _navs[_tab].currentState?.maybePop(),
+              child: IndexedStack(index: _tab, children: _pages),
+            );
             final mini = _MiniPlayer(player: p, onOpen: _openNowPlaying, floating: !wide);
             return Scaffold(
               body: Stack(children: [
@@ -61,7 +85,7 @@ class _ShellState extends State<Shell> {
                     bottom: false,
                     child: wide
                         ? Row(children: [
-                            _Sidebar(tab: _tab, onTap: (i) => setState(() => _tab = i)),
+                            _Sidebar(tab: _tab, onTap: _select),
                             VerticalDivider(width: 0.6, thickness: 0.6, color: context.tok.separator),
                             Expanded(child: Column(children: [Expanded(child: content), mini])),
                           ])
@@ -74,7 +98,7 @@ class _ShellState extends State<Shell> {
                   ? null
                   : Column(mainAxisSize: MainAxisSize.min, children: [
                       mini,
-                      _TabBar(tab: _tab, onTap: (i) => setState(() => _tab = i), blur: p.settings.fullEffects),
+                      _TabBar(tab: _tab, onTap: _select, blur: p.settings.fullEffects),
                     ]),
             );
           });

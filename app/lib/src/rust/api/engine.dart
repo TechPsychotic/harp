@@ -137,6 +137,15 @@ Future<void> settingSet({required String key, required String value}) =>
 Future<List<PlaylistView>> playlists() =>
     RustLib.instance.api.crateApiEnginePlaylists();
 
+/// Pins a playlist to the top of the list (or unpins it).
+Future<void> playlistPin({required PlatformInt64 id, required bool pinned}) =>
+    RustLib.instance.api.crateApiEnginePlaylistPin(id: id, pinned: pinned);
+
+/// Lyric lines in English letters ("Hinglish"). An empty string means the line
+/// needs nothing (it is already in Latin letters).
+List<String> romanizeLines({required List<String> lines}) =>
+    RustLib.instance.api.crateApiEngineRomanizeLines(lines: lines);
+
 Future<PlatformInt64> playlistCreate({required String name}) =>
     RustLib.instance.api.crateApiEnginePlaylistCreate(name: name);
 
@@ -708,15 +717,26 @@ class PlaylistView {
   final PlatformInt64 id;
   final String name;
   final int count;
+  final bool pinned;
+
+  /// Artwork of the first songs, for a cover mosaic.
+  final List<String> covers;
 
   const PlaylistView({
     required this.id,
     required this.name,
     required this.count,
+    required this.pinned,
+    required this.covers,
   });
 
   @override
-  int get hashCode => id.hashCode ^ name.hashCode ^ count.hashCode;
+  int get hashCode =>
+      id.hashCode ^
+      name.hashCode ^
+      count.hashCode ^
+      pinned.hashCode ^
+      covers.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -725,7 +745,9 @@ class PlaylistView {
           runtimeType == other.runtimeType &&
           id == other.id &&
           name == other.name &&
-          count == other.count;
+          count == other.count &&
+          pinned == other.pinned &&
+          covers == other.covers;
 }
 
 class QueueView {

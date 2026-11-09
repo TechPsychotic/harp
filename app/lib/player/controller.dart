@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:audio_session/audio_session.dart';
 import 'package:flutter/material.dart' show Color;
 import 'package:flutter/foundation.dart';
 import 'package:media_kit/media_kit.dart';
@@ -34,13 +35,21 @@ class PlayerController extends ChangeNotifier {
     unawaited(viz.attach(_player, native: fxSupported).then((_) => _applyAudioFx()));
     _subs.addAll([
       _player.stream.position.listen((p) => position.value = p),
-      _player.stream.duration.listen((d) => duration.value = d),
+      _player.stream.duration.listen((d) {
+        duration.value = d;
+        // Songs from search often come without a length. The notification
+        // only draws its progress bar when it knows one, so pass on the real
+        // length as soon as the player has it.
+        final s = current;
+        if (s != null && d > Duration.zero) session.setDuration(s.id, d);
+      }),
       _player.stream.playing.listen((p) {
         if (!p) _saveSpot();
         playing = p;
         viz.playing = p;
         settings.animating = p && settings.fullEffects;
         Native.wakeLock(p);
+        if (p) unawaited(_focus?.setActive(true));
         _syncSession();
         notifyListeners();
       }),
@@ -72,8 +81,44 @@ class PlayerController extends ChangeNotifier {
     session.onPause = () => _player.pause();
     session.onNext = next;
     session.onPrevious = previous;
-    session.onSeek = (d) => _player.seek(d);
+    session.onSeek = seekTo;
     session.onStop = () => _player.pause();
+    unawaited(_watchOutput());
+  }
+
+  AudioSession? _focus;
+  bool _resumeAfterInterruption = false;
+
+  /// Like other music apps: pause when headphones are unplugged or a Bluetooth
+  /// device drops (so the song doesn't jump to the speaker), pause for calls,
+  /// and lower the volume while navigation speaks. Android and Apple only:
+  /// desktop systems don't report this.
+  Future<void> _watchOutput() async {
+    if (!(Platform.isAndroid || Platform.isIOS)) return;
+    try {
+      final s = await AudioSession.instance;
+      await s.configure(const AudioSessionConfiguration.music());
+      _focus = s;
+      _subs.add(s.becomingNoisyEventStream.listen((_) => _player.pause()));
+      _subs.add(s.interruptionEventStream.listen((e) {
+        if (e.begin) {
+          if (e.type == AudioInterruptionType.duck) {
+            _player.setVolume(35);
+          } else if (playing) {
+            // Come back after a short interruption (a call), not after another
+            // app started its own music.
+            _resumeAfterInterruption = e.type == AudioInterruptionType.pause;
+            _player.pause();
+          }
+        } else {
+          _player.setVolume(100);
+          if (_resumeAfterInterruption && e.type == AudioInterruptionType.pause) _player.play();
+          _resumeAfterInterruption = false;
+        }
+      }));
+    } catch (_) {
+      // Without it playback still works; it just won't react to the output changing.
+    }
   }
 
   final AppSettings settings;
@@ -484,8 +529,14 @@ class PlayerController extends ChangeNotifier {
     await _player.playOrPause();
   }
 
-  Future<void> seekFraction(double f) => _player.seek(Duration(milliseconds: (duration.value.inMilliseconds * f).round()));
-  Future<void> seekTo(Duration d) => _player.seek(d);
+  Future<void> seekFraction(double f) => seekTo(Duration(milliseconds: (duration.value.inMilliseconds * f).round()));
+  Future<void> seekTo(Duration d) async {
+    await _player.seek(d);
+    // The notification extrapolates from the last position it was told about,
+    // so tell it about seeks too or its bar drifts.
+    position.value = d;
+    _syncSession();
+  }
 
   /// Skip. Several quick taps are folded into one jump to the last song.
   Future<void> next() {

@@ -148,12 +148,16 @@ fn gather(store: &Store, src: &dyn CandidateSource, req: &Request, rng: &mut Rng
         .filter(|i| !liked_ids.contains(i) && !super_ids.contains(i))
         .collect();
 
+    // Songs you saved in playlists say what you like too.
+    let from_playlists = store.playlist_seeds(8)?;
+    let playlist_of: HashMap<String, String> = from_playlists.iter().map(|(s, n)| (s.id.clone(), n.clone())).collect();
     let seeds: Vec<Song> = if !superliked.is_empty() {
         superliked
     } else {
         liked
             .into_iter()
             .chain(searched.into_iter().filter(|s| searched_only.contains(&s.id)))
+            .chain(from_playlists.into_iter().map(|(s, _)| s))
             .collect()
     };
 
@@ -198,6 +202,9 @@ fn gather(store: &Store, src: &dyn CandidateSource, req: &Request, rng: &mut Rng
         used_seed = picked.first().cloned();
         candidates = c;
         reason = match &used_seed {
+            Some(s) if !super_ids.contains(&s.id) && !liked_ids.contains(&s.id) && !searched_only.contains(&s.id) && playlist_of.contains_key(&s.id) => {
+                format!("Because “{}” is in your playlist {}", s.title, playlist_of[&s.id])
+            }
             Some(s) => {
                 let verb = if super_ids.contains(&s.id) {
                     "loved"
@@ -454,6 +461,23 @@ mod tests {
             let r = next(&empty, &Fake, &Request::default(), &mut Rng::new(seed)).unwrap().unwrap();
             assert!(!r.reason.contains("searched"));
         }
+    }
+
+    #[test]
+    fn saved_playlists_seed_picks() {
+        let st = Store::open_memory().unwrap();
+        let id = st.create_playlist("Road").unwrap();
+        st.add_to_playlist(id, &[song("pl1", "Saved Song", "Z")]).unwrap();
+        let mut hit = false;
+        for seed in 1..30 {
+            let r = next(&st, &Fake, &Request::default(), &mut Rng::new(seed)).unwrap().unwrap();
+            if r.reason.contains("is in your playlist Road") {
+                assert!(r.song.id.starts_with("pl1-r"), "picked from what follows the saved song");
+                hit = true;
+                break;
+            }
+        }
+        assert!(hit, "with no plays yet, a saved playlist already shapes the picks");
     }
 
     #[test]

@@ -31,6 +31,11 @@ class AppSettings extends ChangeNotifier {
   /// Also fetch ahead on mobile data (off: only on Wi-Fi / unmetered networks).
   bool prefetchOnMobile = false;
 
+  /// Lyrics in Hindi, Urdu, Punjabi and other Indian scripts: "both" (the
+  /// original with English letters under it), "roman" (English letters only)
+  /// or "original".
+  String lyricsScript = 'both';
+
   /// "off", "wide", "headphone" or "immersive": a virtual spatial effect (not Dolby Atmos).
   String spatial = 'off';
 
@@ -88,6 +93,7 @@ class AppSettings extends ChangeNotifier {
     spatial = await get('spatial') ?? 'off';
     cacheMb = int.tryParse(await get('cache_mb') ?? '') ?? 512;
     prefetchOnMobile = await get('prefetch_mobile') == '1';
+    lyricsScript = await get('lyrics_script') ?? 'both';
     notifyListeners();
   }
 
@@ -129,6 +135,12 @@ class AppSettings extends ChangeNotifier {
     prefetchOnMobile = v;
     notifyListeners();
     await _save('prefetch_mobile', v ? '1' : '0');
+  }
+
+  Future<void> setLyricsScript(String v) async {
+    lyricsScript = v;
+    notifyListeners();
+    await _save('lyrics_script', v);
   }
 
   Future<void> setCacheMb(int v) async {

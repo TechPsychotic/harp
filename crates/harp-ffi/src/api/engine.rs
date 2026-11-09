@@ -491,11 +491,26 @@ pub struct PlaylistView {
     pub id: i64,
     pub name: String,
     pub count: u32,
+    pub pinned: bool,
+    /// Artwork of the first songs, for a cover mosaic.
+    pub covers: Vec<String>,
 }
 
 pub fn playlists() -> Result<Vec<PlaylistView>, String> {
     let v = eng()?.store.lock().unwrap().playlists().map_err(e)?;
-    Ok(v.into_iter().map(|p| PlaylistView { id: p.id, name: p.name, count: p.count }).collect())
+    Ok(v.into_iter().map(|p| PlaylistView { id: p.id, name: p.name, count: p.count, pinned: p.pinned, covers: p.covers }).collect())
+}
+
+/// Pins a playlist to the top of the list (or unpins it).
+pub fn playlist_pin(id: i64, pinned: bool) -> Result<(), String> {
+    eng()?.store.lock().unwrap().pin_playlist(id, pinned).map_err(e)
+}
+
+/// Lyric lines in English letters ("Hinglish"). An empty string means the line
+/// needs nothing (it is already in Latin letters).
+#[flutter_rust_bridge::frb(sync)]
+pub fn romanize_lines(lines: Vec<String>) -> Vec<String> {
+    lines.iter().map(|l| harp_core::translit::romanize(l).unwrap_or_default()).collect()
 }
 
 pub fn playlist_create(name: String) -> Result<i64, String> {
