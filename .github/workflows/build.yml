@@ -89,8 +89,15 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y zstd
           ./scripts/android-tools.sh
-      - working-directory: app
-        run: flutter build apk --release --target-platform android-arm64
+      - name: Build the APK (retried: GitHub's downloads sometimes return a temporary 5xx)
+        working-directory: app
+        run: |
+          for attempt in 1 2 3; do
+            flutter build apk --release --target-platform android-arm64 && exit 0
+            echo "attempt $attempt failed; retrying in 30 s"
+            sleep 30
+          done
+          exit 1
       - name: Check Python and QuickJS are inside the APK
         run: |
           unzip -l app/build/app/outputs/flutter-apk/app-release.apk | grep -E "libpython.so|libqjs.so|python.zip"
