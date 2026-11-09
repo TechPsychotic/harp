@@ -447,6 +447,9 @@ class EngineConfig {
   /// Use a yt-dlp that is already on this path instead of downloading one.
   final String? ytdlpOverride;
 
+  /// Android: a yt-dlp shipped inside the app, used only if downloading one fails.
+  final String? bundledYtdlp;
+
   const EngineConfig({
     required this.dataDir,
     this.python,
@@ -454,6 +457,7 @@ class EngineConfig {
     this.quickjs,
     this.caDir,
     this.ytdlpOverride,
+    this.bundledYtdlp,
   });
 
   @override
@@ -463,7 +467,8 @@ class EngineConfig {
       pythonHome.hashCode ^
       quickjs.hashCode ^
       caDir.hashCode ^
-      ytdlpOverride.hashCode;
+      ytdlpOverride.hashCode ^
+      bundledYtdlp.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -475,7 +480,8 @@ class EngineConfig {
           pythonHome == other.pythonHome &&
           quickjs == other.quickjs &&
           caDir == other.caDir &&
-          ytdlpOverride == other.ytdlpOverride;
+          ytdlpOverride == other.ytdlpOverride &&
+          bundledYtdlp == other.bundledYtdlp;
 }
 
 class ExportFile {

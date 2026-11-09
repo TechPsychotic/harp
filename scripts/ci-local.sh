@@ -54,6 +54,7 @@ if [ "$APK" = 1 ]; then
   "$AAPT2" dump resources "$F" | grep -q "drawable/ic_stat_harp" && ok "APK: notification icon present" || fail "APK: notification icon missing (the media notification would crash)"
   unzip -l "$F" | grep -q "lib/arm64-v8a/libpython.so" && unzip -l "$F" | grep -q "libqjs.so" && unzip -l "$F" | grep -q "libharp_ffi.so" && ok "APK: Python, QuickJS and the Rust core bundled" || fail "APK: missing bundled libraries"
   "$AAPT2" dump xmltree --file AndroidManifest.xml "$F" | grep -q "com.ryanheise.audioservice.AudioService" && ok "APK: media service in the manifest" || fail "APK: media service missing"
+  unzip -l "$F" | grep -q "assets/yt-dlp.pyz" && ok "APK: fallback yt-dlp bundled" || fail "APK: fallback yt-dlp missing (run scripts/android-tools.sh)"
   if [ "$INSTALL" = 1 ]; then
     mkdir -p "$HOME/Downloads/Harp" && cp "$F" "$HOME/Downloads/Harp/app-release.apk" && ok "APK copied to ~/Downloads/Harp/app-release.apk"
   fi

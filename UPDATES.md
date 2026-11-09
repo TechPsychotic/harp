@@ -8,6 +8,16 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-09 (night, last): a fallback yt-dlp inside the APK
+
+- **The APK now carries yt-dlp 2026.10.26** (verified against yt-dlp's published SHA-256). The
+  phone still downloads and verifies the current yt-dlp on first start; the bundled one is used
+  only if that download fails and there is no earlier copy (as during GitHub's 504 outage),
+  so streaming works from the first launch. Later updates happen as before.
+- The yt-dlp download now has a time limit (15 s to connect, 2 min in all), so an outage can no
+  longer hang the first start.
+- Local CI checks the fallback is inside the APK.
+
 ## 2026-11-09 (night, later): the queue survives restarts, sleep timer, gestures
 
 **Added**

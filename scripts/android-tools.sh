@@ -20,6 +20,11 @@ ASSETS=$ROOT/app/assets
 PBS=20261026; PY=3.13.18; PYV=3.13; QJS=v0.18.0
 PY_URL=https://github.com/astral-sh/python-build-standalone/releases/download/$PBS/cpython-$PY+$PBS-aarch64-unknown-linux-musl-lto+static-full.tar.zst
 PY_SUM=9968a4b1fc3db172ba3b3ab36235fa76fab91c3ec83204f269adca756c87261d
+# A fallback yt-dlp, shipped inside the APK: used only if the first download on the phone
+# fails (as during a GitHub outage). The app still updates yt-dlp itself afterwards.
+YTDLP=2026.10.26
+YTDLP_URL=https://github.com/yt-dlp/yt-dlp/releases/download/$YTDLP/yt-dlp
+YTDLP_SUM=e51e69e89489f199530f13d32a4342da3ddb2cf34842f364603a066db05afbf3
 QJS_URL=https://github.com/quickjs-ng/quickjs/releases/download/$QJS/qjs-linux-aarch64
 QJS_SUM=2c005c7171424a598d31c53c8dc4a0ae2e4958eb6fbb37908c885a307c78187c
 
@@ -33,6 +38,8 @@ fetch() { # file url sum
 }
 fetch python.tar.zst "$PY_URL" "$PY_SUM"
 fetch qjs "$QJS_URL" "$QJS_SUM"
+fetch yt-dlp.pyz "$YTDLP_URL" "$YTDLP_SUM"
+cp "$CACHE/yt-dlp.pyz" "$ASSETS/yt-dlp.pyz"
 
 zstd -dc "$CACHE/python.tar.zst" | tar -x -O "python/install/bin/python$PYV" >"$OUT/libpython.so"
 cp "$CACHE/qjs" "$OUT/libqjs.so"

@@ -26,6 +26,7 @@ Future<void> bootEngine() async {
     final python = File('$lib/libpython.so');
     final hasPython = await python.exists();
     if (hasPython) await _unpackPythonLib(home, version);
+    final bundled = await _unpackBundledYtdlp('$data/tools', version);
     await api.startEngine(
       cfg: api.EngineConfig(
         dataDir: data,
@@ -33,10 +34,28 @@ Future<void> bootEngine() async {
         pythonHome: hasPython ? home.path : null,
         quickjs: await File('$lib/libqjs.so').exists() ? '$lib/libqjs.so' : null,
         caDir: '/system/etc/security/cacerts',
+        bundledYtdlp: bundled,
       ),
     );
   } else {
     await api.startEngine(cfg: api.EngineConfig(dataDir: data));
+  }
+}
+
+/// The yt-dlp shipped inside the app, unpacked once per install. Used only if
+/// downloading the current one fails (and there is no earlier copy).
+Future<String?> _unpackBundledYtdlp(String tools, String version) async {
+  final f = File('$tools/yt-dlp.bundled');
+  final stamp = File('$tools/yt-dlp.bundled.version');
+  try {
+    if (await f.exists() && await stamp.exists() && (await stamp.readAsString()).trim() == version) return f.path;
+    final bytes = (await rootBundle.load('assets/yt-dlp.pyz')).buffer.asUint8List();
+    await f.parent.create(recursive: true);
+    await f.writeAsBytes(bytes, flush: true);
+    await stamp.writeAsString(version);
+    return f.path;
+  } catch (_) {
+    return null; // not bundled (a desktop build, or a build without the tools script)
   }
 }
 

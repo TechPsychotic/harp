@@ -2613,6 +2613,7 @@ impl SseDecode for crate::api::engine::EngineConfig {
         let mut var_quickjs = <Option<String>>::sse_decode(deserializer);
         let mut var_caDir = <Option<String>>::sse_decode(deserializer);
         let mut var_ytdlpOverride = <Option<String>>::sse_decode(deserializer);
+        let mut var_bundledYtdlp = <Option<String>>::sse_decode(deserializer);
         return crate::api::engine::EngineConfig {
             data_dir: var_dataDir,
             python: var_python,
@@ -2620,6 +2621,7 @@ impl SseDecode for crate::api::engine::EngineConfig {
             quickjs: var_quickjs,
             ca_dir: var_caDir,
             ytdlp_override: var_ytdlpOverride,
+            bundled_ytdlp: var_bundledYtdlp,
         };
     }
 }
@@ -3344,6 +3346,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::engine::EngineConfig {
             self.quickjs.into_into_dart().into_dart(),
             self.ca_dir.into_into_dart().into_dart(),
             self.ytdlp_override.into_into_dart().into_dart(),
+            self.bundled_ytdlp.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -3739,6 +3742,7 @@ impl SseEncode for crate::api::engine::EngineConfig {
         <Option<String>>::sse_encode(self.quickjs, serializer);
         <Option<String>>::sse_encode(self.ca_dir, serializer);
         <Option<String>>::sse_encode(self.ytdlp_override, serializer);
+        <Option<String>>::sse_encode(self.bundled_ytdlp, serializer);
     }
 }
 

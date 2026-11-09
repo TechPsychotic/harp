@@ -2634,8 +2634,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   EngineConfig dco_decode_engine_config(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 6)
-      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    if (arr.length != 7)
+      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
     return EngineConfig(
       dataDir: dco_decode_String(arr[0]),
       python: dco_decode_opt_String(arr[1]),
@@ -2643,6 +2643,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       quickjs: dco_decode_opt_String(arr[3]),
       caDir: dco_decode_opt_String(arr[4]),
       ytdlpOverride: dco_decode_opt_String(arr[5]),
+      bundledYtdlp: dco_decode_opt_String(arr[6]),
     );
   }
 
@@ -3132,6 +3133,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_quickjs = sse_decode_opt_String(deserializer);
     var var_caDir = sse_decode_opt_String(deserializer);
     var var_ytdlpOverride = sse_decode_opt_String(deserializer);
+    var var_bundledYtdlp = sse_decode_opt_String(deserializer);
     return EngineConfig(
       dataDir: var_dataDir,
       python: var_python,
@@ -3139,6 +3141,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       quickjs: var_quickjs,
       caDir: var_caDir,
       ytdlpOverride: var_ytdlpOverride,
+      bundledYtdlp: var_bundledYtdlp,
     );
   }
 
@@ -3755,6 +3758,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_String(self.quickjs, serializer);
     sse_encode_opt_String(self.caDir, serializer);
     sse_encode_opt_String(self.ytdlpOverride, serializer);
+    sse_encode_opt_String(self.bundledYtdlp, serializer);
   }
 
   @protected

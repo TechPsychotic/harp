@@ -139,9 +139,8 @@ account access without a paid developer key).**
 ## 3. Known bugs and weak spots in the implementation
 
 **Reliability**
-- **Android depends on GitHub at first launch.** yt-dlp is downloaded and verified on first run;
-  if GitHub is unreachable (as during the 504 outage), nothing can stream. A fallback copy of the
-  yt-dlp zipapp should ship inside the APK.
+- ~~Android depends on GitHub at first launch~~ fixed: a verified yt-dlp ships inside the APK as
+  a fallback; the first download also has a time limit now.
 - **Only SHA-256 checks yt-dlp downloads.** The checksum file's GPG signature is not verified.
 - **No database migrations.** Tables are created with `IF NOT EXISTS`; the first schema change
   will need a versioned migration step.

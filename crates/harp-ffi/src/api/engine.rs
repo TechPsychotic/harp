@@ -71,6 +71,8 @@ pub struct EngineConfig {
     pub ca_dir: Option<String>,
     /// Use a yt-dlp that is already on this path instead of downloading one.
     pub ytdlp_override: Option<String>,
+    /// Android: a yt-dlp shipped inside the app, used only if downloading one fails.
+    pub bundled_ytdlp: Option<String>,
 }
 
 struct Engine {
@@ -174,7 +176,15 @@ pub fn start_engine(cfg: EngineConfig) -> Result<(), String> {
         Tool::binary(p)
     } else if let Some(py) = &cfg.python {
         // Android: bundled static Python runs the verified yt-dlp zipapp, behind a proxy.
-        let zip = install::ensure(&tools, install::asset_name("android", "aarch64", true), false).map_err(e)?;
+        // Download (and verify) the current yt-dlp; if that fails and there is no earlier
+        // copy, fall back to the one shipped in the app.
+        let zip = match install::ensure(&tools, install::asset_name("android", "aarch64", true), false) {
+            Ok(p) => p,
+            Err(err) => match cfg.bundled_ytdlp.as_deref().map(PathBuf::from).filter(|p| p.is_file()) {
+                Some(p) => p,
+                None => return Err(e(err)),
+            },
+        };
         let mut t = Tool::zipapp(py, zip);
         let px = Proxy::start().map_err(e)?;
         t.proxy = Some(px.url.clone());

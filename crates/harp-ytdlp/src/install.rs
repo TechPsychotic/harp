@@ -40,7 +40,13 @@ pub fn sha256_hex(bytes: &[u8]) -> String {
 }
 
 fn get(url: &str) -> Result<Vec<u8>> {
-    let mut resp = ureq::get(url).call().map_err(|e| Error::Download(e.to_string()))?;
+    // A time limit, so a GitHub outage cannot hang the app's first start.
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .timeout_connect(Some(std::time::Duration::from_secs(15)))
+        .timeout_global(Some(std::time::Duration::from_secs(120)))
+        .build()
+        .into();
+    let mut resp = agent.get(url).call().map_err(|e| Error::Download(e.to_string()))?;
     let mut buf = Vec::new();
     resp.body_mut()
         .as_reader()
