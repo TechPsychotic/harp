@@ -6,6 +6,7 @@ import '../player/controller.dart';
 import '../settings.dart';
 import '../src/rust/api/engine.dart' as api;
 import '../theme/glass.dart';
+import '../widgets/cover.dart';
 import '../widgets/song_actions.dart';
 import 'playlist.dart' show AuroraScaffold;
 
@@ -166,11 +167,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   trailing: TextButton(
                     onPressed: () async {
                       await api.clearThumbnailCache();
+                      ThumbCache.forgetAll();
                       _refresh();
                       if (context.mounted) toast(context, 'Cover cache cleared');
                     },
                     child: const Text('Clear'),
                   ),
+                ),
+              ]),
+              _Section('Performance', [
+                SwitchListTile(
+                  title: const Text('Show frame times'),
+                  subtitle: Text('A small readout of how smooth the app is. If something feels slow, the numbers help find out why.', style: TextStyle(color: tok.textDim)),
+                  value: s.perfOverlay,
+                  onChanged: s.setPerfOverlay,
                 ),
               ]),
               _Section('About', [
@@ -182,7 +192,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     if (widget.embedded) {
       return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Padding(padding: const EdgeInsets.fromLTRB(16, 20, 16, 4), child: Text('Settings', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700))),
+        const PageTitle('Settings'),
         Expanded(child: list),
       ]);
     }
@@ -203,7 +213,7 @@ class _Section extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(top: 16),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Padding(padding: const EdgeInsets.fromLTRB(4, 0, 4, 8), child: Text(title, style: TextStyle(fontWeight: FontWeight.w700, color: context.tok.textDim))),
+        Padding(padding: const EdgeInsets.fromLTRB(4, 0, 4, 8), child: Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700))),
         GlassCard(padding: EdgeInsets.zero, child: Column(children: children)),
       ]),
     );

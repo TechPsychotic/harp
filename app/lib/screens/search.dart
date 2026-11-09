@@ -17,7 +17,7 @@ class SearchScreen extends StatefulWidget {
   State<SearchScreen> createState() => _SearchScreenState();
 }
 
-const _kinds = [('songs', 'Songs'), ('albums', 'Albums'), ('playlists', 'Playlists'), ('podcasts', 'Podcasts')];
+const _kinds = [('songs', 'Songs'), ('artists', 'Artists'), ('albums', 'Albums'), ('playlists', 'Playlists'), ('podcasts', 'Podcasts')];
 
 class _SearchScreenState extends State<SearchScreen> {
   final _ctl = TextEditingController();
@@ -103,10 +103,7 @@ class _SearchScreenState extends State<SearchScreen> {
     final p = widget.player;
     final hasResults = _kind == 'songs' ? _songs.isNotEmpty : _collections.isNotEmpty;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
-        child: Text('Search', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
-      ),
+      const PageTitle('Search'),
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
         child: GlassCard(
@@ -121,7 +118,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 onSubmitted: _run,
                 textInputAction: TextInputAction.search,
                 decoration: InputDecoration(
-                  hintText: _offline ? 'Search your downloads' : 'Songs, albums, playlists, podcasts',
+                  hintText: _offline ? 'Search your downloads' : 'Songs, artists, albums, playlists, podcasts',
                   border: InputBorder.none,
                   filled: false,
                 ),
@@ -163,7 +160,7 @@ class _SearchScreenState extends State<SearchScreen> {
             : !_hasQuery
                 ? _historyView(tok)
                 : !hasResults
-                    ? Center(child: Text(_busy ? '' : 'No results', style: TextStyle(color: tok.textFaint)))
+                    ? (_busy ? const SizedBox.shrink() : const EmptyState(icon: Icons.search_off_rounded, text: 'No results'))
                     : _kind == 'songs'
                         ? ListView.builder(
                             padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
@@ -181,7 +178,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Widget _historyView(HarpTokens tok) {
     if (_history.isEmpty) {
-      return Center(child: Text(_offline ? 'Offline: searching downloaded songs' : 'Search for songs, albums, playlists and podcasts', style: TextStyle(color: tok.textFaint)));
+      return EmptyState(icon: Icons.search_rounded, text: _offline ? 'Offline: searching downloaded songs' : 'Search for songs, artists, albums, playlists and podcasts');
     }
     return ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 16), children: [
       Row(children: [
@@ -218,7 +215,7 @@ class _CollectionRow extends StatelessWidget {
         radius: Radii.tile,
         onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CollectionScreen(player: player, info: c))),
         child: Row(children: [
-          Cover(url: c.thumbnail, seed: c.id, size: 56),
+          Cover(url: c.thumbnail, seed: c.id, size: 56, round: c.kind == 'artist'),
           const SizedBox(width: 12),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

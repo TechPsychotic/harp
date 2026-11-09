@@ -2187,11 +2187,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   CollectionDetail dco_decode_collection_detail(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 2)
-      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
     return CollectionDetail(
       info: dco_decode_collection_view(arr[0]),
       songs: dco_decode_list_song_view(arr[1]),
+      related: dco_decode_list_collection_view(arr[2]),
     );
   }
 
@@ -2273,12 +2274,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ImportPlaylistView dco_decode_import_playlist_view(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 3)
-      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
     return ImportPlaylistView(
       name: dco_decode_String(arr[0]),
       tracks: dco_decode_list_import_track_view(arr[1]),
       resolved: dco_decode_list_song_view(arr[2]),
+      notice: dco_decode_opt_String(arr[3]),
     );
   }
 
@@ -2614,7 +2616,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_info = sse_decode_collection_view(deserializer);
     var var_songs = sse_decode_list_song_view(deserializer);
-    return CollectionDetail(info: var_info, songs: var_songs);
+    var var_related = sse_decode_list_collection_view(deserializer);
+    return CollectionDetail(
+      info: var_info,
+      songs: var_songs,
+      related: var_related,
+    );
   }
 
   @protected
@@ -2705,10 +2712,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_name = sse_decode_String(deserializer);
     var var_tracks = sse_decode_list_import_track_view(deserializer);
     var var_resolved = sse_decode_list_song_view(deserializer);
+    var var_notice = sse_decode_opt_String(deserializer);
     return ImportPlaylistView(
       name: var_name,
       tracks: var_tracks,
       resolved: var_resolved,
+      notice: var_notice,
     );
   }
 
@@ -3150,6 +3159,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_collection_view(self.info, serializer);
     sse_encode_list_song_view(self.songs, serializer);
+    sse_encode_list_collection_view(self.related, serializer);
   }
 
   @protected
@@ -3218,6 +3228,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.name, serializer);
     sse_encode_list_import_track_view(self.tracks, serializer);
     sse_encode_list_song_view(self.resolved, serializer);
+    sse_encode_opt_String(self.notice, serializer);
   }
 
   @protected

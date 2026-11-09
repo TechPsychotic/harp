@@ -109,6 +109,59 @@ ThemeData harpTheme(Color accent, Brightness b) {
       thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
     ),
     dividerColor: Colors.transparent,
+    // Every control shares one shape (rounded rectangles, never pills) and one weight.
+    filledButtonTheme: FilledButtonThemeData(style: FilledButton.styleFrom(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.control)),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+      textStyle: const TextStyle(fontWeight: FontWeight.w600),
+    )),
+    outlinedButtonTheme: OutlinedButtonThemeData(style: OutlinedButton.styleFrom(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.control)),
+      side: BorderSide(color: tok.glassEdge.withValues(alpha: 0.25)),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+      foregroundColor: tok.text,
+      textStyle: const TextStyle(fontWeight: FontWeight.w600),
+    )),
+    textButtonTheme: TextButtonThemeData(style: TextButton.styleFrom(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.control)),
+      textStyle: const TextStyle(fontWeight: FontWeight.w600),
+    )),
+    iconButtonTheme: IconButtonThemeData(style: IconButton.styleFrom(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.control)),
+    )),
+    appBarTheme: AppBarTheme(
+      backgroundColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      centerTitle: false,
+      foregroundColor: tok.text,
+      titleTextStyle: TextStyle(color: tok.text, fontSize: 20, fontWeight: FontWeight.w700),
+    ),
+    popupMenuTheme: PopupMenuThemeData(
+      color: b == Brightness.dark ? const Color(0xF21B1B2A) : const Color(0xF2FFFFFF),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.tile)),
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: b == Brightness.dark ? const Color(0xFF1B1A28) : Colors.white,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.sheet)),
+    ),
+    snackBarTheme: SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.control)),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      hintStyle: TextStyle(color: tok.textFaint),
+      filled: false,
+      border: const UnderlineInputBorder(),
+    ),
+    switchTheme: SwitchThemeData(
+      thumbColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? Colors.white : tok.textDim),
+      trackColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? accent : tok.text.withValues(alpha: 0.18)),
+      trackOutlineColor: WidgetStatePropertyAll(Colors.transparent),
+    ),
+    listTileTheme: const ListTileThemeData(contentPadding: EdgeInsets.symmetric(horizontal: 16)),
     // Android's predictive back gesture previews the screen you are going back to.
     pageTransitionsTheme: const PageTransitionsTheme(builders: {
       TargetPlatform.android: PredictiveBackPageTransitionsBuilder(),
@@ -414,6 +467,48 @@ class GlassChip extends StatelessWidget {
             Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
           ]),
         ),
+      ),
+    );
+  }
+}
+
+/// The big title at the top of every main screen (Apple Music style).
+class PageTitle extends StatelessWidget {
+  const PageTitle(this.title, {super.key, this.leading, this.actions = const []});
+  final String title;
+  final Widget? leading;
+  final List<Widget> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 18, 8, 8),
+      child: Row(children: [
+        if (leading != null) ...[leading!, const SizedBox(width: 12)],
+        Expanded(child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, height: 1.1))),
+        ...actions,
+      ]),
+    );
+  }
+}
+
+/// What a list shows when it has nothing to show.
+class EmptyState extends StatelessWidget {
+  const EmptyState({super.key, required this.icon, required this.text});
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final tok = context.tok;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 40, color: tok.textFaint),
+          const SizedBox(height: 12),
+          Text(text, textAlign: TextAlign.center, style: TextStyle(color: tok.textDim)),
+        ]),
       ),
     );
   }

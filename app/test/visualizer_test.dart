@@ -47,11 +47,13 @@ void audioChainTests() {
 void settingsTests() {
   test('effects level: auto follows the governor, explicit choices win', () {
     final s = AppSettings();
-    expect(s.effects, 'full');
-    expect(s.fullEffects, isTrue);
-    s.effectsPref = 'reduced';
+    expect(s.effectsPref, 'reduced', reason: 'the light background is the default');
     expect(s.effects, 'reduced');
     expect(s.fullEffects, isFalse);
+    s.effectsPref = 'auto';
+    expect(s.effects, 'full', reason: 'auto starts full and only steps down when frames are slow');
+    s.effectsPref = 'full';
+    expect(s.fullEffects, isTrue);
     s.effectsPref = 'off';
     expect(s.flatBackground, isTrue);
   });

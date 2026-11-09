@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `collection_view`, `e`, `eng`, `import_view`, `lyrics_view`, `queue_view`, `request`, `serde_json_string`, `song_from_json`, `song`, `spotify_embed_url`, `view`, `views`
+// These functions are ignored because they are not marked as `pub`: `collection_view`, `e`, `eng`, `import_view`, `lyrics_view`, `queue_view`, `request`, `serde_json_string`, `song_from_json`, `song`, `spotify_embed_url`, `view`, `views`, `youtube_list_id`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Engine`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
@@ -248,7 +248,8 @@ Future<List<CollectionView>> searchCollections({
   query: query,
 );
 
-/// An album, playlist or podcast show with its songs or episodes.
+/// An album, playlist, podcast show or artist, with its songs or episodes (a long
+/// playlist is read in full) and, for an artist, their albums and more.
 Future<CollectionDetail> openCollection({required String id}) =>
     RustLib.instance.api.crateApiEngineOpenCollection(id: id);
 
@@ -292,10 +293,17 @@ class CollectionDetail {
   final CollectionView info;
   final List<SongView> songs;
 
-  const CollectionDetail({required this.info, required this.songs});
+  /// For an artist: their albums, singles, playlists and similar artists.
+  final List<CollectionView> related;
+
+  const CollectionDetail({
+    required this.info,
+    required this.songs,
+    required this.related,
+  });
 
   @override
-  int get hashCode => info.hashCode ^ songs.hashCode;
+  int get hashCode => info.hashCode ^ songs.hashCode ^ related.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -303,7 +311,8 @@ class CollectionDetail {
       other is CollectionDetail &&
           runtimeType == other.runtimeType &&
           info == other.info &&
-          songs == other.songs;
+          songs == other.songs &&
+          related == other.related;
 }
 
 class CollectionView {
@@ -474,14 +483,19 @@ class ImportPlaylistView {
   /// When the source already gave playable songs (a YouTube playlist), no matching is needed.
   final List<SongView> resolved;
 
+  /// Something worth telling the user (a source that cuts long lists short).
+  final String? notice;
+
   const ImportPlaylistView({
     required this.name,
     required this.tracks,
     required this.resolved,
+    this.notice,
   });
 
   @override
-  int get hashCode => name.hashCode ^ tracks.hashCode ^ resolved.hashCode;
+  int get hashCode =>
+      name.hashCode ^ tracks.hashCode ^ resolved.hashCode ^ notice.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -490,7 +504,8 @@ class ImportPlaylistView {
           runtimeType == other.runtimeType &&
           name == other.name &&
           tracks == other.tracks &&
-          resolved == other.resolved;
+          resolved == other.resolved &&
+          notice == other.notice;
 }
 
 class ImportTrackView {

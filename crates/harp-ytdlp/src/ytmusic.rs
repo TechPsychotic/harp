@@ -228,6 +228,7 @@ pub enum Kind {
     Albums,
     Playlists,
     Podcasts,
+    Artists,
 }
 
 impl Kind {
@@ -236,6 +237,7 @@ impl Kind {
             "albums" => Kind::Albums,
             "playlists" => Kind::Playlists,
             "podcasts" => Kind::Podcasts,
+            "artists" => Kind::Artists,
             _ => Kind::Songs,
         }
     }
@@ -247,6 +249,7 @@ impl Kind {
             Kind::Albums => "IY",
             Kind::Playlists => "Io",
             Kind::Podcasts => "JQ",
+            Kind::Artists => "Ig",
         };
         format!("EgWKAQ{p2}AWoKEAkQBRAKEAMQBA%3D%3D")
     }
@@ -271,6 +274,8 @@ fn kind_of_id(id: &str) -> Option<&'static str> {
         Some("podcast")
     } else if id.starts_with("VL") {
         Some("playlist")
+    } else if id.starts_with("UC") {
+        Some("artist")
     } else {
         None
     }
@@ -308,37 +313,127 @@ pub fn parse_collections(v: &Value) -> Vec<Collection> {
         .collect()
 }
 
-/// An album, playlist or show's page: its details and its songs or episodes.
-pub fn open(browse_id: &str) -> Result<(Collection, Vec<Song>)> {
-    let v = post("browse", json!({"browseId": browse_id}))?;
-    Ok(parse_page(&v, browse_id))
+/// The token for the next page of a long playlist, if there is one.
+pub fn next_token(v: &Value) -> Option<String> {
+    let mut cmds = vec![];
+    find_all(v, "continuationCommand", &mut cmds);
+    if let Some(tok) = cmds.iter().find_map(|c| c.get("token").and_then(Value::as_str)) {
+        return Some(tok.to_string());
+    }
+    let mut old = vec![];
+    find_all(v, "nextContinuationData", &mut old);
+    old.iter().find_map(|c| c.get("continuation").and_then(Value::as_str)).map(String::from)
 }
 
-pub fn parse_page(v: &Value, browse_id: &str) -> (Collection, Vec<Song>) {
+/// The most songs read from one playlist.
+pub const MAX_SONGS: usize = 5000;
+
+/// An album, playlist or show's page: its details and ALL its songs or
+/// episodes (a playlist comes 100 at a time, so the next pages are followed).
+pub fn open(browse_id: &str) -> Result<(Collection, Vec<Song>)> {
+    let v = post("browse", json!({"browseId": browse_id}))?;
+    let (collection, mut songs) = parse_page(&v, browse_id);
+    let ctx = PageCtx {
+        title: collection.title.clone(),
+        owner: collection.subtitle.clone(),
+        owner_id: None,
+        cover: collection.thumbnail.clone(),
+        kind: kind_of_id(browse_id).unwrap_or("playlist"),
+    };
+    let mut seen: std::collections::HashSet<String> = songs.iter().map(|s| s.id.clone()).collect();
+    let mut token = next_token(&v);
+    let mut pages = 0;
+    while let Some(t) = token.take() {
+        if pages >= 60 || songs.len() >= MAX_SONGS {
+            break;
+        }
+        pages += 1;
+        // A failed later page keeps what was already read.
+        let Ok(page) = post("browse", json!({"continuation": t})) else { break };
+        let before = songs.len();
+        collect_songs(&page, &ctx, &mut seen, &mut songs);
+        if songs.len() == before {
+            break;
+        }
+        token = next_token(&page);
+    }
+    Ok((collection, songs))
+}
+
+/// An artist's page: their songs, and their albums, singles, playlists and similar artists.
+pub fn open_artist(browse_id: &str) -> Result<(Collection, Vec<Song>, Vec<Collection>)> {
+    let v = post("browse", json!({"browseId": browse_id}))?;
+    let (artist, mut songs, related, all_songs_id) = parse_artist(&v, browse_id);
+    // The page shows five top songs; the shelf's title links to the full list.
+    if let Some(id) = all_songs_id {
+        if let Ok((_, all)) = open(&id) {
+            if all.len() > songs.len() {
+                songs = all;
+                songs.truncate(300);
+            }
+        }
+    }
+    Ok((artist, songs, related))
+}
+
+pub fn parse_artist(v: &Value, browse_id: &str) -> (Collection, Vec<Song>, Vec<Collection>, Option<String>) {
     let mut headers = vec![];
-    find_all(v, "musicResponsiveHeaderRenderer", &mut headers);
+    find_all(v, "musicImmersiveHeaderRenderer", &mut headers);
     let header = headers.first().copied();
-    let title = header
-        .and_then(|h| h.pointer("/title/runs/0/text"))
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .to_string();
-    let strap: Option<&Vec<Value>> = header
-        .and_then(|h| h.pointer("/straplineTextOne/runs").or_else(|| h.pointer("/subtitle/runs")))
-        .and_then(Value::as_array);
-    let owner = strap.and_then(|r| r.first()).and_then(text).unwrap_or("").to_string();
-    let owner_id = strap
-        .and_then(|r| r.first())
-        .and_then(|r| r.pointer("/navigationEndpoint/browseEndpoint/browseId"))
-        .and_then(Value::as_str)
-        .map(String::from);
+    let name = header.and_then(|h| h.pointer("/title/runs/0/text")).and_then(Value::as_str).unwrap_or("").to_string();
     let cover = header.and_then(thumb);
-    let kind = kind_of_id(browse_id).unwrap_or("playlist");
-    let collection = Collection { id: browse_id.into(), title: title.clone(), subtitle: owner.clone(), thumbnail: cover.clone(), kind: kind.into() };
+    let artist = Collection { id: browse_id.into(), title: name.clone(), subtitle: "Artist".into(), thumbnail: cover.clone(), kind: "artist".into() };
 
+    // The first shelf of song rows is "Top songs".
+    let mut shelves = vec![];
+    find_all(v, "musicShelfRenderer", &mut shelves);
     let mut songs = vec![];
-    let mut seen = std::collections::HashSet::new();
+    let mut all_songs_id = None;
+    if let Some(shelf) = shelves.first() {
+        let ctx = PageCtx { title: name.clone(), owner: name.clone(), owner_id: Some(browse_id.into()), cover: cover.clone(), kind: "playlist" };
+        let mut seen = std::collections::HashSet::new();
+        collect_songs(shelf, &ctx, &mut seen, &mut songs);
+        all_songs_id = shelf
+            .pointer("/bottomEndpoint/browseEndpoint/browseId")
+            .or_else(|| shelf.pointer("/title/runs/0/navigationEndpoint/browseEndpoint/browseId"))
+            .and_then(Value::as_str)
+            .filter(|id| id.starts_with("VL"))
+            .map(String::from);
+    }
 
+    // Albums, singles, playlists, similar artists: the carousels of cards.
+    let mut cards = vec![];
+    find_all(v, "musicTwoRowItemRenderer", &mut cards);
+    let mut seen = std::collections::HashSet::new();
+    let related = cards
+        .into_iter()
+        .filter_map(|c| {
+            let id = c.pointer("/navigationEndpoint/browseEndpoint/browseId").and_then(Value::as_str)?;
+            let kind = kind_of_id(id)?;
+            if id == browse_id || !seen.insert(id.to_string()) {
+                return None;
+            }
+            let title = c.pointer("/title/runs/0/text").and_then(Value::as_str)?.to_string();
+            let subtitle = c.pointer("/subtitle/runs").and_then(Value::as_array).map(|r| r.iter().filter_map(text).collect::<String>()).unwrap_or_default();
+            Some(Collection { id: id.into(), title, subtitle, thumbnail: thumb(c), kind: kind.into() })
+        })
+        .collect();
+    (artist, songs, related, all_songs_id)
+}
+
+
+/// What a page's rows need to fill in what a row itself leaves out.
+struct PageCtx {
+    title: String,
+    owner: String,
+    owner_id: Option<String>,
+    cover: Option<String>,
+    kind: &'static str,
+}
+
+/// Reads every song row (and podcast episode) in a page or a continuation.
+fn collect_songs(v: &Value, ctx: &PageCtx, seen: &mut std::collections::HashSet<String>, songs: &mut Vec<Song>) {
+    let (title, owner, owner_id, cover, kind) = (&ctx.title, &ctx.owner, &ctx.owner_id, &ctx.cover, ctx.kind);
     // Albums and playlists: rows of songs.
     let mut rows = vec![];
     find_all(v, "musicResponsiveListItemRenderer", &mut rows);
@@ -396,6 +491,34 @@ pub fn parse_page(v: &Value, browse_id: &str) -> (Collection, Vec<Song>) {
             thumbnail: thumb(it).or_else(|| cover.clone()),
         });
     }
+}
+
+pub fn parse_page(v: &Value, browse_id: &str) -> (Collection, Vec<Song>) {
+    let mut headers = vec![];
+    find_all(v, "musicResponsiveHeaderRenderer", &mut headers);
+    let header = headers.first().copied();
+    let title = header
+        .and_then(|h| h.pointer("/title/runs/0/text"))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    let strap: Option<&Vec<Value>> = header
+        .and_then(|h| h.pointer("/straplineTextOne/runs").or_else(|| h.pointer("/subtitle/runs")))
+        .and_then(Value::as_array);
+    let owner = strap.and_then(|r| r.first()).and_then(text).unwrap_or("").to_string();
+    let owner_id = strap
+        .and_then(|r| r.first())
+        .and_then(|r| r.pointer("/navigationEndpoint/browseEndpoint/browseId"))
+        .and_then(Value::as_str)
+        .map(String::from);
+    let cover = header.and_then(thumb);
+    let kind = kind_of_id(browse_id).unwrap_or("playlist");
+    let collection = Collection { id: browse_id.into(), title: title.clone(), subtitle: owner.clone(), thumbnail: cover.clone(), kind: kind.into() };
+
+    let ctx = PageCtx { title: title.clone(), owner: owner.clone(), owner_id: owner_id.clone(), cover: cover.clone(), kind };
+    let mut songs = vec![];
+    let mut seen = std::collections::HashSet::new();
+    collect_songs(v, &ctx, &mut seen, &mut songs);
     (collection, songs)
 }
 
@@ -485,12 +608,47 @@ mod tests {
     }
 
     #[test]
+    fn long_playlists_are_followed_page_by_page() {
+        // The first page ends in a token; the next page has rows and another token.
+        let first = fixture(include_str!("../tests/fixtures/ytm_playlist_paged.json"));
+        assert_eq!(next_token(&first).as_deref(), Some("FIRSTTOKEN"));
+        let more = fixture(include_str!("../tests/fixtures/ytm_continuation.json"));
+        let ctx = PageCtx { title: "T".into(), owner: "Owner".into(), owner_id: None, cover: None, kind: "playlist" };
+        let (mut seen, mut songs) = (std::collections::HashSet::new(), vec![]);
+        collect_songs(&more, &ctx, &mut seen, &mut songs);
+        assert_eq!(songs.len(), 2);
+        assert!(songs[0].id.len() == 11 && !songs[0].artist.is_empty());
+        assert!(next_token(&more).is_some(), "and it points on to the page after");
+        // The same rows twice add nothing, which is what stops the loop.
+        collect_songs(&more, &ctx, &mut seen, &mut songs);
+        assert_eq!(songs.len(), 2);
+        assert_eq!(next_token(&json!({"a": 1})), None);
+        let old = json!({"x": {"nextContinuationData": {"continuation": "OLD"}}});
+        assert_eq!(next_token(&old).as_deref(), Some("OLD"));
+    }
+
+    #[test]
+    fn artist_page_has_songs_albums_and_a_link_to_all_songs() {
+        let (a, songs, related, all) = parse_artist(&fixture(include_str!("../tests/fixtures/ytm_artist.json")), "UCDxKh1gFWeYsqePvgVzmPoQ");
+        assert_eq!((a.title.as_str(), a.kind.as_str()), ("Arijit Singh", "artist"));
+        assert!(a.thumbnail.is_some());
+        assert_eq!(songs.len(), 3);
+        assert!(all.as_deref().unwrap().starts_with("VLOLAK5uy_"), "the shelf links to the full song list");
+        let kinds: std::collections::HashSet<_> = related.iter().map(|c| c.kind.as_str()).collect();
+        assert!(kinds.contains("album") && kinds.contains("playlist") && kinds.contains("artist"), "{kinds:?}");
+        assert!(related.iter().all(|c| !c.title.is_empty() && c.id != "UCDxKh1gFWeYsqePvgVzmPoQ"));
+    }
+
+    #[test]
     fn kinds_and_filters() {
+        assert_eq!(Kind::parse("artists"), Kind::Artists);
+        assert!(Kind::Artists.params().starts_with("EgWKAQIg"));
+        assert_eq!(kind_of_id("UCabc"), Some("artist"));
         assert_eq!(Kind::parse("podcasts"), Kind::Podcasts);
         assert_eq!(Kind::parse("x"), Kind::Songs);
         assert!(Kind::Albums.params().starts_with("EgWKAQIY"));
         assert_eq!(kind_of_id("VLPL1"), Some("playlist"));
-        assert_eq!(kind_of_id("UC1"), None);
+        assert_eq!(kind_of_id("MPED1"), None, "music videos are not collections");
     }
 
     #[test]
@@ -507,6 +665,22 @@ mod tests {
 #[cfg(test)]
 mod live {
     use super::*;
+
+    #[test]
+    #[ignore]
+    fn live_long_playlist_and_artist() {
+        // A public playlist with several hundred songs: all of them, not the first 100.
+        let (c, songs) = open("VLPLwNv9Hhd8gZjNoQdpd2kBa3fwXNeJjzDX").unwrap();
+        assert_eq!(c.kind, "playlist");
+        assert!(songs.len() > 150, "got {}", songs.len());
+        let ids: std::collections::HashSet<_> = songs.iter().map(|s| &s.id).collect();
+        assert_eq!(ids.len(), songs.len(), "no duplicates across pages");
+        // An artist found by search, opened with their full song list and albums.
+        let found = search_collections(Kind::Artists, "arijit singh", 5).unwrap();
+        assert_eq!(found[0].kind, "artist");
+        let (a, songs, related) = open_artist(&found[0].id).unwrap();
+        assert!(a.title.contains("Arijit") && songs.len() > 5 && !related.is_empty());
+    }
 
     #[test]
     #[ignore]

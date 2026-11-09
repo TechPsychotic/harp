@@ -4,6 +4,7 @@ import '../player/controller.dart';
 import '../theme/glass.dart';
 import '../theme/logo.dart';
 import '../widgets/cover.dart';
+import '../perf.dart';
 import 'home.dart';
 import 'library.dart';
 import 'now_playing.dart';
@@ -53,7 +54,8 @@ class _ShellState extends State<Shell> {
             final wide = c.maxWidth >= 760;
             final content = IndexedStack(index: _tab, children: _pages);
             return Scaffold(
-              body: SafeArea(
+              body: Stack(children: [
+                SafeArea(
                 bottom: false,
                 child: Column(children: [
                   Expanded(
@@ -66,7 +68,9 @@ class _ShellState extends State<Shell> {
                   ),
                   _Dock(player: p, blur: p.settings.fullEffects, onOpen: _openNowPlaying, nav: wide ? null : _NavBar(tab: _tab, onTap: (i) => setState(() => _tab = i))),
                 ]),
-              ),
+                ),
+                if (p.settings.perfOverlay) Positioned(top: MediaQuery.paddingOf(context).top + 4, right: 8, child: const FrameMeter()),
+              ]),
             );
           }),
         );

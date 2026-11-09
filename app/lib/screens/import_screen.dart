@@ -42,6 +42,7 @@ class _ImportScreenState extends State<ImportScreen> {
   List<_Row> _rows = [];
   int _done = 0;
   bool _cancel = false;
+  String? _notice; // e.g. Spotify cut the list at 100
   final _name = TextEditingController();
 
   PlayerController get p => widget.player;
@@ -94,6 +95,7 @@ class _ImportScreenState extends State<ImportScreen> {
 
   Future<void> _start(api.ImportPlaylistView pl) async {
     _chosen = pl;
+    _notice = pl.notice;
     _name.text = pl.name;
     _cancel = false;
     _done = 0;
@@ -105,14 +107,22 @@ class _ImportScreenState extends State<ImportScreen> {
     }
     _rows = [for (final t in pl.tracks) _Row(t, null)];
     setState(() => _step = _Step.matching);
-    for (var i = 0; i < _rows.length && !_cancel && mounted; i++) {
-      try {
-        _rows[i].m = await api.importMatch(t: _rows[i].track);
-      } catch (_) {
-        _rows[i].m = const api.MatchView(score: 0, confidence: 'none', alternatives: []);
+    // Four searches at a time: a thousand songs takes minutes, not a quarter of an hour.
+    var next = 0;
+    Future<void> worker() async {
+      while (!_cancel && mounted) {
+        final i = next++;
+        if (i >= _rows.length) break;
+        try {
+          _rows[i].m = await api.importMatch(t: _rows[i].track);
+        } catch (_) {
+          _rows[i].m = const api.MatchView(score: 0, confidence: 'none', alternatives: []);
+        }
+        if (mounted) setState(() => _done++);
       }
-      if (mounted) setState(() => _done = i + 1);
     }
+
+    await Future.wait(List.generate(4, (_) => worker()));
     if (mounted && !_cancel) {
       ThumbCache.precache(_rows.map((r) => r.song?.thumbnail ?? ''));
       setState(() => _step = _Step.review);
@@ -197,6 +207,7 @@ class _ImportScreenState extends State<ImportScreen> {
                   LinearProgressIndicator(value: _rows.isEmpty ? null : _done / _rows.length),
                   const SizedBox(height: 8),
                   Text('$_done of ${_rows.length}', style: TextStyle(color: tok.textDim)),
+                  if (_notice != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(_notice!, textAlign: TextAlign.center, style: TextStyle(color: tok.textDim, fontSize: 12.5))),
                   const SizedBox(height: 16),
                   TextButton(onPressed: () { _cancel = true; setState(() => _step = _Step.source); }, child: const Text('Cancel')),
                 ]),
@@ -216,6 +227,18 @@ class _ImportScreenState extends State<ImportScreen> {
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
         child: Column(children: [
+          if (_notice != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: GlassCard(
+                padding: const EdgeInsets.all(12),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Icon(Icons.info_outline_rounded, size: 18),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text(_notice!, style: TextStyle(color: tok.textDim, fontSize: 12.5))),
+                ]),
+              ),
+            ),
           TextField(controller: _name, decoration: const InputDecoration(labelText: 'Playlist name')),
           const SizedBox(height: 8),
           Align(

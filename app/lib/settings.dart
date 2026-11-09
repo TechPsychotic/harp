@@ -19,8 +19,11 @@ class AppSettings extends ChangeNotifier {
 
   /// "auto" (watches the frame rate and backs off on slow machines), "full",
   /// "reduced" (still background, no blur) or "off" (flat).
-  String effectsPref = 'auto';
+  String effectsPref = 'reduced';
   String _autoLevel = 'full';
+
+  /// Shows frame times on screen, to see what is slow.
+  bool perfOverlay = false;
 
   /// Size of the play cache in MB (0 = off). Songs about to play are fetched ahead of time.
   int cacheMb = 512;
@@ -76,7 +79,8 @@ class AppSettings extends ChangeNotifier {
     downloadQuality = await get('download_quality') ?? 'high';
     offline = await get('offline') == '1';
     reactiveBackground = await get('reactive_bg') != '0';
-    effectsPref = await get('effects') ?? 'auto';
+    effectsPref = await get('effects') ?? 'reduced';
+    perfOverlay = await get('perf_overlay') == '1';
     _autoLevel = await get('effects_auto') ?? 'full';
     spatial = await get('spatial') ?? 'off';
     cacheMb = int.tryParse(await get('cache_mb') ?? '') ?? 512;
@@ -121,6 +125,12 @@ class AppSettings extends ChangeNotifier {
     cacheMb = v;
     notifyListeners();
     await _save('cache_mb', '$v');
+  }
+
+  Future<void> setPerfOverlay(bool v) async {
+    perfOverlay = v;
+    notifyListeners();
+    await _save('perf_overlay', v ? '1' : '0');
   }
 
   Future<void> setSpatial(String v) async {

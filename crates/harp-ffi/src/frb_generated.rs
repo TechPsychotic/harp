@@ -2137,9 +2137,11 @@ impl SseDecode for crate::api::engine::CollectionDetail {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_info = <crate::api::engine::CollectionView>::sse_decode(deserializer);
         let mut var_songs = <Vec<crate::api::engine::SongView>>::sse_decode(deserializer);
+        let mut var_related = <Vec<crate::api::engine::CollectionView>>::sse_decode(deserializer);
         return crate::api::engine::CollectionDetail {
             info: var_info,
             songs: var_songs,
+            related: var_related,
         };
     }
 }
@@ -2240,10 +2242,12 @@ impl SseDecode for crate::api::engine::ImportPlaylistView {
         let mut var_name = <String>::sse_decode(deserializer);
         let mut var_tracks = <Vec<crate::api::engine::ImportTrackView>>::sse_decode(deserializer);
         let mut var_resolved = <Vec<crate::api::engine::SongView>>::sse_decode(deserializer);
+        let mut var_notice = <Option<String>>::sse_decode(deserializer);
         return crate::api::engine::ImportPlaylistView {
             name: var_name,
             tracks: var_tracks,
             resolved: var_resolved,
+            notice: var_notice,
         };
     }
 }
@@ -2743,6 +2747,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::engine::CollectionDetail {
         [
             self.info.into_into_dart().into_dart(),
             self.songs.into_into_dart().into_dart(),
+            self.related.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -2860,6 +2865,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::engine::ImportPlaylistView {
             self.name.into_into_dart().into_dart(),
             self.tracks.into_into_dart().into_dart(),
             self.resolved.into_into_dart().into_dart(),
+            self.notice.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -3109,6 +3115,7 @@ impl SseEncode for crate::api::engine::CollectionDetail {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <crate::api::engine::CollectionView>::sse_encode(self.info, serializer);
         <Vec<crate::api::engine::SongView>>::sse_encode(self.songs, serializer);
+        <Vec<crate::api::engine::CollectionView>>::sse_encode(self.related, serializer);
     }
 }
 
@@ -3178,6 +3185,7 @@ impl SseEncode for crate::api::engine::ImportPlaylistView {
         <String>::sse_encode(self.name, serializer);
         <Vec<crate::api::engine::ImportTrackView>>::sse_encode(self.tracks, serializer);
         <Vec<crate::api::engine::SongView>>::sse_encode(self.resolved, serializer);
+        <Option<String>>::sse_encode(self.notice, serializer);
     }
 }
 

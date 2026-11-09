@@ -7,6 +7,7 @@ import '../widgets/cover.dart';
 import '../widgets/lyrics_pane.dart';
 import '../widgets/song_actions.dart';
 import '../widgets/song_tile.dart';
+import 'collection.dart';
 import 'playlist.dart' show AuroraScaffold;
 
 String _fmt(Duration d) {
@@ -92,7 +93,18 @@ class _Controls extends StatelessWidget {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(s.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
           const SizedBox(height: 4),
-          Text(s.artist, style: TextStyle(fontSize: 16, color: tok.textDim)),
+          InkWell(
+            borderRadius: BorderRadius.circular(Radii.chip),
+            onTap: s.artistId != null && s.artistId!.startsWith('UC')
+                ? () => Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => CollectionScreen(
+                        player: player,
+                        info: api.CollectionView(id: s.artistId!, title: s.artist.split(RegExp(r'[,&]')).first.trim(), subtitle: 'Artist', thumbnail: '', kind: 'artist'),
+                      ),
+                    ))
+                : null,
+            child: Text(s.artist, style: TextStyle(fontSize: 16, color: tok.textDim, decoration: s.artistId != null && s.artistId!.startsWith('UC') ? TextDecoration.underline : null, decorationColor: tok.textFaint)),
+          ),
         ]),
       ),
       if (player.currentReason != null) ...[

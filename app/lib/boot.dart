@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'src/rust/api/engine.dart' as api;
+import 'widgets/cover.dart';
 
 const _native = MethodChannel('dev.harp/native');
 
@@ -17,6 +18,7 @@ const _native = MethodChannel('dev.harp/native');
 Future<void> bootEngine() async {
   final support = await getApplicationSupportDirectory();
   final data = '${support.path}/harp';
+  await ThumbCache.init(data);
   if (Platform.isAndroid) {
     final lib = await _native.invokeMethod<String>('nativeLibraryDir') ?? '';
     final version = await _native.invokeMethod<String>('versionStamp') ?? '0';

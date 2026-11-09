@@ -701,6 +701,8 @@ pub struct ImportPlaylistView {
     pub tracks: Vec<ImportTrackView>,
     /// When the source already gave playable songs (a YouTube playlist), no matching is needed.
     pub resolved: Vec<SongView>,
+    /// Something worth telling the user (a source that cuts long lists short).
+    pub notice: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -721,6 +723,7 @@ fn import_view(p: imp::ImportedPlaylist) -> ImportPlaylistView {
             .map(|t| ImportTrackView { title: t.title, artist: t.artist, album: t.album, duration_secs: t.duration_secs })
             .collect(),
         resolved: vec![],
+        notice: None,
     }
 }
 
@@ -741,6 +744,16 @@ fn spotify_embed_url(url: &str) -> Option<String> {
     matches!(kind, "playlist" | "album").then(|| format!("https://open.spotify.com/embed/{kind}/{id}"))
 }
 
+/// The playlist id of a YouTube / YouTube Music link (`...?list=PL...`).
+fn youtube_list_id(url: &str) -> Option<String> {
+    let q = url.split_once('?')?.1;
+    let id = q.split(['&', '#']).find_map(|kv| kv.strip_prefix("list="))?;
+    (!id.is_empty()).then(|| id.to_string())
+}
+
+/// Spotify's public pages hand out at most this many songs of a playlist.
+const SPOTIFY_PAGE_CAP: usize = 100;
+
 /// Reads a public playlist link: Spotify, YouTube or YouTube Music.
 pub fn import_link(url: String) -> Result<Vec<ImportPlaylistView>, String> {
     let en = eng()?;
@@ -749,15 +762,38 @@ pub fn import_link(url: String) -> Result<Vec<ImportPlaylistView>, String> {
         let embed = spotify_embed_url(&url).ok_or("That Spotify link isn't a playlist or album.")?;
         let html = thumbs::get_text(&embed).map_err(e)?;
         let p = imp::parse_spotify_embed(&html).ok_or("Couldn't read that Spotify playlist (is it public?).")?;
-        return Ok(vec![import_view(p)]);
+        let capped = p.tracks.len() >= SPOTIFY_PAGE_CAP;
+        let mut v = import_view(p);
+        if capped {
+            v.notice = Some(
+                "Spotify's public page only shares the first 100 songs of a playlist, so this one may be longer. For the whole playlist, use Spotify's data export or an Exportify CSV (Import › From a file): they have no limit."
+                    .into(),
+            );
+        }
+        return Ok(vec![v]);
     }
     if url.contains("youtube.com") || url.contains("youtu.be") {
-        let songs = en.yt.playlist(&url, 500).map_err(e)?;
-        if songs.is_empty() {
+        // YouTube Music reads a playlist in full (100 at a time), with proper artists.
+        let mut resolved: Vec<SongView> = vec![];
+        let mut name = "YouTube playlist".to_string();
+        if let Some(list) = youtube_list_id(&url) {
+            if let Ok((c, songs)) = ytmusic::open(&format!("VL{list}")) {
+                if !songs.is_empty() {
+                    if !c.title.is_empty() {
+                        name = c.title;
+                    }
+                    resolved = views(en, songs.into_iter());
+                }
+            }
+        }
+        if resolved.is_empty() {
+            let songs = en.yt.playlist(&url, 5000).map_err(e)?;
+            resolved = views(en, songs.into_iter());
+        }
+        if resolved.is_empty() {
             return Err("No songs found at that link (is the playlist public or unlisted?).".into());
         }
-        let resolved = views(en, songs.into_iter());
-        return Ok(vec![ImportPlaylistView { name: "YouTube playlist".into(), tracks: vec![], resolved }]);
+        return Ok(vec![ImportPlaylistView { name, tracks: vec![], resolved, notice: None }]);
     }
     if url.contains("music.apple.com") || url.contains("amazon.") {
         return Err("Apple Music and Amazon Music don't share playlist contents in links. Export it (Apple Music: File > Library > Export Playlist) or paste the song list.".into());
@@ -788,6 +824,13 @@ pub fn import_match(t: ImportTrackView) -> Result<MatchView, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn youtube_list_ids() {
+        assert_eq!(youtube_list_id("https://music.youtube.com/playlist?list=PLabc123&si=x").as_deref(), Some("PLabc123"));
+        assert_eq!(youtube_list_id("https://www.youtube.com/watch?v=abc&list=RDabc").as_deref(), Some("RDabc"));
+        assert_eq!(youtube_list_id("https://www.youtube.com/watch?v=abc"), None);
+    }
 
     #[test]
     fn spotify_links() {
@@ -835,6 +878,8 @@ pub struct CollectionView {
 pub struct CollectionDetail {
     pub info: CollectionView,
     pub songs: Vec<SongView>,
+    /// For an artist: their albums, singles, playlists and similar artists.
+    pub related: Vec<CollectionView>,
 }
 
 fn collection_view(c: ytmusic::Collection) -> CollectionView {
@@ -852,11 +897,20 @@ pub fn search_collections(kind: String, query: String) -> Result<Vec<CollectionV
     Ok(v.into_iter().map(collection_view).collect())
 }
 
-/// An album, playlist or podcast show with its songs or episodes.
+/// An album, playlist, podcast show or artist, with its songs or episodes (a long
+/// playlist is read in full) and, for an artist, their albums and more.
 pub fn open_collection(id: String) -> Result<CollectionDetail, String> {
     let en = eng()?;
+    if id.starts_with("UC") {
+        let (a, songs, related) = ytmusic::open_artist(&id).map_err(e)?;
+        return Ok(CollectionDetail {
+            info: collection_view(a),
+            songs: views(en, songs.into_iter()),
+            related: related.into_iter().map(collection_view).collect(),
+        });
+    }
     let (c, songs) = ytmusic::open(&id).map_err(e)?;
-    Ok(CollectionDetail { info: collection_view(c), songs: views(en, songs.into_iter()) })
+    Ok(CollectionDetail { info: collection_view(c), songs: views(en, songs.into_iter()), related: vec![] })
 }
 
 /// Plays a list of songs: the first now, the rest queued after what you already added.

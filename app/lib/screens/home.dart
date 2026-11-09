@@ -8,7 +8,6 @@ import '../widgets/cover.dart';
 import '../widgets/shelf.dart';
 import 'import_screen.dart';
 import 'playlist.dart';
-import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.player});
@@ -101,20 +100,13 @@ class _HomeScreenState extends State<HomeScreen> {
       child: ListView(
         padding: const EdgeInsets.only(top: 12, bottom: 24),
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(children: [
-              const HarpLogo(size: 34),
-              const SizedBox(width: 12),
-              Expanded(child: Text(greeting, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700))),
-              if (_refreshing) const Padding(padding: EdgeInsets.only(right: 12), child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))),
+          PageTitle(
+            greeting,
+            leading: const HarpLogo(size: 34),
+            actions: [
+              if (_refreshing) const Padding(padding: EdgeInsets.only(right: 8), child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))),
               IconButton(tooltip: 'Refresh picks', icon: const Icon(Icons.refresh_rounded), onPressed: offline ? null : _forceRefresh),
-              IconButton(
-                tooltip: 'Settings',
-                icon: const Icon(Icons.settings_rounded),
-                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => SettingsScreen(player: p))),
-              ),
-            ]),
+            ],
           ),
           if (offline)
             Padding(
