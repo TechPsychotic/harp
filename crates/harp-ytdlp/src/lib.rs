@@ -12,6 +12,7 @@ pub mod install;
 pub mod lyrics;
 pub mod parse;
 pub mod proxy;
+pub mod spotify;
 pub mod thumbs;
 pub mod ytmusic;
 

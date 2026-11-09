@@ -8,6 +8,29 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-09 (late night): Exportify-style tools (core), roadmap rewrite
+
+**Added (in the Rust core, tested; not yet on any screen)**
+- **Spotify account connection, like Exportify**: sign in with your own Spotify developer
+  Client ID (PKCE, no secret, nothing of ours in between); reads every playlist you have and
+  your Liked Songs with **no 100-song cap**. 🧪 against a fake Spotify: 250 songs read across
+  pages, a rate limit waited out, both old and new API shapes, sign-in callback (right state,
+  wrong state, cancel, time-out), token refresh, and the PKCE example from RFC 7636.
+- **Export any playlist** as Exportify-style CSV, M3U or Spotify-export JSON; Harp can read all
+  three back (round-trip tested). File names are made safe.
+
+**Checked**
+- **Apple Music**: public playlist pages *do* carry the track list (50 songs in structured
+  data, more in page data) with no key, so link import is possible. I had said otherwise
+  earlier; that was wrong. Reading your Apple Music *account* needs a paid Apple developer
+  token, so that part is not possible without one.
+- **Amazon Music**: shared playlist pages are a JavaScript app with no songs in the page, and
+  there is no public API for listeners. Not possible beyond pasting or a converter's CSV.
+
+**Changed**
+- **`ROADMAP.md` rewritten** as the tracker of everything you reported (18 problems) and asked
+  for (33 features), with status, plus known bugs, weak spots in the idea, and a backlog.
+
 ## 2026-11-09 (night): the crash, and why there were no notification controls
 
 **Found and fixed**

@@ -4,6 +4,7 @@
 //! fetch (through the [`recommend::CandidateSource`] trait) and a local SQLite file.
 
 pub mod error;
+pub mod export;
 pub mod import;
 pub mod library;
 pub mod lyrics;
