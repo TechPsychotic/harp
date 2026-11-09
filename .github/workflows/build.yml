@@ -99,7 +99,7 @@ jobs:
             sleep 45
           done
           exit 1
-      - name: Build the APK (retried: GitHub's downloads sometimes return a temporary 5xx)
+      - name: Build the APK (retried on temporary download errors)
         working-directory: app
         run: |
           for attempt in 1 2 3; do
