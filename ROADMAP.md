@@ -148,6 +148,7 @@ the idea and the code. `UPDATES.md` is the dated log of changes; this file is th
 | F60 | ✓ on songs in a playlist; see and change which playlists | ✅ | ✓ on rows, "Saved in" sheet with checkboxes. 🧪 |
 | F61 | Listening stats like Sound Capsule → **Your Rhythm** | 🟡 | Week/month/year minutes, chart, top artists and songs, time of day, streak, listener kind. 🧪 |
 | F62 | Year in review like Wrapped → **Harp Encore** (from the 2nd week of December) | 🟡 | Story pages from 8 Dec to 7 Jan; save the top 50 as a playlist. 🧪 |
+| F63 | Updates install themselves | 🟡 | Android: download + checksum + system installer (you confirm). Linux: swap in and restart. Win/mac: release page. Needs a public repo and a published release. |
 
 **Features: almost all done; the ones marked 🟡 are built and waiting for a check on your devices.**
 

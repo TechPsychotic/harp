@@ -30,6 +30,15 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 - **Windows and macOS builds:** fixed the two build errors (a missing macOS system framework for the
   device-sync networking, and a Windows compiler setting for the media-controls plugin).
 
+**New: updates install themselves** (Settings › About)
+- Harp still looks for a new release once a day. On **Android** a tap on "Update to …" downloads it,
+  checks it against the release's SHA256SUMS, and hands it to Android's installer: you confirm once (the
+  first time Android also asks you to allow Harp to install updates). On the **Linux** install
+  (`~/.local/opt/harp`) it downloads, checks, unpacks next to the install, swaps it in and restarts.
+  Windows and macOS still open the release page. A bad checksum or a failed unpack leaves your Harp as
+  it was. 🧪 checksum reading; 📱🖥️ the install itself needs the first published release, and the repo to
+  be public (GitHub hides releases of private repos from the app).
+
 **New: Your Rhythm** (Home › Your Rhythm)
 - This week / month / year: minutes listened (with the change from the last one), a chart by day or
   month, songs, artists, longest day streak, time of day, your top artists and songs, and what kind of

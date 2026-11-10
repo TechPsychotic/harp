@@ -101,6 +101,27 @@ class MainActivity : AudioServiceActivity() {
         return sb.toString()
     }
 
+    private fun installApk(apk: File) {
+        val installer = packageManager.packageInstaller
+        val params = android.content.pm.PackageInstaller.SessionParams(android.content.pm.PackageInstaller.SessionParams.MODE_FULL_INSTALL)
+        params.setAppPackageName(packageName)
+        val id = installer.createSession(params)
+        installer.openSession(id).use { session ->
+            apk.inputStream().use { input ->
+                session.openWrite("harp.apk", 0, apk.length()).use { out ->
+                    input.copyTo(out)
+                    session.fsync(out)
+                }
+            }
+            val flags = android.app.PendingIntent.FLAG_UPDATE_CURRENT or
+                (if (Build.VERSION.SDK_INT >= 31) android.app.PendingIntent.FLAG_MUTABLE else 0)
+            val pending = android.app.PendingIntent.getBroadcast(
+                this, id, android.content.Intent(this, UpdateReceiver::class.java), flags,
+            )
+            session.commit(pending.intentSender)
+        }
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         links = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.harp/links").apply {
@@ -148,6 +169,26 @@ class MainActivity : AudioServiceActivity() {
                             call.argument<Boolean>("playing") ?: false,
                         )
                         result.success(null)
+                    }
+                    // Updates: hand a downloaded, checked APK to Android's installer.
+                    // Returns "permission" when Harp first needs "Install unknown apps".
+                    "installApk" -> {
+                        if (Build.VERSION.SDK_INT >= 26 && !packageManager.canRequestPackageInstalls()) {
+                            startActivity(
+                                android.content.Intent(
+                                    android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                                    android.net.Uri.parse("package:$packageName"),
+                                )
+                            )
+                            result.success("permission")
+                        } else {
+                            try {
+                                installApk(File(call.argument<String>("path")!!))
+                                result.success("started")
+                            } catch (e: Exception) {
+                                result.error("install", e.message, null)
+                            }
+                        }
                     }
                     "isMetered" -> {
                         val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager

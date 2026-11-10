@@ -410,11 +410,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             if (context.mounted && Updates.available.value == null) toast(context, 'You have the latest Harp');
                           },
                         )
-                      : ListTile(
-                          leading: Icon(Icons.new_releases_rounded, color: Theme.of(context).colorScheme.primary),
-                          title: Text('Update available: ${up.tag}'),
-                          subtitle: Text('Opens the release page to download it.', style: TextStyle(color: tok.textDim)),
-                          onTap: () => launchUrl(Uri.parse(up.url), mode: LaunchMode.externalApplication),
+                      : ValueListenableBuilder(
+                          valueListenable: Updates.busy,
+                          builder: (context, b, _) {
+                            final self = Updates.canInstall(up);
+                            return ListTile(
+                              leading: Icon(Icons.new_releases_rounded, color: Theme.of(context).colorScheme.primary),
+                              title: Text(b != null ? '${b.step} ${up.tag}…' : 'Update to ${up.tag}'),
+                              subtitle: b != null
+                                  ? Padding(padding: const EdgeInsets.only(top: 8), child: LinearProgressIndicator(value: b.step == 'Downloading' ? b.progress : null))
+                                  : Text(
+                                      self
+                                          ? (Platform.isAndroid ? 'Downloads and checks it, then Android asks you to confirm.' : 'Downloads and checks it, then Harp restarts on the new version.')
+                                          : 'Opens the release page to download it.',
+                                      style: TextStyle(color: tok.textDim),
+                                    ),
+                              trailing: self && b == null
+                                  ? IconButton(
+                                      tooltip: 'What’s new',
+                                      icon: const Icon(Icons.open_in_new_rounded),
+                                      onPressed: () => launchUrl(Uri.parse(up.url), mode: LaunchMode.externalApplication),
+                                    )
+                                  : null,
+                              onTap: b != null
+                                  ? null
+                                  : self
+                                      ? () async {
+                                          final msg = await Updates.install(up);
+                                          if (msg != null && context.mounted) toast(context, msg);
+                                        }
+                                      : () => launchUrl(Uri.parse(up.url), mode: LaunchMode.externalApplication),
+                            );
+                          },
                         ),
                 ),
                 ListTile(title: const Text('yt-dlp'), subtitle: Text(_ytdlp, style: TextStyle(color: tok.textDim))),

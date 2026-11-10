@@ -52,6 +52,11 @@ class Native {
     }
   }
 
+  /// Android: hands a downloaded update to the system installer. "started",
+  /// or "permission" (Harp first sends you to allow installing updates).
+  static Future<String> installApk(String path) async =>
+      await _c.invokeMethod<String>('installApk', {'path': path}) ?? 'started';
+
   /// Android: tells the home-screen widget what's playing.
   static Future<void> updateWidget({required String title, required String artist, required String art, required bool playing}) async {
     if (!Platform.isAndroid) return;
