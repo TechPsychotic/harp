@@ -72,7 +72,7 @@ class RhythmScreen extends StatefulWidget {
 }
 
 class _RhythmScreenState extends State<RhythmScreen> {
-  int _range = 0; // 0 week, 1 month, 2 year
+  int _range = 1; // 0 today, 1 week, 2 month, 3 year
   api.StatsView? _now;
   api.StatsView? _before;
 
@@ -87,9 +87,11 @@ class _RhythmScreenState extends State<RhythmScreen> {
     final today = DateTime(n.year, n.month, n.day);
     switch (_range) {
       case 0:
+        return (today, today.add(const Duration(days: 1)), today.subtract(const Duration(days: 1)));
+      case 1:
         final start = today.subtract(Duration(days: today.weekday - 1));
         return (start, start.add(const Duration(days: 7)), start.subtract(const Duration(days: 7)));
-      case 1:
+      case 2:
         return (DateTime(n.year, n.month), DateTime(n.year, n.month + 1), DateTime(n.year, n.month - 1));
       default:
         return (DateTime(n.year), DateTime(n.year + 1), DateTime(n.year - 1));
@@ -111,7 +113,11 @@ class _RhythmScreenState extends State<RhythmScreen> {
     final (start, end, _) = _bounds();
     final byDay = {for (final d in s.byDay) d.day: d.minutes};
     String key(DateTime d) => '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-    if (_range == 2) {
+    if (_range == 0) {
+      // Today: hour by hour.
+      return [for (var h = 0; h < 24; h++) (h % 6 == 0 ? hourText(h) : '', s.byHour[h])];
+    }
+    if (_range == 3) {
       const names = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
       final months = List<double>.filled(12, 0);
       for (final d in s.byDay) {
@@ -123,7 +129,7 @@ class _RhythmScreenState extends State<RhythmScreen> {
     const wd = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
     final out = <(String, double)>[];
     for (var d = start; d.isBefore(end); d = DateTime(d.year, d.month, d.day + 1)) {
-      final label = _range == 0 ? wd[d.weekday - 1] : (d.day == 1 || d.day % 5 == 0 ? '${d.day}' : '');
+      final label = _range == 1 ? wd[d.weekday - 1] : (d.day == 1 || d.day % 5 == 0 ? '${d.day}' : '');
       out.add((label, byDay[key(d)] ?? 0));
     }
     return out;
@@ -134,7 +140,7 @@ class _RhythmScreenState extends State<RhythmScreen> {
     final tok = context.tok;
     final accent = Theme.of(context).colorScheme.primary;
     final s = _now;
-    const names = ['week', 'month', 'year'];
+    const names = ['day', 'week', 'month', 'year'];
     return Scaffold(
       appBar: AppBar(title: const Text('Your Rhythm')),
       body: RefreshIndicator(
@@ -144,9 +150,10 @@ class _RhythmScreenState extends State<RhythmScreen> {
           children: [
             SegmentedButton<int>(
               segments: const [
-                ButtonSegment(value: 0, label: Text('This week')),
-                ButtonSegment(value: 1, label: Text('This month')),
-                ButtonSegment(value: 2, label: Text('This year')),
+                ButtonSegment(value: 0, label: Text('Today')),
+                ButtonSegment(value: 1, label: Text('Week')),
+                ButtonSegment(value: 2, label: Text('Month')),
+                ButtonSegment(value: 3, label: Text('Year')),
               ],
               selected: {_range},
               showSelectedIcon: false,
@@ -173,7 +180,7 @@ class _RhythmScreenState extends State<RhythmScreen> {
               Padding(
                 padding: const EdgeInsets.all(24),
                 child: Text(
-                  'Nothing played this ${names[_range]} yet. Your rhythm builds as you listen.',
+                  _range == 0 ? 'Nothing played today yet. Your rhythm builds as you listen.' : 'Nothing played this ${names[_range]} yet. Your rhythm builds as you listen.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: tok.textDim),
                 ),
@@ -212,19 +219,22 @@ class _RhythmScreenState extends State<RhythmScreen> {
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: _Fact(label: 'Day streak', value: '${s.streak}'),
+                    child: _range == 0 ? _Fact(label: 'Plays', value: '${s.plays}') : _Fact(label: 'Day streak', value: '${s.streak}'),
                   ),
                 ],
               ),
               const SizedBox(height: 12),
               _KindCard(stats: s),
-              const SectionHeader('Time of day'),
-              GlassCard(
-                child: SizedBox(
-                  height: 90,
-                  child: _BarChart(bars: [for (var h = 0; h < 24; h++) (h % 6 == 0 ? hourText(h) : '', s.byHour[h])], color: accent),
+              // (Today's chart above is already hour by hour.)
+              if (_range != 0) ...[
+                const SectionHeader('Time of day'),
+                GlassCard(
+                  child: SizedBox(
+                    height: 90,
+                    child: _BarChart(bars: [for (var h = 0; h < 24; h++) (h % 6 == 0 ? hourText(h) : '', s.byHour[h])], color: accent),
+                  ),
                 ),
-              ),
+              ],
               const SectionHeader('Top artists'),
               for (final (i, a) in s.topArtists.indexed)
                 ListTile(
@@ -266,7 +276,7 @@ class _RhythmScreenState extends State<RhythmScreen> {
     final pct = ((now - before) / before * 100).round();
     final up = pct >= 0;
     return Text(
-      '${up ? '▲' : '▼'} ${pct.abs()}% vs last $unit',
+      '${up ? '▲' : '▼'} ${pct.abs()}% vs ${unit == 'day' ? 'yesterday' : 'last $unit'}',
       style: TextStyle(color: up ? const Color(0xFF3DDC84) : context.tok.textDim, fontSize: 13, fontWeight: FontWeight.w600),
     );
   }

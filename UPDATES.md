@@ -8,6 +8,14 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-10 (night): Your Rhythm by the day
+
+- **Your Rhythm has a Today view** next to Week, Month and Year: minutes so far with the change from
+  yesterday, an hour-by-hour chart, songs, artists and plays, your listener kind, and today's top
+  artists and songs. Analyzer clean. 📱
+
+---
+
 ## 2026-11-10 (night, latest): roadmap kept off GitHub
 
 - `ROADMAP.md` is no longer in the repository; it stays on the maintainer's machine (and is ignored by
