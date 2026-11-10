@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `cached_view`, `collection_view`, `e`, `eng`, `export_songs`, `followed_playlists`, `home_artists`, `import_view`, `lyrics_view`, `playlist_contents`, `playlist_follow_set`, `queue_view`, `request`, `section_of`, `sections`, `serde_json_string`, `song_from_json`, `song`, `spotify_embed_url`, `spotify_token`, `this_year`, `view`, `views`, `youtube_list_id`
+// These functions are ignored because they are not marked as `pub`: `backing_off`, `cached_view`, `collection_view`, `e`, `eng`, `export_songs`, `followed_playlists`, `home_artists`, `import_view`, `lyrics_view`, `note_bot_check`, `playlist_contents`, `playlist_follow_set`, `queue_view`, `request`, `section_of`, `sections`, `serde_json_string`, `song_from_json`, `song`, `spotify_embed_url`, `spotify_token`, `this_year`, `view`, `views`, `youtube_list_id`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Engine`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
@@ -544,6 +544,49 @@ Future<void> playlistSetFolder({
 Future<void> folderRename({required String old, required String new_}) =>
     RustLib.instance.api.crateApiEngineFolderRename(old: old, new_: new_);
 
+/// Whether background fetching is paused because YouTube asked us to slow down.
+bool youtubeBackingOff() =>
+    RustLib.instance.api.crateApiEngineYoutubeBackingOff();
+
+/// Listening between `from` and `to` (unix seconds), `top` entries per list.
+Future<StatsView> listeningStats({
+  required PlatformInt64 from,
+  required PlatformInt64 to,
+  required int top,
+}) => RustLib.instance.api.crateApiEngineListeningStats(
+  from: from,
+  to: to,
+  top: top,
+);
+
+class ArtistStatView {
+  final String name;
+  final double minutes;
+  final int plays;
+  final String? thumbnail;
+
+  const ArtistStatView({
+    required this.name,
+    required this.minutes,
+    required this.plays,
+    this.thumbnail,
+  });
+
+  @override
+  int get hashCode =>
+      name.hashCode ^ minutes.hashCode ^ plays.hashCode ^ thumbnail.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ArtistStatView &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          minutes == other.minutes &&
+          plays == other.plays &&
+          thumbnail == other.thumbnail;
+}
+
 class AutoEqProfileView {
   final String name;
   final String source;
@@ -697,6 +740,24 @@ class CollectionView {
           subtitle == other.subtitle &&
           thumbnail == other.thumbnail &&
           kind == other.kind;
+}
+
+class DayMinutes {
+  final String day;
+  final double minutes;
+
+  const DayMinutes({required this.day, required this.minutes});
+
+  @override
+  int get hashCode => day.hashCode ^ minutes.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DayMinutes &&
+          runtimeType == other.runtimeType &&
+          day == other.day &&
+          minutes == other.minutes;
 }
 
 class DownloadView {
@@ -1220,6 +1281,30 @@ class SectionView {
           items == other.items;
 }
 
+class SongStatView {
+  final SongView song;
+  final int plays;
+  final double minutes;
+
+  const SongStatView({
+    required this.song,
+    required this.plays,
+    required this.minutes,
+  });
+
+  @override
+  int get hashCode => song.hashCode ^ plays.hashCode ^ minutes.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SongStatView &&
+          runtimeType == other.runtimeType &&
+          song == other.song &&
+          plays == other.plays &&
+          minutes == other.minutes;
+}
+
 class SongView {
   final String id;
   final String title;
@@ -1319,6 +1404,65 @@ class SpotifyPlaylistView {
           name == other.name &&
           total == other.total &&
           owner == other.owner;
+}
+
+class StatsView {
+  final double minutes;
+  final int plays;
+  final int songs;
+  final int artists;
+  final List<ArtistStatView> topArtists;
+  final List<SongStatView> topSongs;
+  final Float64List byHour;
+  final List<DayMinutes> byDay;
+  final int streak;
+  final int? peakHour;
+  final SongView? first;
+
+  const StatsView({
+    required this.minutes,
+    required this.plays,
+    required this.songs,
+    required this.artists,
+    required this.topArtists,
+    required this.topSongs,
+    required this.byHour,
+    required this.byDay,
+    required this.streak,
+    this.peakHour,
+    this.first,
+  });
+
+  @override
+  int get hashCode =>
+      minutes.hashCode ^
+      plays.hashCode ^
+      songs.hashCode ^
+      artists.hashCode ^
+      topArtists.hashCode ^
+      topSongs.hashCode ^
+      byHour.hashCode ^
+      byDay.hashCode ^
+      streak.hashCode ^
+      peakHour.hashCode ^
+      first.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StatsView &&
+          runtimeType == other.runtimeType &&
+          minutes == other.minutes &&
+          plays == other.plays &&
+          songs == other.songs &&
+          artists == other.artists &&
+          topArtists == other.topArtists &&
+          topSongs == other.topSongs &&
+          byHour == other.byHour &&
+          byDay == other.byDay &&
+          streak == other.streak &&
+          peakHour == other.peakHour &&
+          first == other.first;
 }
 
 class StreamView {

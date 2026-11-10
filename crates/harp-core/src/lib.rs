@@ -14,6 +14,7 @@ pub mod model;
 pub mod queue;
 pub mod recommend;
 pub mod rng;
+pub mod stats;
 pub mod taste;
 pub mod tidy;
 pub mod translit;

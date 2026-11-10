@@ -1,3 +1,4 @@
+import 'rhythm.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -175,6 +176,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           Padding(padding: const EdgeInsets.fromLTRB(16, 10, 16, 0), child: _heroRow(context)),
           ListenableBuilder(listenable: p, builder: (context, _) => _playingFrom(context)),
+          if (encoreSeason()) Padding(padding: const EdgeInsets.fromLTRB(16, 10, 16, 0), child: EncoreBanner(player: p)),
           if (p.error != null) Padding(padding: const EdgeInsets.fromLTRB(16, 10, 16, 0), child: Text(p.error!, style: const TextStyle(color: Color(0xFFFF6B6B)))),
           if (f == null)
             const Padding(padding: EdgeInsets.all(40), child: Center(child: CircularProgressIndicator()))
@@ -220,6 +222,23 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
             SongShelf(title: 'Downloaded', subtitle: 'Plays without a connection', songs: f.downloads, player: p),
             SongShelf(title: 'Liked Songs', songs: f.liked, player: p),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 22, 16, 0),
+              child: GlassCard(
+                onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => RhythmScreen(player: p))),
+                child: Row(children: [
+                  Icon(Icons.insights_rounded, color: Theme.of(context).colorScheme.primary),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      const Text('Your Rhythm', style: TextStyle(fontWeight: FontWeight.w600)),
+                      Text('Minutes, top artists and songs, when you listen', style: TextStyle(color: tok.textDim, fontSize: 13)),
+                    ]),
+                  ),
+                  Icon(Icons.chevron_right_rounded, color: tok.textFaint),
+                ]),
+              ),
+            ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 22, 16, 0),
               child: GlassCard(

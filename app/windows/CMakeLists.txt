@@ -2,6 +2,10 @@
 cmake_minimum_required(VERSION 3.14)
 project(harp LANGUAGES CXX)
 
+# audio_service_win (media controls) still uses MSVC's old experimental
+# coroutines (/await); new Visual Studio refuses them unless told otherwise.
+add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
 set(BINARY_NAME "harp")

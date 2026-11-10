@@ -40,13 +40,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   AppSettings get s => widget.player.settings;
 
+  Timer? _sizes;
+
   @override
   void initState() {
     super.initState();
     _refresh();
+    // Sizes follow downloads, removals and the play cache as they change.
+    widget.player.libraryRev.addListener(_refresh);
+    widget.player.downloading.addListener(_refresh);
+    _sizes = Timer.periodic(const Duration(seconds: 30), (_) => _refresh());
     api.ytdlpVersion().then((v) => mounted ? setState(() => _ytdlp = v) : null).catchError((_) {
       if (mounted) setState(() => _ytdlp = 'unavailable');
     });
+  }
+
+  @override
+  void dispose() {
+    widget.player.libraryRev.removeListener(_refresh);
+    widget.player.downloading.removeListener(_refresh);
+    _sizes?.cancel();
+    super.dispose();
   }
 
   Future<void> _refresh() async {

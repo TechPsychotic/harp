@@ -34,6 +34,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String dco_decode_String(dynamic raw);
 
   @protected
+  ArtistStatView dco_decode_artist_stat_view(dynamic raw);
+
+  @protected
   AutoEqProfileView dco_decode_auto_eq_profile_view(dynamic raw);
 
   @protected
@@ -85,6 +88,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   CollectionView dco_decode_collection_view(dynamic raw);
 
   @protected
+  DayMinutes dco_decode_day_minutes(dynamic raw);
+
+  @protected
   DeviceView dco_decode_device_view(dynamic raw);
 
   @protected
@@ -118,6 +124,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<String> dco_decode_list_String(dynamic raw);
 
   @protected
+  List<ArtistStatView> dco_decode_list_artist_stat_view(dynamic raw);
+
+  @protected
   List<AutoEqProfileView> dco_decode_list_auto_eq_profile_view(dynamic raw);
 
   @protected
@@ -128,6 +137,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<CollectionView> dco_decode_list_collection_view(dynamic raw);
+
+  @protected
+  List<DayMinutes> dco_decode_list_day_minutes(dynamic raw);
 
   @protected
   List<DeviceView> dco_decode_list_device_view(dynamic raw);
@@ -151,6 +163,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<PlaylistView> dco_decode_list_playlist_view(dynamic raw);
 
   @protected
+  Float64List dco_decode_list_prim_f_64_strict(dynamic raw);
+
+  @protected
   Int64List dco_decode_list_prim_i_64_strict(dynamic raw);
 
   @protected
@@ -167,6 +182,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<SectionView> dco_decode_list_section_view(dynamic raw);
+
+  @protected
+  List<SongStatView> dco_decode_list_song_stat_view(dynamic raw);
 
   @protected
   List<SongView> dco_decode_list_song_view(dynamic raw);
@@ -241,6 +259,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   SectionView dco_decode_section_view(dynamic raw);
 
   @protected
+  SongStatView dco_decode_song_stat_view(dynamic raw);
+
+  @protected
   SongView dco_decode_song_view(dynamic raw);
 
   @protected
@@ -248,6 +269,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   SpotifyPlaylistView dco_decode_spotify_playlist_view(dynamic raw);
+
+  @protected
+  StatsView dco_decode_stats_view(dynamic raw);
 
   @protected
   StreamView dco_decode_stream_view(dynamic raw);
@@ -277,6 +301,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   String sse_decode_String(SseDeserializer deserializer);
+
+  @protected
+  ArtistStatView sse_decode_artist_stat_view(SseDeserializer deserializer);
 
   @protected
   AutoEqProfileView sse_decode_auto_eq_profile_view(
@@ -340,6 +367,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   CollectionView sse_decode_collection_view(SseDeserializer deserializer);
 
   @protected
+  DayMinutes sse_decode_day_minutes(SseDeserializer deserializer);
+
+  @protected
   DeviceView sse_decode_device_view(SseDeserializer deserializer);
 
   @protected
@@ -375,6 +405,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<String> sse_decode_list_String(SseDeserializer deserializer);
 
   @protected
+  List<ArtistStatView> sse_decode_list_artist_stat_view(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   List<AutoEqProfileView> sse_decode_list_auto_eq_profile_view(
     SseDeserializer deserializer,
   );
@@ -393,6 +428,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<CollectionView> sse_decode_list_collection_view(
     SseDeserializer deserializer,
   );
+
+  @protected
+  List<DayMinutes> sse_decode_list_day_minutes(SseDeserializer deserializer);
 
   @protected
   List<DeviceView> sse_decode_list_device_view(SseDeserializer deserializer);
@@ -428,6 +466,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  Float64List sse_decode_list_prim_f_64_strict(SseDeserializer deserializer);
+
+  @protected
   Int64List sse_decode_list_prim_i_64_strict(SseDeserializer deserializer);
 
   @protected
@@ -448,6 +489,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<SectionView> sse_decode_list_section_view(SseDeserializer deserializer);
+
+  @protected
+  List<SongStatView> sse_decode_list_song_stat_view(
+    SseDeserializer deserializer,
+  );
 
   @protected
   List<SongView> sse_decode_list_song_view(SseDeserializer deserializer);
@@ -536,6 +582,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   SectionView sse_decode_section_view(SseDeserializer deserializer);
 
   @protected
+  SongStatView sse_decode_song_stat_view(SseDeserializer deserializer);
+
+  @protected
   SongView sse_decode_song_view(SseDeserializer deserializer);
 
   @protected
@@ -545,6 +594,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   SpotifyPlaylistView sse_decode_spotify_playlist_view(
     SseDeserializer deserializer,
   );
+
+  @protected
+  StatsView sse_decode_stats_view(SseDeserializer deserializer);
 
   @protected
   StreamView sse_decode_stream_view(SseDeserializer deserializer);
@@ -581,6 +633,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_String(String self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_artist_stat_view(
+    ArtistStatView self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_auto_eq_profile_view(
@@ -670,6 +728,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_day_minutes(DayMinutes self, SseSerializer serializer);
+
+  @protected
   void sse_encode_device_view(DeviceView self, SseSerializer serializer);
 
   @protected
@@ -709,6 +770,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_artist_stat_view(
+    List<ArtistStatView> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_auto_eq_profile_view(
     List<AutoEqProfileView> self,
     SseSerializer serializer,
@@ -729,6 +796,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_collection_view(
     List<CollectionView> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_day_minutes(
+    List<DayMinutes> self,
     SseSerializer serializer,
   );
 
@@ -775,6 +848,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_prim_f_64_strict(
+    Float64List self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_prim_i_64_strict(
     Int64List self,
     SseSerializer serializer,
@@ -804,6 +883,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_section_view(
     List<SectionView> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_song_stat_view(
+    List<SongStatView> self,
     SseSerializer serializer,
   );
 
@@ -910,6 +995,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_section_view(SectionView self, SseSerializer serializer);
 
   @protected
+  void sse_encode_song_stat_view(SongStatView self, SseSerializer serializer);
+
+  @protected
   void sse_encode_song_view(SongView self, SseSerializer serializer);
 
   @protected
@@ -920,6 +1008,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     SpotifyPlaylistView self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_stats_view(StatsView self, SseSerializer serializer);
 
   @protected
   void sse_encode_stream_view(StreamView self, SseSerializer serializer);

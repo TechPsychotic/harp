@@ -376,15 +376,21 @@ class _PlaylistRow extends StatelessWidget {
               Row(children: [
                 if (playing) ...[Icon(Icons.graphic_eq_rounded, size: 14, color: accent), const SizedBox(width: 4), Text('Playing · ', style: TextStyle(color: accent, fontSize: 13))],
                 if (pl.pinned) ...[Icon(Icons.push_pin_rounded, size: 13, color: accent), const SizedBox(width: 4)],
-                Text('Playlist · ${pl.count} ${pl.count == 1 ? 'song' : 'songs'}', style: TextStyle(color: tok.textDim, fontSize: 13)),
+                // Shrinks (…) instead of running under the play/pause button.
+                Flexible(
+                  child: Text('Playlist · ${pl.count} ${pl.count == 1 ? 'song' : 'songs'}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: tok.textDim, fontSize: 13)),
+                ),
               ]),
             ]),
           ),
           if (playing)
-            IconButton(
-              tooltip: paused ? 'Resume' : 'Pause',
-              icon: Icon(paused ? Icons.play_circle_fill_rounded : Icons.pause_circle_filled_rounded, color: accent, size: 32),
-              onPressed: onToggle,
+            Padding(
+              padding: const EdgeInsets.only(left: 6),
+              child: IconButton(
+                tooltip: paused ? 'Play' : 'Pause',
+                icon: Icon(paused ? Icons.play_circle_fill_rounded : Icons.pause_circle_filled_rounded, color: accent, size: 32),
+                onPressed: onToggle,
+              ),
             ),
           PopupMenuButton<String>(
             icon: Icon(Icons.more_horiz_rounded, color: tok.textDim),

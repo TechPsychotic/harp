@@ -285,7 +285,11 @@ pub fn resolve_stream(id: String, quality: String) -> Result<StreamView, String>
         cache::touch(&p);
         return Ok(StreamView { url: p.to_string_lossy().into_owned(), local: true, headers: vec![], expires_at: None });
     }
-    let s = en.yt.resolve(&id, Quality::parse(&quality)).map_err(e)?;
+    let s = en.yt.resolve(&id, Quality::parse(&quality)).map_err(|err| {
+        let msg = err.to_string();
+        note_bot_check(&msg);
+        msg
+    })?;
     Ok(StreamView { url: s.url, local: false, headers: s.headers.into_iter().collect(), expires_at: s.expires_at })
 }
 
@@ -638,7 +642,26 @@ pub struct DownloadView {
 /// Downloads a song's audio for offline playback.
 pub fn download_song(s: SongView, quality: String) -> Result<SongView, String> {
     let en = eng()?;
-    let (path, bytes) = en.yt.download(&s.id, &en.downloads_dir, Quality::parse(&quality)).map_err(e)?;
+    // Already fetched ahead into the play cache: move that file over instead of
+    // asking YouTube for the song again.
+    let cached = cache::find(&en.cache_dir, &s.id).and_then(|c| {
+        std::fs::create_dir_all(&en.downloads_dir).ok()?;
+        let dest = en.downloads_dir.join(c.file_name()?);
+        if std::fs::rename(&c, &dest).is_err() {
+            std::fs::copy(&c, &dest).ok()?;
+            let _ = std::fs::remove_file(&c);
+        }
+        let bytes = std::fs::metadata(&dest).ok()?.len();
+        Some((dest, bytes))
+    });
+    let (path, bytes) = match cached {
+        Some(x) => x,
+        None => en.yt.download(&s.id, &en.downloads_dir, Quality::parse(&quality)).map_err(|err| {
+            let msg = err.to_string();
+            note_bot_check(&msg);
+            msg
+        })?,
+    };
     en.store
         .lock()
         .unwrap()
@@ -1164,7 +1187,8 @@ static PREFETCH_TURN: Mutex<()> = Mutex::new(());
 /// already downloaded or cached are skipped. `limit_mb` is the cache size cap.
 pub fn prefetch_songs(ids: Vec<String>, quality: String, limit_mb: u32) {
     let Ok(en) = eng() else { return };
-    if limit_mb == 0 {
+    // YouTube asked us to slow down: no background fetching for a while.
+    if limit_mb == 0 || backing_off() {
         return;
     }
     let inflight = PREFETCHING.get_or_init(|| Mutex::new(Default::default()));
@@ -1183,8 +1207,10 @@ pub fn prefetch_songs(ids: Vec<String>, quality: String, limit_mb: u32) {
             let Ok(en) = eng() else { return };
             {
                 let _turn = PREFETCH_TURN.lock().unwrap();
-                if cache::find(&en.cache_dir, &id).is_none() {
-                    let _ = en.yt.download(&id, &en.cache_dir, q);
+                if cache::find(&en.cache_dir, &id).is_none() && !backing_off() {
+                    if let Err(e) = en.yt.download(&id, &en.cache_dir, q) {
+                        note_bot_check(&e.to_string());
+                    }
                 }
                 let keep: Vec<String> = vec![id.clone()];
                 cache::trim(&en.cache_dir, limit_mb as u64 * 1_048_576, &keep);
@@ -1756,4 +1782,86 @@ pub(crate) fn playlist_follow_set(id: i64, link: &str, songs: &[Song]) -> Result
 /// Playlists that follow a friend's shared link: (id, link).
 pub(crate) fn followed_playlists() -> Result<Vec<(i64, String)>, String> {
     Ok(eng()?.store.lock().unwrap().playlists().map_err(e)?.into_iter().filter(|p| !p.remote.is_empty()).map(|p| (p.id, p.remote)).collect())
+}
+
+
+// --- YouTube's "confirm you're not a bot" ---
+
+static BOT_UNTIL: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// After YouTube says "Sign in to confirm you're not a bot", Harp stops all
+/// background fetching (prefetch, lining up the next song) for two minutes;
+/// songs you ask for still try. Asking less often is what makes it go away.
+fn note_bot_check(msg: &str) {
+    let m = msg.to_lowercase();
+    if m.contains("not a bot") || m.contains("confirm you") || m.contains("http error 429") || m.contains("too many requests") {
+        BOT_UNTIL.store(now_secs() + 120, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+fn backing_off() -> bool {
+    now_secs() < BOT_UNTIL.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Whether background fetching is paused because YouTube asked us to slow down.
+#[flutter_rust_bridge::frb(sync)]
+pub fn youtube_backing_off() -> bool {
+    backing_off()
+}
+
+// --- Your Rhythm and Harp Encore: listening stats ---
+
+pub struct ArtistStatView {
+    pub name: String,
+    pub minutes: f64,
+    pub plays: u32,
+    pub thumbnail: Option<String>,
+}
+
+pub struct SongStatView {
+    pub song: SongView,
+    pub plays: u32,
+    pub minutes: f64,
+}
+
+pub struct DayMinutes {
+    pub day: String,
+    pub minutes: f64,
+}
+
+pub struct StatsView {
+    pub minutes: f64,
+    pub plays: u32,
+    pub songs: u32,
+    pub artists: u32,
+    pub top_artists: Vec<ArtistStatView>,
+    pub top_songs: Vec<SongStatView>,
+    pub by_hour: Vec<f64>,
+    pub by_day: Vec<DayMinutes>,
+    pub streak: u32,
+    pub peak_hour: Option<u32>,
+    pub first: Option<SongView>,
+}
+
+/// Listening between `from` and `to` (unix seconds), `top` entries per list.
+pub fn listening_stats(from: i64, to: i64, top: u32) -> Result<StatsView, String> {
+    let en = eng()?;
+    let s = en.store.lock().unwrap().listening_stats(from, to, top as usize).map_err(e)?;
+    let peak_hour = s.peak_hour();
+    let songs: Vec<Song> = s.top_songs.iter().map(|x| x.song.clone()).collect();
+    let song_views = views(en, songs.into_iter());
+    let first = s.first.clone().map(|f| views(en, std::iter::once(f)).remove(0));
+    Ok(StatsView {
+        minutes: s.minutes,
+        plays: s.plays,
+        songs: s.songs,
+        artists: s.artists,
+        top_artists: s.top_artists.into_iter().map(|a| ArtistStatView { name: a.name, minutes: a.minutes, plays: a.plays, thumbnail: a.thumbnail }).collect(),
+        top_songs: s.top_songs.iter().zip(song_views).map(|(x, v)| SongStatView { song: v, plays: x.plays, minutes: x.minutes }).collect(),
+        by_hour: s.by_hour,
+        by_day: s.by_day.into_iter().map(|(day, minutes)| DayMinutes { day, minutes }).collect(),
+        streak: s.streak,
+        peak_hour,
+        first,
+    })
 }

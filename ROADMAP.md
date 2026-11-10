@@ -64,6 +64,11 @@ the idea and the code. `UPDATES.md` is the dated log of changes; this file is th
 | B21 | Doesn't pause when the output changes (earphones out, Bluetooth off) | 🟡 | Android: pauses when the output would switch to the speaker, pauses for calls and resumes after, lowers the volume while navigation speaks. Needs the phone to confirm. Desktop systems don't report this, so not on Linux yet. |
 | B22 | Notification sometimes has no progress bar | 🟡 | Cause: songs from search often come without a length, and the notification only draws progress when it knows the length; it was never told the real one. Now the player's length is passed on as soon as it is known, and seeks are reported too. Needs the phone. |
 | B23 | Playlists: no picture, wasteful layout, no pinning | 🟡 | Covers (first song, or a 2×2 mosaic from four songs) on Library and Home; Library lists playlists as compact rows; pin to top from the … menu or a long press (pinned first, saved in the database). 🧪 database tests. |
+| B24 | Playlist pauses instead of playing the next song; shown song ≠ playing song | 🟡 | The next song is lined up only in the last 30 s; the player checks the engine plays what it shows and corrects it; a watchdog moves on if it stops at the end. Needs the phone. |
+| B25 | "Sign in to confirm you're not a bot" again (with crossfade) | 🟡 | One song fetched ahead (after 20 s), one crossfade try per song, a 2-minute pause on push-back, no skipping. Needs use to confirm. |
+| B26 | Library play/pause overlaps text; rough queue scrolling | 🟡 | Text now shrinks with an ellipsis; queue is one sliver list with handle drags. |
+| B27 | Windows and macOS builds failing | 🟡 | SystemConfiguration framework (macOS); coroutine define (Windows). Re-run on Actions. |
+| B28 | Cache / downloads sizes out of date | 🟡 | Refresh on every download change; downloads reuse cached songs. |
 | B18 | Android builds failing on GitHub | 🟡 | GitHub's release downloads returned 504 for hours. Day-to-day CI now runs on the laptop (`scripts/ci-local.sh`, ✅); GitHub Actions only for releases or by hand, with caches and retries. |
 
 **Problems (23): 5 fixed and checked, 17 fixed but waiting for your confirmation, 1 partly fixed.**
@@ -141,6 +146,8 @@ the idea and the code. `UPDATES.md` is the dated log of changes; this file is th
 | F58 | Share playlists like Sync | 🟡 | Share link (iroh); friends open it and save a copy. 🧪 |
 | F59 | Spotify-style playlist row: Play/Pause, shuffle + Smart Shuffle toggles, filled download icon | 🟡 | Done; Smart Shuffle mixes similar songs in while playing; Recommended section with +. |
 | F60 | ✓ on songs in a playlist; see and change which playlists | ✅ | ✓ on rows, "Saved in" sheet with checkboxes. 🧪 |
+| F61 | Listening stats like Sound Capsule → **Your Rhythm** | 🟡 | Week/month/year minutes, chart, top artists and songs, time of day, streak, listener kind. 🧪 |
+| F62 | Year in review like Wrapped → **Harp Encore** (from the 2nd week of December) | 🟡 | Story pages from 8 Dec to 7 Jan; save the top 50 as a playlist. 🧪 |
 
 **Features: almost all done; the ones marked 🟡 are built and waiting for a check on your devices.**
 
@@ -178,6 +185,7 @@ Status as of 2026-11-10. ☑ done · ◐ partly done · ☐ to do. 📱 = built,
 - ☑ Discovery: on-device taste (fades with time, time of day, skips count only when repeated), moods,
   charts and genres, new releases, offline picks, world genres.
 - ☑ Backup and restore (restore adds), imports from Spotify, Apple Music links, YouTube, files.
+- ☑ Your Rhythm (listening stats) and Harp Encore (the year in review, from 8 December).
 
 ### M6 · Platform integration
 - ☑ Android: media session, notification and lock screen, edge-to-edge, predictive back, adaptive icon,

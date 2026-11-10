@@ -40,6 +40,7 @@ A new Flutter FFI plugin project.
     'DEFINES_MODULE' => 'YES',
     # Flutter.framework does not contain a i386 slice.
     'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386',
-    'OTHER_LDFLAGS' => '-force_load ${BUILT_PRODUCTS_DIR}/libharp_ffi.a',
+    # iroh's networking (listening together, sync) uses Apple's SystemConfiguration.
+    'OTHER_LDFLAGS' => '-force_load ${BUILT_PRODUCTS_DIR}/libharp_ffi.a -framework SystemConfiguration',
   }
 end

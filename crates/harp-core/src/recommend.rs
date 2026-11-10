@@ -98,6 +98,20 @@ pub struct Recommendation {
     pub reason: String,
 }
 
+/// For a mood: sometimes a search built on one of your top artists, e.g.
+/// ("Badshah party songs", "Badshah"). None when there's no taste yet, or
+/// half the time (so moods still bring new artists).
+fn mood_query(store: &Store, key: &str, label: &str, rng: &mut Rng) -> Result<Option<(String, String)>> {
+    if matches!(key, "more_energy" | "less_energy") || rng.f64() < 0.5 {
+        return Ok(None);
+    }
+    let history = store.history(150)?;
+    let liked = store.liked_songs()?;
+    let top = top_artists(&history, &liked, 6);
+    let Some(artist) = rng.choose(&top).cloned() else { return Ok(None) };
+    Ok(Some((format!("{artist} {} songs", label.to_lowercase()), artist)))
+}
+
 /// Picks from a pool you already have (downloads, your own files) with the
 /// same taste model as online picks: artist scores (fading with time), the
 /// time-of-day nudge, no recent repeats and no early skips. Works offline.
@@ -246,12 +260,23 @@ fn gather(store: &Store, src: &dyn CandidateSource, req: &Request, rng: &mut Rng
         candidates = c;
         reason = format!("Playing: {artist}");
     } else if let Some((key, label, qs)) = genre {
-        candidates = cold(src, rng.choose(qs).copied().unwrap_or("pop hits"));
-        reason = match (*key, req.requested) {
-            ("more_energy", true) => "You wanted more energy".into(),
-            ("less_energy", true) => "You wanted something calmer".into(),
-            (_, true) => format!("You asked for: {label}"),
-            _ => format!("Genre: {label}"),
+        // Half the time a mood leans on your own artists ("Badshah party songs"),
+        // so it sounds like your music and not just the charts.
+        let mine = mood_query(store, key, label, rng)?;
+        let (mut c, anchored) = match &mine {
+            Some((q, _)) => (cold(src, q), true),
+            None => (vec![], false),
+        };
+        if c.is_empty() {
+            c = cold(src, rng.choose(qs).copied().unwrap_or("pop hits"));
+        }
+        candidates = c;
+        reason = match (*key, req.requested, anchored, &mine) {
+            ("more_energy", true, _, _) => "You wanted more energy".into(),
+            ("less_energy", true, _, _) => "You wanted something calmer".into(),
+            (_, _, true, Some((_, artist))) => format!("{label} · because you like {artist}"),
+            (_, true, _, _) => format!("You asked for: {label}"),
+            _ => format!("{label} mood"),
         };
     } else if let Some(q) = searched_query(store, rng, !seeds.is_empty())? {
         let mut c = cold(src, &q);

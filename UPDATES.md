@@ -8,6 +8,40 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-10 (late): playback fixes, Your Rhythm, Harp Encore
+
+**Fixes**
+- **Wrong song / sudden pauses at the end of a song.** The next song used to be lined up in the engine
+  long before the end; if the queue changed meanwhile (or that early link expired) the engine could play
+  the song *after* the one shown, or stop. Now the next song is lined up only in the last 30 s (never in
+  the last 3 s), the player checks every couple of seconds that what the engine plays is what it shows
+  (and corrects it), and a watchdog moves on if playback stops at the end without you pausing. 📱
+- **"Sign in to confirm you're not a bot".** Harp was asking YouTube for too much at once (three songs
+  ahead, plus crossfade retrying every tick). Now: only the next song is fetched, after 20 s of play;
+  crossfade tries once per song; and when YouTube pushes back, background fetching pauses for 2 minutes,
+  with a clear message and no skipping through the queue. 📱
+- **Library play/pause** on a playlist row no longer overlaps the text.
+- **Queue scrolling** is smooth: one scrolling list, and dragging to reorder starts from the handle (or a
+  long press), so a scroll no longer turns into a drag.
+- **Storage sizes** (cache, downloads) refresh as soon as something is downloaded or removed; a download
+  of a song already in the cache reuses it instead of fetching again.
+- **Moods** now lean on artists you like half the time ("because you like …"), so they fit your taste
+  better. 🧪
+- **Windows and macOS builds:** fixed the two build errors (a missing macOS system framework for the
+  device-sync networking, and a Windows compiler setting for the media-controls plugin).
+
+**New: Your Rhythm** (Home › Your Rhythm)
+- This week / month / year: minutes listened (with the change from the last one), a chart by day or
+  month, songs, artists, longest day streak, time of day, your top artists and songs, and what kind of
+  listener you are (Night Owl, Early Riser… Explorer). All worked out on the device. 🧪
+
+**New: Harp Encore** (your year in music)
+- From the second week of December (the 8th) to 7 January, a banner on Home opens a story: minutes, the
+  first song of your year, artist and song of the year, top fives, your listener kind, your hour and
+  streak, and at the end **save your top 50 as a playlist** or play them. 🧪 dates and numbers.
+
+---
+
 ## 2026-11-10 (night): M3, M5, M6, M7, M8: crossfade, headphone correction, folders, widget, device sync, releases
 
 **Fixes first**

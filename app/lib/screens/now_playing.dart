@@ -380,7 +380,9 @@ void showQueueSheet(BuildContext context, PlayerController player) {
           final tok = context.tok;
           final accent = Theme.of(context).colorScheme.primary;
           final empty = q.user.isEmpty && q.context.isEmpty && q.autoplay.isEmpty;
-          return ListView(controller: scroll, padding: const EdgeInsets.only(bottom: 24), children: [
+          // One scroll view with lazy sections (nested shrink-wrapped lists made it rough).
+          return CustomScrollView(controller: scroll, slivers: [
+            SliverToBoxAdapter(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 8, 0),
               child: Row(children: [
@@ -403,19 +405,21 @@ void showQueueSheet(BuildContext context, PlayerController player) {
                 padding: const EdgeInsets.fromLTRB(16, 2, 16, 4),
                 child: Text('Swipe right: play next · swipe left: remove · hold and drag: move', style: TextStyle(color: tok.textFaint, fontSize: 12)),
               ),
-            if (empty) const Padding(padding: EdgeInsets.all(24), child: EmptyState(icon: Icons.queue_music_rounded, text: 'Nothing queued')),
+              if (empty) const Padding(padding: EdgeInsets.all(24), child: EmptyState(icon: Icons.queue_music_rounded, text: 'Nothing queued')),
+            ])),
             if (q.user.isNotEmpty) ...[
-              const SectionHeader('Next in Queue'),
-              _QueueSection(player: player, section: 'user', songs: q.user),
+              const SliverToBoxAdapter(child: SectionHeader('Next in Queue')),
+              _queueSection(player, 'user', q.user),
             ],
             if (q.context.isNotEmpty) ...[
-              SectionHeader(q.source != null ? 'Next from: ${q.source!.title}' : 'Up Next'),
-              _QueueSection(player: player, section: 'context', songs: q.context),
+              SliverToBoxAdapter(child: SectionHeader(q.source != null ? 'Next from: ${q.source!.title}' : 'Up Next')),
+              _queueSection(player, 'context', q.context),
             ],
             if (q.autoplay.isNotEmpty) ...[
-              const SectionHeader('Autoplay', subtitle: 'Picked from your taste'),
-              _QueueSection(player: player, section: 'auto', songs: q.autoplay),
+              const SliverToBoxAdapter(child: SectionHeader('Autoplay', subtitle: 'Picked from your taste')),
+              _queueSection(player, 'auto', q.autoplay),
             ],
+            const SliverToBoxAdapter(child: SizedBox(height: 24)),
           ]);
         },
       ),
@@ -436,36 +440,29 @@ String sourceLabel(api.SourceView s) => switch (s.kind) {
       _ => s.title,
     };
 
-/// One section of the queue: swipe, remove and drag to reorder.
-class _QueueSection extends StatelessWidget {
-  const _QueueSection({required this.player, required this.section, required this.songs});
-  final PlayerController player;
-  final String section;
-  final List<api.SongView> songs;
-
-  @override
-  Widget build(BuildContext context) {
-    final tok = context.tok;
-    Widget swipeBg(Color c, IconData icon, String label, Alignment a) => Container(
-          color: c,
-          alignment: a,
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(icon, color: Colors.white),
-            const SizedBox(width: 8),
-            Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-          ]),
-        );
-    return ReorderableListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      buildDefaultDragHandles: false,
-      itemCount: songs.length,
-      onReorderItem: (from, to) => player.moveInQueue(section, from, to),
-      itemBuilder: (context, i) {
-        final song = songs[i];
-        return ReorderableDelayedDragStartListener(
-          key: ValueKey('$section-$i-${song.id}'),
+/// One section of the queue: swipe, remove and drag to reorder. A lazy sliver,
+/// so long queues scroll smoothly.
+Widget _queueSection(PlayerController player, String section, List<api.SongView> songs) {
+  Widget swipeBg(Color c, IconData icon, String label, Alignment a) => Container(
+        color: c,
+        alignment: a,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, color: Colors.white),
+          const SizedBox(width: 8),
+          Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+        ]),
+      );
+  return SliverReorderableList(
+    itemCount: songs.length,
+    onReorderItem: (from, to) => player.moveInQueue(section, from, to),
+    itemBuilder: (context, i) {
+      final song = songs[i];
+      final tok = context.tok;
+      return Material(
+        key: ValueKey('$section-$i-${song.id}'),
+        color: Colors.transparent,
+        child: ReorderableDelayedDragStartListener(
           index: i,
           child: Dismissible(
             key: ValueKey('d-$section-$i-${song.id}'),
@@ -492,10 +489,10 @@ class _QueueSection extends StatelessWidget {
               ),
             ),
           ),
-        );
-      },
-    );
-  }
+        ),
+      );
+    },
+  );
 }
 
 /// Sleep timer: pause after a while, or at the end of this song.
