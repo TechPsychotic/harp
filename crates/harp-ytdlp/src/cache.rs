@@ -62,6 +62,23 @@ pub fn trim(dir: &Path, max_bytes: u64, keep: &[String]) -> usize {
     removed
 }
 
+/// Deletes every finished cached song except the `keep` ids (what just played,
+/// what plays now and what's coming). Files still being fetched are left alone.
+pub fn retain(dir: &Path, keep: &[String]) -> usize {
+    let Ok(d) = std::fs::read_dir(dir) else { return 0 };
+    let mut removed = 0;
+    for e in d.flatten() {
+        let name = e.file_name().to_string_lossy().into_owned();
+        if name.ends_with(".part") || name.ends_with(".ytdl") || keep.iter().any(|k| name.starts_with(&format!("{k}."))) {
+            continue;
+        }
+        if e.path().is_file() && std::fs::remove_file(e.path()).is_ok() {
+            removed += 1;
+        }
+    }
+    removed
+}
+
 pub fn clear(dir: &Path) {
     if let Ok(d) = std::fs::read_dir(dir) {
         for e in d.flatten() {
@@ -127,5 +144,17 @@ mod tests {
         assert!(find(&d, "old").is_some() && find(&d, "new").is_none());
         clear(&d);
         assert_eq!(total_bytes(&d), 0);
+    }
+
+    #[test]
+    fn retain_keeps_only_what_is_needed() {
+        let d = tmp("retain");
+        write(&d, "prev.m4a", 10, 0);
+        write(&d, "cur.webm", 10, 0);
+        write(&d, "gone.m4a", 10, 0);
+        write(&d, "fetching.m4a.part", 10, 0);
+        assert_eq!(retain(&d, &["prev".into(), "cur".into(), "next".into()]), 1);
+        assert!(find(&d, "gone").is_none() && find(&d, "prev").is_some() && find(&d, "cur").is_some());
+        assert!(d.join("fetching.m4a.part").exists(), "a fetch in progress is not touched");
     }
 }

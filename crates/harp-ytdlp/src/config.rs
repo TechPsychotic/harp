@@ -14,6 +14,9 @@ pub struct Tool {
     pub proxy: Option<String>,
     /// A JavaScript runtime for YouTube's player challenges: `quickjs:/path/to/qjs`.
     pub js_runtime: Option<String>,
+    /// yt-dlp's own cache (YouTube's player code and solved challenges), kept
+    /// between songs so each one doesn't fetch and solve them again. None: no cache.
+    pub cache_dir: Option<PathBuf>,
     pub timeout: Duration,
 }
 
@@ -26,6 +29,7 @@ impl Tool {
             env: vec![],
             proxy: None,
             js_runtime: None,
+            cache_dir: None,
             timeout: Duration::from_secs(60),
         }
     }
@@ -39,10 +43,14 @@ impl Tool {
 
     pub(crate) fn base_args(&self) -> Vec<String> {
         let mut a = self.prefix_args.clone();
-        a.extend(
-            ["--ignore-config", "--no-warnings", "--encoding", "utf-8", "--socket-timeout", "30", "--no-cache-dir"]
-                .map(String::from),
-        );
+        a.extend(["--ignore-config", "--no-warnings", "--encoding", "utf-8", "--socket-timeout", "30"].map(String::from));
+        match &self.cache_dir {
+            Some(d) => {
+                a.push("--cache-dir".into());
+                a.push(d.to_string_lossy().into_owned());
+            }
+            None => a.push("--no-cache-dir".into()),
+        }
         if let Some(js) = &self.js_runtime {
             a.push("--js-runtimes".into());
             a.push(js.clone());

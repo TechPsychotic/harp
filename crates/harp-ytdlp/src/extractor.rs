@@ -56,6 +56,15 @@ pub struct YtDlp {
     tool: Tool,
     cache: Mutex<HashMap<(String, Quality), Stream>>,
     ytmusic: bool,
+    light_client: bool,
+}
+
+const LIGHT_CLIENT: &str = "youtube:player_client=visionos;player_skip=webpage,configs";
+
+/// YouTube refusing an address for asking too much.
+pub fn is_bot_check(msg: &str) -> bool {
+    let m = msg.to_lowercase();
+    m.contains("not a bot") || m.contains("confirm you") || m.contains("http error 429") || m.contains("too many requests")
 }
 
 fn now() -> u64 {
@@ -72,12 +81,18 @@ pub(crate) fn is_transient(msg: &str) -> bool {
 
 impl YtDlp {
     pub fn new(tool: Tool) -> Self {
-        YtDlp { tool, cache: Mutex::new(HashMap::new()), ytmusic: true }
+        YtDlp { tool, cache: Mutex::new(HashMap::new()), ytmusic: true, light_client: true }
     }
 
     /// Use only yt-dlp, never YouTube Music's web API (tests, or if it breaks).
     pub fn without_ytmusic(mut self) -> Self {
         self.ytmusic = false;
+        self
+    }
+
+    /// Always let yt-dlp choose YouTube's clients (tests with a fake yt-dlp).
+    pub fn without_light_client(mut self) -> Self {
+        self.light_client = false;
         self
     }
 
@@ -176,25 +191,13 @@ impl YtDlp {
                 return Ok(s.clone());
             }
         }
-        let args = [
-            "--no-playlist".to_string(),
-            "-f".into(),
-            q.format().into(),
-            "-J".into(),
-            format!("https://www.youtube.com/watch?v={id}"),
-        ];
-        // A flaky connection (a dropped tunnel, a 502, a timeout) is worth another try.
-        let mut attempt = 0;
-        let out = loop {
-            match self.run(&args) {
-                Ok(o) => break o,
-                Err(Error::Failed(m)) if attempt < 2 && is_transient(&m) => {
-                    attempt += 1;
-                    std::thread::sleep(std::time::Duration::from_millis(600 * attempt as u64));
-                }
-                Err(e) => return Err(e),
-            }
-        };
+        let url = format!("https://www.youtube.com/watch?v={id}");
+        let out = self.with_clients(|client| {
+            let mut a = vec!["--no-playlist".to_string()];
+            a.extend(client.iter().map(|x| x.to_string()));
+            a.extend(["-f".into(), q.format().into(), "-J".into(), url.clone()]);
+            self.run_retrying(&a)
+        })?;
         let s = parse::stream_from_info(&out)?;
         self.cache.lock().unwrap().insert(key, s.clone());
         Ok(s)
@@ -205,18 +208,22 @@ impl YtDlp {
     pub fn download(&self, id: &str, dir: &std::path::Path, q: Quality) -> Result<(std::path::PathBuf, u64)> {
         std::fs::create_dir_all(dir)?;
         let template = dir.join(format!("{id}.%(ext)s"));
-        let out = self.run(&[
-            "--no-playlist".into(),
-            "--no-part".into(),
-            "-f".into(),
-            q.format().into(),
-            "-o".into(),
-            template.to_string_lossy().into_owned(),
-            "--print".into(),
-            "after_move:filepath".into(),
-            "--no-simulate".into(),
-            format!("https://www.youtube.com/watch?v={id}"),
-        ])?;
+        let url = format!("https://www.youtube.com/watch?v={id}");
+        let out = self.with_clients(|client| {
+            let mut a = vec!["--no-playlist".to_string(), "--no-part".into()];
+            a.extend(client.iter().map(|x| x.to_string()));
+            a.extend([
+                "-f".into(),
+                q.format().into(),
+                "-o".into(),
+                template.to_string_lossy().into_owned(),
+                "--print".into(),
+                "after_move:filepath".into(),
+                "--no-simulate".into(),
+                url.clone(),
+            ]);
+            self.run_retrying(&a)
+        })?;
         let path = out
             .lines()
             .rev()
@@ -226,6 +233,39 @@ impl YtDlp {
             .ok_or_else(|| Error::Failed("yt-dlp did not report a file".into()))?;
         let bytes = std::fs::metadata(&path)?.len();
         Ok((path, bytes))
+    }
+
+    /// A flaky connection (a dropped tunnel, a 502, a timeout) is worth another try.
+    fn run_retrying(&self, args: &[String]) -> Result<String> {
+        let mut attempt = 0;
+        loop {
+            match self.run(args) {
+                Err(Error::Failed(m)) if attempt < 2 && is_transient(&m) => {
+                    attempt += 1;
+                    std::thread::sleep(std::time::Duration::from_millis(600 * attempt as u64));
+                }
+                r => return r,
+            }
+        }
+    }
+
+    /// Runs `f` with YouTube's lightest client first, then yt-dlp's own choice.
+    ///
+    /// The `visionos` client returns plain audio links from one request, with no
+    /// web page and no player code to download and solve (slow with QuickJS on a
+    /// phone). yt-dlp's default instead asks three clients, after the page and the
+    /// player code: four or five requests a song, which is what gets an address
+    /// "confirm you're not a bot" sooner. If the light client has nothing, the
+    /// default runs as before.
+    fn with_clients(&self, f: impl Fn(&[&str]) -> Result<String>) -> Result<String> {
+        if !self.light_client {
+            return f(&[]);
+        }
+        match f(&["--extractor-args", LIGHT_CLIENT]) {
+            Ok(o) => Ok(o),
+            Err(Error::Timeout) => Err(Error::Timeout),
+            Err(first) => f(&[]).map_err(|e| if is_bot_check(&e.to_string()) || !is_bot_check(&first.to_string()) { e } else { first }),
+        }
     }
 
     pub fn forget(&self, id: &str) {
@@ -327,6 +367,42 @@ mod tests {
     }
 
     #[test]
+    fn light_client_first_then_ytdlps_choice() {
+        // A tool that refuses the light client (logging each call): the default still plays.
+        let d = tmp("light");
+        let tool = d.join("yt-dlp");
+        let info = include_str!("../tests/fixtures/info.json").replace('\n', "");
+        std::fs::write(
+            &tool,
+            format!(
+                "#!/bin/sh\necho \"$*\" >> \"{d}/calls\"\ncase \"$*\" in *visionos*) echo 'ERROR: [youtube] x: Sign in to confirm you’re not a bot' >&2; exit 1;; esac\ncat <<'EOF'\n{info}\nEOF\n",
+                d = d.display()
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&tool, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let y = YtDlp::new(Tool::binary(tool)).without_ytmusic();
+        assert!(y.resolve("5NV6Rdv1a3I", Quality::High).is_ok());
+        let calls = std::fs::read_to_string(d.join("calls")).unwrap();
+        let lines: Vec<&str> = calls.lines().collect();
+        assert_eq!(lines.len(), 2, "{calls}");
+        assert!(lines[0].contains("player_client=visionos") && lines[0].contains("--cache-dir").eq(&false));
+        assert!(!lines[1].contains("visionos"));
+        assert!(is_bot_check("ERROR: Sign in to confirm you're not a bot"));
+        assert!(!is_bot_check("ERROR: Video unavailable"));
+    }
+
+    #[test]
+    fn cache_dir_replaces_no_cache() {
+        let mut t = Tool::binary("/bin/yt-dlp");
+        assert!(t.base_args().contains(&"--no-cache-dir".to_string()));
+        t.cache_dir = Some("/data/ytc".into());
+        let a = t.base_args();
+        assert!(!a.contains(&"--no-cache-dir".to_string()));
+        assert!(a.windows(2).any(|w| w[0] == "--cache-dir" && w[1] == "/data/ytc"));
+    }
+
+    #[test]
     fn qualities_parse_and_select_formats() {
         assert_eq!(Quality::parse("low"), Quality::Low);
         assert_eq!(Quality::parse("medium"), Quality::Medium);
@@ -387,4 +463,24 @@ mod tests {
         assert!(matches!(YtDlp::new(t).version(), Err(Error::Timeout)));
     }
 
+}
+
+#[cfg(test)]
+mod live {
+    use super::*;
+
+    /// `HARP_YTDLP=/path/to/yt-dlp cargo test -p harp-ytdlp -- --ignored live_light_client`
+    #[test]
+    #[ignore]
+    fn live_light_client() {
+        let mut t = Tool::binary(std::env::var("HARP_YTDLP").expect("HARP_YTDLP"));
+        let dir = std::env::temp_dir().join("harp-live-light");
+        t.cache_dir = Some(dir.join("ytc"));
+        let y = YtDlp::new(t).without_ytmusic();
+        let s = y.resolve("dQw4w9WgXcQ", Quality::High).unwrap();
+        assert!(s.url.starts_with("https://"));
+        let (p, bytes) = y.download("dQw4w9WgXcQ", &dir, Quality::High).unwrap();
+        eprintln!("{} ({bytes} bytes)", p.display());
+        assert!(bytes > 500_000);
+    }
 }

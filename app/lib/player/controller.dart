@@ -560,6 +560,7 @@ class PlayerController extends ChangeNotifier {
     final s = queue.current;
     if (s == null) return;
     final gen = ++_loadGen;
+    if (_loadedId != null && _loadedId != s.id) _prevId = _loadedId;
     _userPaused = false;
     _fadeTried = null;
     _saveLongSpot(); // the song being left, while its position is still known
@@ -614,6 +615,7 @@ class PlayerController extends ChangeNotifier {
       _errorStreak = 0;
       unawaited(api.saveLastPlayed(s: s));
       unawaited(_topUpAutoplay());
+      _tidyCache();
       _prefetch();
     } catch (e) {
       if (gen == _loadGen) {
@@ -664,12 +666,38 @@ class PlayerController extends ChangeNotifier {
 
   Timer? _prefetchTimer;
 
-  /// Fetches the next song ahead (one song: asking YouTube for several at
-  /// once, on every skip, is what triggers its bot check). Waits until this
-  /// song has played 20 s, so quick skipping doesn't fetch anything.
+  /// How many songs ahead are kept on the device: five, fewer if the cache
+  /// limit in Settings is small (about 10 MB a song at the best quality).
+  int get _aheadCount => (settings.cacheMb ~/ 10).clamp(0, 5);
+
+  /// The songs that play next (not ones already downloaded: they're on the
+  /// device anyway, and are never fetched again).
+  List<api.SongView> get _upcoming {
+    final q = queue;
+    final out = <api.SongView>[];
+    for (final s in [...q.user, ...q.context, ...q.autoplay]) {
+      if (out.length >= _aheadCount) break;
+      if (!s.downloaded && !out.any((x) => x.id == s.id)) out.add(s);
+    }
+    return out;
+  }
+
+  /// The song before this one keeps its cached file (in case you go back to
+  /// it) until this one is over; older cached songs are deleted.
+  String? _prevId;
+
+  void _tidyCache() {
+    final cur = current;
+    if (cur == null) return;
+    unawaited(api.cacheKeepOnly(keep: [?_prevId, cur.id, ..._upcoming.map((s) => s.id)]));
+  }
+
+  /// Fetches the next few songs onto the device, one at a time and a few
+  /// seconds apart (a burst is what triggers YouTube's bot check). Waits until
+  /// this song has played 10 s, so quick skipping doesn't fetch anything.
   Future<void> _prefetchIfAllowed() async {
     _prefetchTimer?.cancel();
-    final wait = const Duration(seconds: 20) - position.value;
+    final wait = const Duration(seconds: 10) - position.value;
     if (wait > Duration.zero) {
       final id = current?.id;
       _prefetchTimer = Timer(wait, () {
@@ -680,9 +708,9 @@ class PlayerController extends ChangeNotifier {
     // Don't fetch ahead on mobile data unless allowed in Settings.
     if (!settings.prefetchOnMobile && await Native.isMetered()) return;
     if (api.youtubeBackingOff()) return;
-    final next = [...queue.user, ...queue.context, ...queue.autoplay].firstOrNull;
-    if (next == null || next.downloaded) return;
-    await api.prefetchSongs(ids: [next.id], quality: settings.streamQuality, limitMb: settings.cacheMb);
+    final ids = _upcoming.map((s) => s.id).toList();
+    if (ids.isEmpty) return;
+    await api.prefetchSongs(ids: ids, quality: settings.streamQuality, limitMb: settings.cacheMb);
   }
 
   Future<void> _topUpAutoplay() async {
@@ -749,21 +777,19 @@ class PlayerController extends ChangeNotifier {
 
   Future<void> _armOnce() async {
     final cur = current;
-    // Not as a party guest (the host decides what's next), not mid-load.
     // Not as a party guest (the host decides), not mid-load, not while crossfading
     // (then the next song starts on a second player instead).
-    final next = (steer != null || cur == null || _loadedId != cur.id || _loading || settings.crossfade > 0) ? null : _upNext;
+    var next = (steer != null || cur == null || _loadedId != cur.id || _loading || settings.crossfade > 0) ? null : _upNext;
+    // Only a song that's on the device (downloaded or fetched ahead) waits in
+    // the engine. A streaming link could expire or fail while it waits, and
+    // the engine would then stop on it with the next song on screen. Songs
+    // that aren't on the device load the ordinary way when this one ends.
+    if (next != null && !next.downloaded && !api.songOnDevice(id: next.id)) next = null;
     if (next?.id == _armedId) return;
-    // Late, not early: in the last 30 s of the song (one request per song, with a
-    // fresh link, and no time for the queue to change under it), or straight
-    // away when the next song is on the device (no request at all).
-    final d = duration.value, pos = position.value;
-    final left = d - pos;
-    final late = d > Duration.zero && left < const Duration(seconds: 30);
-    if (next != null && _armedId == null && !late && !next.downloaded) return;
+    final d = duration.value;
+    final left = d - position.value;
     // Never swap what's lined up in the last 3 s: the engine may be moving into it.
     if (_armedId != null && d > Duration.zero && left < const Duration(seconds: 3)) return;
-    if (next != null && !next.downloaded && api.youtubeBackingOff()) return;
     final pl = _player.state.playlist;
     for (var i = pl.items.length - 1; i > pl.index; i--) {
       await _player.remove(i);
@@ -771,6 +797,7 @@ class PlayerController extends ChangeNotifier {
     _armedId = null;
     if (next == null || (settings.offline && !next.downloaded)) return;
     final st = await api.resolveStream(id: next.id, quality: settings.streamQuality);
+    if (!st.local) return;
     // The queue may have changed while that resolved.
     if (_upNext?.id != next.id || _loadedId != current?.id || _loading) {
       _armAgain = true;
@@ -810,6 +837,7 @@ class PlayerController extends ChangeNotifier {
 
   Future<void> _onGaplessAdvance(String id) async {
     _armedId = null;
+    if (_loadedId != null && _loadedId != id) _prevId = _loadedId;
     final before = queue;
     await _finishCurrent(skipped: false, completion: 1.0); // it played to the end
     queue = await api.queueNext(autoAdvance: true);
@@ -837,7 +865,21 @@ class PlayerController extends ChangeNotifier {
     } catch (_) {}
     notifyListeners();
     unawaited(_topUpAutoplay());
+    _tidyCache();
     _prefetch();
+    _ensureStarted(id);
+  }
+
+  /// After the engine moved on by itself: if the new song hasn't really
+  /// started within a few seconds (and you didn't pause), load it again.
+  void _ensureStarted(String id) {
+    Future<void>.delayed(const Duration(seconds: 5), () {
+      if (current?.id != id || _loading || _userPaused || steer != null) return;
+      if (position.value < const Duration(seconds: 1)) {
+        _pendingSkips = 0;
+        unawaited(_load());
+      }
+    });
   }
 
   // --- crossfade ---
@@ -1073,8 +1115,10 @@ class PlayerController extends ChangeNotifier {
     if (steer != null) return steer!(playing ? 'pause' : 'play', position.value.inMilliseconds);
     _userPaused = playing;
     if (current == null) return;
-    // After a restart the queue is back but nothing is loaded yet.
-    if (_loadedId != current!.id) {
+    // After a restart the queue is back but nothing is loaded yet; and if the
+    // engine stopped on a song that never started, play loads it properly.
+    final stalled = !playing && !_loading && (_player.state.completed || duration.value == Duration.zero);
+    if (_loadedId != current!.id || stalled) {
       _pendingSkips = 0;
       await _load();
       return;

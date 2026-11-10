@@ -231,6 +231,8 @@ pub fn start_engine(cfg: EngineConfig) -> Result<(), String> {
         Tool::binary(install::ensure(&tools, asset, false).map_err(e)?)
     };
 
+    let mut tool = tool;
+    tool.cache_dir = Some(data.join("ytdlp-cache"));
     // A backup an older build left staged is merged in (never swapped over this library).
     let _ = harp_core::backup::apply_pending(&db);
     let store = Store::open(&db).map_err(e)?;
@@ -1192,6 +1194,7 @@ pub fn prefetch_songs(ids: Vec<String>, quality: String, limit_mb: u32) {
         return;
     }
     let inflight = PREFETCHING.get_or_init(|| Mutex::new(Default::default()));
+    let all = ids.clone();
     for id in ids {
         if harp_core::local::is_local(&id) {
             continue; // already on the device
@@ -1203,6 +1206,7 @@ pub fn prefetch_songs(ids: Vec<String>, quality: String, limit_mb: u32) {
             continue;
         }
         let q = Quality::parse(&quality);
+        let keep = all.clone();
         std::thread::spawn(move || {
             let Ok(en) = eng() else { return };
             {
@@ -1211,13 +1215,37 @@ pub fn prefetch_songs(ids: Vec<String>, quality: String, limit_mb: u32) {
                     if let Err(e) = en.yt.download(&id, &en.cache_dir, q) {
                         note_bot_check(&e.to_string());
                     }
+                    // One at a time, a few seconds apart: a burst of requests is
+                    // what YouTube answers with "confirm you're not a bot".
+                    std::thread::sleep(std::time::Duration::from_secs(3));
                 }
-                let keep: Vec<String> = vec![id.clone()];
                 cache::trim(&en.cache_dir, limit_mb as u64 * 1_048_576, &keep);
             }
             PREFETCHING.get().unwrap().lock().unwrap().remove(&id);
         });
     }
+}
+
+/// Keeps only these songs in the play cache (the one just played, the one
+/// playing and the ones coming up); the rest are deleted. Downloads live
+/// elsewhere and are never touched.
+pub fn cache_keep_only(keep: Vec<String>) {
+    if let Ok(en) = eng() {
+        cache::retain(&en.cache_dir, &keep);
+    }
+}
+
+/// Whether a song plays from the device (downloaded, your own file, or fetched ahead).
+#[flutter_rust_bridge::frb(sync)]
+pub fn song_on_device(id: String) -> bool {
+    let Ok(en) = eng() else { return false };
+    if harp_core::local::is_local(&id) {
+        return true;
+    }
+    if en.store.lock().unwrap().downloaded_path(&id).ok().flatten().is_some_and(|p| std::path::Path::new(&p).is_file()) {
+        return true;
+    }
+    cache::find(&en.cache_dir, &id).is_some()
 }
 
 pub fn cache_bytes() -> u64 {

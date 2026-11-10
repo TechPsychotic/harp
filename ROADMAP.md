@@ -69,6 +69,9 @@ the idea and the code. `UPDATES.md` is the dated log of changes; this file is th
 | B26 | Library play/pause overlaps text; rough queue scrolling | 🟡 | Text now shrinks with an ellipsis; queue is one sliver list with handle drags. |
 | B27 | Windows and macOS builds failing | 🟡 | SystemConfiguration framework (macOS); coroutine define (Windows). Re-run on Actions. |
 | B28 | Cache / downloads sizes out of date | 🟡 | Refresh on every download change; downloads reuse cached songs. |
+| B29 | Playlist's next song doesn't start; play doesn't help | 🟡 | Only on-device songs wait in the engine; 5 s start check; play reloads a stalled song. |
+| B30 | Bot check still showing | 🟡 | Light YouTube client first (1 request), yt-dlp cache kept, fetches spaced out. |
+| F64 | Fetch 5 songs ahead, delete after the next finishes, never touch downloads | 🟡 | Done; 🧪 tidy-up. |
 | B18 | Android builds failing on GitHub | 🟡 | GitHub's release downloads returned 504 for hours. Day-to-day CI now runs on the laptop (`scripts/ci-local.sh`, ✅); GitHub Actions only for releases or by hand, with caches and retries. |
 
 **Problems (23): 5 fixed and checked, 17 fixed but waiting for your confirmation, 1 partly fixed.**

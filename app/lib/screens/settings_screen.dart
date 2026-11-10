@@ -280,7 +280,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   subtitle: Text(
                     s.cacheMb == 0
                         ? 'Off: songs stream only'
-                        : 'Up to ${s.cacheMb} MB. The next songs load in the background so skipping is instant and playback survives a weak connection or a sleeping screen.',
+                        : 'Up to ${s.cacheMb} MB. The next ${(s.cacheMb ~/ 10).clamp(1, 5)} songs are fetched onto the device while you listen, so they start instantly and play through a weak connection. A song’s file is deleted once the song after it has finished. Downloaded songs are never fetched again.',
                     style: TextStyle(color: tok.textDim),
                   ),
                   trailing: PopupMenuButton<int>(

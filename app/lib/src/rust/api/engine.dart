@@ -343,6 +343,16 @@ Future<void> prefetchSongs({
   limitMb: limitMb,
 );
 
+/// Keeps only these songs in the play cache (the one just played, the one
+/// playing and the ones coming up); the rest are deleted. Downloads live
+/// elsewhere and are never touched.
+Future<void> cacheKeepOnly({required List<String> keep}) =>
+    RustLib.instance.api.crateApiEngineCacheKeepOnly(keep: keep);
+
+/// Whether a song plays from the device (downloaded, your own file, or fetched ahead).
+bool songOnDevice({required String id}) =>
+    RustLib.instance.api.crateApiEngineSongOnDevice(id: id);
+
 Future<BigInt> cacheBytes() => RustLib.instance.api.crateApiEngineCacheBytes();
 
 Future<void> clearCache() => RustLib.instance.api.crateApiEngineClearCache();

@@ -8,6 +8,30 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-10 (evening): next song stalls, bot check, fetching five songs ahead
+
+**Fixes**
+- **A playlist's next song didn't start, and play didn't help** until you went back a song and skipped
+  again. Cause: near the end of a song Harp lined up the next one *in the engine* as a streaming link;
+  when that link failed, the engine stopped on it while the screen had already moved on, and play only
+  resumed the stopped engine. Now only songs **on the device** (downloaded or fetched ahead) are lined
+  up in the engine; others load the ordinary way when the song ends. If a song hasn't really started
+  5 s after the engine moved on, it is loaded again, and play on a stalled song loads it properly. 📱
+- **"Confirm you're not a bot" again.** Each song cost 4–5 requests to YouTube (its web page, its
+  player code, three player clients), with yt-dlp's cache switched off so the player code was fetched
+  and solved again every time (slow with QuickJS on the phone). Now Harp asks with YouTube's lightest
+  client first: one request, plain audio links, no player code. If that has nothing, yt-dlp's usual
+  way runs, now with its cache kept between songs. 🧪 the fallback order; ✅ live on the laptop: the
+  stream resolves and a song downloads (3.4 MB) through the light client.
+
+**Fetching ahead** (Settings › Play cache)
+- The **next 5 songs** (fewer if the cache limit is small) are fetched onto the device once a song has
+  played 10 s, one at a time a few seconds apart, so they start instantly and play through a weak
+  connection. A song's cached file is **deleted once the song after it has finished** (so going back one
+  song is still instant). **Downloaded songs are never fetched or deleted.** 🧪 the cache tidy-up.
+
+---
+
 ## 2026-11-10 (late): playback fixes, Your Rhythm, Harp Encore
 
 **Fixes**
