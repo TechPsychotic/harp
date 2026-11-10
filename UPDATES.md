@@ -8,6 +8,17 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-10 (evening, later): website; HRTF plan
+
+- **Website** in `docs/` (GitHub Pages): a parallax landing page covering discovery, offline, sound,
+  lyrics, listening together and sync, Your Rhythm and Encore, privacy and downloads. It works on
+  phones, tablets and desktops, and keeps still for people who turn off motion. ✅ rendered at
+  1440, 820 and 390 px wide in Firefox. Goes live once Pages is switched on (repo public).
+- **HRTF (true 3D):** checked the engine's FFmpeg: it has no `sofalizer`, `headphone` or `afir`, so
+  it needs our own engine build with libmysofa. Planned as the milestone after v0.9.0.
+
+---
+
 ## 2026-11-10 (evening): next song stalls, bot check, fetching five songs ahead
 
 **Fixes**

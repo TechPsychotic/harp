@@ -174,7 +174,7 @@ Status as of 2026-11-10. ☑ done · ◐ partly done · ☐ to do. 📱 = built,
   measured models), even volume (EBU R128), spatial (Wide, Headphone crossfeed, Immersive), playback
   speed, sleep timer, resume for long tracks.
 - ☑ **Crossfade** (0–12 s, a second player; gapless when off).
-- ☐ Later: true 3D (HRTF) needs FFmpeg's `sofalizer`, which the engine's build doesn't include: a custom
+- ☐ **Next after v0.9.0:** true 3D (HRTF). The engine's FFmpeg has no `sofalizer`, `headphone` or `afir` (checked), so: a custom
   engine build with libmysofa, or a different HRTF library.
 
 ### M4 · Lyrics (low priority)
