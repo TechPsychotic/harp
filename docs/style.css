@@ -17,6 +17,12 @@
 
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; background: var(--ink); }
+/* Touch screens: scrolling settles gently on a section. With a mouse wheel
+   or keys, main.js moves one section at a time instead. */
+@media (hover: none) { html { scroll-snap-type: y proximity; } }
+.hero, .band { scroll-snap-align: start; }
+.sec { scroll-snap-align: center; }
+.dl, .foot { scroll-snap-align: end; }
 body {
   margin: 0;
   /* No background here: the page root has it, so the sky and spheres (behind

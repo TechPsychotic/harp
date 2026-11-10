@@ -496,6 +496,69 @@
     addEventListener("resize", () => requestAnimationFrame(frame));
   }
 
+  // ---------- one section at a time ----------
+  // With a mouse wheel, a trackpad or the keyboard, each gesture glides to the
+  // next (or previous) section, centred. The download area at the end is
+  // taller than the screen, so it scrolls freely. Touch screens keep their
+  // own scrolling.
+  const band = document.querySelector(".band");
+  const stops = () => {
+    const y = scrollY, out = [];
+    for (const s of sections) {
+      if (s.el === band) break;
+      const r = s.el.getBoundingClientRect();
+      const top = r.top + y;
+      out.push(s.el.classList.contains("hero") ? 0 : Math.max(0, top + r.height / 2 - H / 2));
+    }
+    out.push(band.getBoundingClientRect().top + y);
+    return out;
+  };
+  let busyUntil = 0, wheelSum = 0;
+  function glide(dir) {
+    const list = stops(), y = scrollY, bandTop = list[list.length - 1];
+    // Inside the download area: scroll freely, until going up past its top.
+    if (y > bandTop + 4) {
+      if (dir > 0) return false;
+      if (y - 140 > bandTop) return false;
+    }
+    if (y >= bandTop - 4 && dir > 0) return false;
+    let i = 0;
+    for (let k = 0; k < list.length; k++) if (Math.abs(list[k] - y) < Math.abs(list[i] - y)) i = k;
+    // Between two stops: the next one in the direction you're going.
+    if (dir > 0 && list[i] <= y + 4) i++;
+    else if (dir < 0 && list[i] >= y - 4) i--;
+    i = Math.max(0, Math.min(list.length - 1, i));
+    scrollTo({ top: list[i], behavior: reduce ? "auto" : "smooth" });
+    busyUntil = performance.now() + (reduce ? 120 : 850);
+    return true;
+  }
+  const finePointer = matchMedia("(hover: hover) and (pointer: fine)").matches;
+  if (finePointer) {
+    addEventListener("wheel", (e) => {
+      if (e.ctrlKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return; // zoom, sideways
+      const now = performance.now();
+      const dir = Math.sign(e.deltaY);
+      const list = stops(), bandTop = list[list.length - 1];
+      const free = scrollY > bandTop + 4 && !(dir < 0 && scrollY - Math.abs(e.deltaY) <= bandTop) || (scrollY >= bandTop - 4 && dir > 0);
+      if (free) return;
+      e.preventDefault();
+      // A trackpad's glide keeps sending events: one move per gesture.
+      if (now < busyUntil) { busyUntil = Math.max(busyUntil, now + 160); return; }
+      wheelSum += e.deltaY;
+      if (Math.abs(wheelSum) < 24) return;
+      wheelSum = 0;
+      glide(dir);
+    }, { passive: false });
+    addEventListener("keydown", (e) => {
+      if (e.target.closest && e.target.closest("input, textarea, select, [contenteditable]")) return;
+      const down = ["ArrowDown", "PageDown", " "].includes(e.key) && !e.shiftKey;
+      const up = ["ArrowUp", "PageUp"].includes(e.key) || (e.key === " " && e.shiftKey);
+      if (!down && !up) return;
+      if (performance.now() < busyUntil) { e.preventDefault(); return; }
+      if (glide(down ? 1 : -1)) e.preventDefault();
+    });
+  }
+
   // ---------- text coming into view ----------
   const io = new IntersectionObserver((entries) => {
     for (const e of entries) {
