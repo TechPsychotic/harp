@@ -158,3 +158,45 @@ pub fn sync_cancel() {
         o.cancel();
     }
 }
+
+// --- sharing playlists ---
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct SharedPlaylist {
+    name: String,
+    songs: Vec<harp_core::Song>,
+}
+
+/// Starts sharing a playlist (or returns the link if it already is). Friends
+/// open the link to get a copy. Sharing lasts while Harp is open, until stopped.
+pub fn playlist_share(id: i64) -> Result<String, String> {
+    if let Some(s) = crate::party_state::SHARES.lock().unwrap().as_ref().and_then(|m| m.get(&id).cloned()) {
+        return Ok(s.link.clone());
+    }
+    let (name, songs) = super::engine::playlist_contents(id)?;
+    let data = serde_json::to_vec(&SharedPlaylist { name: name.clone(), songs }).map_err(|e| e.to_string())?;
+    let share = rt().block_on(harp_party::share::Share::start(data, &name, false)).map_err(|e| e.to_string())?;
+    let link = share.link.clone();
+    crate::party_state::SHARES.lock().unwrap().get_or_insert_with(Default::default).insert(id, std::sync::Arc::new(share));
+    Ok(link)
+}
+
+/// The link while a playlist is being shared.
+#[flutter_rust_bridge::frb(sync)]
+pub fn playlist_share_link(id: i64) -> Option<String> {
+    crate::party_state::SHARES.lock().unwrap().as_ref().and_then(|m| m.get(&id).map(|s| s.link.clone()))
+}
+
+pub fn playlist_share_stop(id: i64) {
+    let s = crate::party_state::SHARES.lock().unwrap().as_mut().and_then(|m| m.remove(&id));
+    if let Some(s) = s.and_then(|s| std::sync::Arc::try_unwrap(s).ok()) {
+        rt().spawn(s.close());
+    }
+}
+
+/// What a shared playlist link holds (name and songs), without saving it.
+pub fn playlist_peek(link: String) -> Result<(String, Vec<SongView>), String> {
+    let data = rt().block_on(harp_party::share::fetch(&link)).map_err(|e| format!("{e:#}"))?;
+    let p: SharedPlaylist = serde_json::from_slice(&data).map_err(|_| "that playlist couldn't be read".to_string())?;
+    Ok((p.name, p.songs.iter().map(|s| view(s, false, false)).collect()))
+}

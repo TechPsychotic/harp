@@ -3,7 +3,7 @@ use crate::home_cache::{now_secs, HomeCache, HOME_TTL_SECS};
 use crate::spotify_state::{PendingSignIn, SPOTIFY_CANCEL, SPOTIFY_PENDING};
 use harp_core::import as imp;
 use harp_core::queue::{Queue, Repeat};
-use harp_core::recommend::{self, CandidateSource, Request};
+use harp_core::recommend::{self, Request};
 use harp_core::rng::Rng;
 use harp_core::taste::{PlayRecord, PlaySource, SkipReason, Store};
 use harp_core::Song;
@@ -1580,4 +1580,76 @@ pub fn recommend_offline(count: u32, exclude: Vec<String>) -> Result<Vec<SongVie
         recommend::rank_pool(&st, pool, count as usize, &exclude, &mut rng).map_err(e)?
     };
     Ok(views(en, picks.into_iter()))
+}
+
+
+// --- playlists: membership, smart shuffle ---
+
+/// Name and songs of a playlist (for sharing).
+pub(crate) fn playlist_contents(id: i64) -> Result<(String, Vec<Song>), String> {
+    let en = eng()?;
+    let st = en.store.lock().unwrap();
+    let name = st.playlists().map_err(e)?.into_iter().find(|p| p.id == id).map(|p| p.name).ok_or("no such playlist")?;
+    Ok((name, st.playlist_songs(id).map_err(e)?))
+}
+
+/// The playlists a song is in.
+pub fn playlists_containing(song_id: String) -> Result<Vec<i64>, String> {
+    eng()?.store.lock().unwrap().playlists_with_song(&song_id).map_err(e)
+}
+
+/// Every song that's in some playlist (rows show a ✓).
+pub fn playlisted_song_ids() -> Result<Vec<String>, String> {
+    eng()?.store.lock().unwrap().playlisted_ids().map_err(e)
+}
+
+/// Takes a song out of a playlist.
+pub fn playlist_remove_song(id: i64, song_id: String) -> Result<(), String> {
+    eng()?.store.lock().unwrap().remove_song_from_playlist(id, &song_id).map_err(e)
+}
+
+/// Songs like the ones in a playlist but not in it: for smart shuffle and the
+/// "recommended for this playlist" list. Uses a few of its songs as seeds.
+pub fn playlist_smart_picks(id: i64, count: u32) -> Result<Vec<SongView>, String> {
+    let en = eng()?;
+    let songs = en.store.lock().unwrap().playlist_songs(id).map_err(e)?;
+    if songs.is_empty() {
+        return Ok(vec![]);
+    }
+    let have: std::collections::HashSet<String> = songs.iter().map(|s| s.id.clone()).collect();
+    let seeds: Vec<Song> = {
+        let mut rng = en.rng.lock().unwrap();
+        let mut v = songs.clone();
+        rng.shuffle(&mut v);
+        v.into_iter().take(4).collect()
+    };
+    // Related songs for each seed, side by side.
+    let lists: Vec<Vec<Song>> = std::thread::scope(|sc| {
+        let jobs: Vec<_> = seeds.iter().map(|s| sc.spawn(|| recommend::related_to(&en.yt, s, 12).unwrap_or_default())).collect();
+        jobs.into_iter().map(|j| j.join().unwrap_or_default()).collect()
+    });
+    // Round-robin across seeds so picks are varied.
+    let mut out: Vec<Song> = Vec::new();
+    let mut seen = have.clone();
+    for i in 0..12 {
+        for l in &lists {
+            if let Some(s) = l.get(i) {
+                if seen.insert(s.id.clone()) {
+                    out.push(s.clone());
+                }
+            }
+        }
+        if out.len() >= count as usize {
+            break;
+        }
+    }
+    out.truncate(count as usize);
+    Ok(views(en, out.into_iter()))
+}
+
+/// Smart shuffle: mixes picks into the list playing now, one after every `every` songs.
+pub fn queue_mix_in(songs: Vec<SongView>, every: u32) -> Result<QueueView, String> {
+    let en = eng()?;
+    en.queue.lock().unwrap().mix_into_context(songs.iter().map(song).collect(), every as usize);
+    Ok(queue_view(en))
 }

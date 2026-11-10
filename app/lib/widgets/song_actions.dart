@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
@@ -9,6 +10,7 @@ import '../player/controller.dart';
 import '../src/rust/api/engine.dart' as api;
 import '../theme/glass.dart';
 import 'cover.dart';
+import 'playlist_art.dart';
 
 void toast(BuildContext context, String message) {
   ScaffoldMessenger.of(context)
@@ -94,8 +96,11 @@ class SongMenu extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.tile)),
       onSelected: (v) => runSongAction(context, player, song, v, onRemove: onRemoveFromList),
       itemBuilder: (_) => [
-        _item('next', Icons.playlist_play_rounded, 'Play next'),
-        _item('add', Icons.queue_music_rounded, 'Add to queue'),
+        // Not for the song that's playing: it can't come next.
+        if (player.current?.id != song.id) ...[
+          _item('next', Icons.playlist_play_rounded, 'Play next'),
+          _item('add', Icons.queue_music_rounded, 'Add to queue'),
+        ],
         _item('playlist', Icons.playlist_add_rounded, 'Add to playlist…'),
         _item('like', song.liked ? Icons.favorite_rounded : Icons.favorite_border_rounded, song.liked ? 'Remove from liked' : 'Like'),
         // Your own files: nothing to download or share a link to.
@@ -125,7 +130,7 @@ Future<void> runSongAction(BuildContext context, PlayerController player, api.So
       await player.addToQueue(song);
       if (context.mounted) toast(context, 'Added to queue');
     case 'playlist':
-      await addToPlaylistDialog(context, player, [song]);
+      await showSavedInSheet(context, player, song);
     case 'like':
       await player.toggleLike(song);
     case 'download':
@@ -184,8 +189,10 @@ Future<void> showSongSheet(BuildContext context, PlayerController player, api.So
               ]),
             ),
             const Divider(height: 1),
-            item('next', Icons.playlist_play_rounded, 'Play next'),
-            item('add', Icons.queue_music_rounded, 'Add to queue'),
+            if (player.current?.id != song.id) ...[
+              item('next', Icons.playlist_play_rounded, 'Play next'),
+              item('add', Icons.queue_music_rounded, 'Add to queue'),
+            ],
             item('playlist', Icons.playlist_add_rounded, 'Add to playlist…'),
             item('like', song.liked ? Icons.favorite_rounded : Icons.favorite_border_rounded, song.liked ? 'Remove from liked' : 'Like'),
             if (!song.id.startsWith('local:')) ...[
@@ -227,3 +234,83 @@ Future<String?> pickExportFormat(BuildContext context) => showModalBottomSheet<S
         ]),
       ),
     );
+
+
+/// "Saved in": every playlist with a checkbox, ticked where the song already
+/// is. Tick to add, untick to take it out; or make a new playlist with it.
+Future<void> showSavedInSheet(BuildContext context, PlayerController player, api.SongView song) async {
+  final lists = await api.playlists();
+  final inside = (await api.playlistsContaining(songId: song.id)).map((e) => e.toInt()).toSet();
+  if (!context.mounted) return;
+  await showModalBottomSheet<void>(
+    context: context,
+    useRootNavigator: true,
+    isScrollControlled: true,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setSheet) {
+        final tok = ctx.tok;
+        Future<void> toggle(api.PlaylistView pl, bool on) async {
+          if (on) {
+            await api.playlistAdd(id: pl.id, songs: [song]);
+            inside.add(pl.id);
+            // A playlist you chose "Download All" for keeps itself downloaded.
+            if (pl.autoDownload && !song.downloaded) unawaited(player.download(song));
+          } else {
+            await api.playlistRemoveSong(id: pl.id, songId: song.id);
+            inside.remove(pl.id);
+          }
+          setSheet(() {});
+          player.libraryRev.value++;
+        }
+        return SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(ctx).height * 0.75),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                child: Row(children: [
+                  Cover(url: song.thumbnail, seed: song.id, size: 44),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(inside.isEmpty ? 'Add to playlist' : 'Saved in ${inside.length} ${inside.length == 1 ? 'playlist' : 'playlists'}',
+                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 17)),
+                      Text(song.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: tok.textDim)),
+                    ]),
+                  ),
+                ]),
+              ),
+              ListTile(
+                leading: const Icon(Icons.add_rounded),
+                title: const Text('New playlist'),
+                onTap: () async {
+                  final name = await promptText(ctx, title: 'New playlist', hint: 'Name');
+                  if (name == null || name.trim().isEmpty) return;
+                  final id = await api.playlistCreate(name: name);
+                  await api.playlistAdd(id: id, songs: [song]);
+                  player.libraryRev.value++;
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  if (context.mounted) toast(context, 'Added to “${name.trim()}”');
+                },
+              ),
+              const Divider(height: 1),
+              Flexible(
+                child: ListView(shrinkWrap: true, children: [
+                  for (final pl in lists)
+                    CheckboxListTile(
+                      value: inside.contains(pl.id),
+                      onChanged: (v) => toggle(pl, v ?? false),
+                      secondary: PlaylistArt(covers: pl.covers, seed: 'pl${pl.id}', size: 40, radius: Radii.cover),
+                      title: Text(pl.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      subtitle: Text('${pl.count} songs', style: TextStyle(color: tok.textDim, fontSize: 12.5)),
+                    ),
+                ]),
+              ),
+              const SizedBox(height: 8),
+            ]),
+          ),
+        );
+      },
+    ),
+  );
+}

@@ -9,6 +9,7 @@ import 'engine.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `event_view`, `song_view`, `track`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `SharedPlaylist`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `fmt`, `fmt`
 
 /// The app listens here for everything that happens in a party.
@@ -61,6 +62,22 @@ Future<MergeInfoView> syncJoin({required String link}) =>
 
 /// Stops offering (a `sync_wait` in progress returns "cancelled" and closes it).
 Future<void> syncCancel() => RustLib.instance.api.crateApiPartySyncCancel();
+
+/// Starts sharing a playlist (or returns the link if it already is). Friends
+/// open the link to get a copy. Sharing lasts while Harp is open, until stopped.
+Future<String> playlistShare({required PlatformInt64 id}) =>
+    RustLib.instance.api.crateApiPartyPlaylistShare(id: id);
+
+/// The link while a playlist is being shared.
+String? playlistShareLink({required PlatformInt64 id}) =>
+    RustLib.instance.api.crateApiPartyPlaylistShareLink(id: id);
+
+Future<void> playlistShareStop({required PlatformInt64 id}) =>
+    RustLib.instance.api.crateApiPartyPlaylistShareStop(id: id);
+
+/// What a shared playlist link holds (name and songs), without saving it.
+Future<(String, List<SongView>)> playlistPeek({required String link}) =>
+    RustLib.instance.api.crateApiPartyPlaylistPeek(link: link);
 
 /// Something that happened in the party. `kind`: "guest_joined", "guest_left",
 /// "control", "request", "connected", "state", "members", "ended".

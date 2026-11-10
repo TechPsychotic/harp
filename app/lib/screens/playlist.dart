@@ -1,11 +1,15 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
 
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import '../native.dart';
 import '../player/controller.dart';
+import '../src/rust/api/party.dart' as net;
 import '../src/rust/api/engine.dart' as api;
 import '../theme/glass.dart';
 import '../widgets/cover.dart';
 import '../widgets/song_actions.dart';
-import '../widgets/play_button.dart';
 import '../widgets/song_tile.dart';
 import 'library.dart' show sortSongs;
 
@@ -28,6 +32,14 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   late bool _autoDl = widget.playlist.autoDownload;
   bool _loaded = false;
 
+  /// Play order toggles, remembered per playlist (like Spotify).
+  bool _shuffle = false, _smart = false;
+  bool _downloadingAll = false;
+
+  /// "Recommended for this playlist" (songs like its own, not in it).
+  List<api.SongView>? _recs;
+  bool _recsLoading = false;
+
   PlayerController get p => widget.player;
   int get id => widget.playlist.id;
 
@@ -47,9 +59,106 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   Future<void> _load() async {
     final s = await api.playlistSongs(id: id);
     _sort = await api.settingGet(key: 'sort:pl:$id') ?? _sort;
+    _shuffle = await api.settingGet(key: 'pl_shuffle:$id') == '1';
+    _smart = await api.settingGet(key: 'pl_smart:$id') == '1';
     ThumbCache.precache(s.map((x) => x.thumbnail));
     final me = (await api.playlists()).where((x) => x.id == id).firstOrNull;
     if (mounted) setState(() { _songs = s; _loaded = true; _autoDl = me?.autoDownload ?? _autoDl; });
+  }
+
+  bool get _isThis {
+    final src = p.queue.source;
+    return p.current != null && src != null && src.kind == 'playlist' && src.id == '$id';
+  }
+
+  Future<void> _play() async {
+    if (_isThis) return p.togglePlay();
+    await p.playPlaylist(id, shuffle: _shuffle, smart: _smart);
+  }
+
+  Future<void> _toggleShuffle() async {
+    setState(() => _shuffle = !_shuffle);
+    await api.settingSet(key: 'pl_shuffle:$id', value: _shuffle ? '1' : '0');
+    if (_shuffle && _isThis) await p.shuffleUpcoming();
+    if (mounted) toast(context, _shuffle ? 'Shuffle on' : 'Shuffle off');
+  }
+
+  Future<void> _toggleSmart() async {
+    setState(() => _smart = !_smart);
+    await api.settingSet(key: 'pl_smart:$id', value: _smart ? '1' : '0');
+    if (_smart && _isThis) unawaited(p.mixInSmartPicks(id));
+    if (mounted) toast(context, _smart ? 'Smart Shuffle on: songs like these get mixed in as it plays' : 'Smart Shuffle off');
+  }
+
+  Future<void> _downloadAll() async {
+    if (_downloadingAll) return;
+    final missing = _songs.where((s) => !s.downloaded).toList();
+    if (missing.isEmpty) {
+      return _menu(_autoDl ? 'nodl' : 'download');
+    }
+    await _menu('download');
+  }
+
+  Future<void> _share() async {
+    String link;
+    try {
+      link = await net.playlistShare(id: id);
+    } catch (e) {
+      if (mounted) toast(context, "Couldn't share: $e");
+      return;
+    }
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Share “$_name”'),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Friends open this link in Harp to get a copy of the playlist. It works while sharing is on and Harp is open here.'),
+          const SizedBox(height: 10),
+          SelectableText(link, style: TextStyle(fontSize: 12, color: ctx.tok.textDim)),
+        ]),
+        actions: [
+          TextButton(
+            onPressed: () {
+              net.playlistShareStop(id: id);
+              Navigator.pop(ctx);
+              toast(context, 'Stopped sharing');
+            },
+            child: const Text('Stop sharing'),
+          ),
+          TextButton(
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: link));
+              if (ctx.mounted) Navigator.pop(ctx);
+              if (mounted) toast(context, 'Link copied');
+            },
+            child: const Text('Copy'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final text = 'Listen to my playlist “$_name” on Harp: $link';
+              if (!await Native.share(text)) await Clipboard.setData(ClipboardData(text: link));
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            child: const Text('Share'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _loadRecs() async {
+    if (_recsLoading || _songs.isEmpty || p.settings.offline) return;
+    setState(() => _recsLoading = true);
+    try {
+      final r = await api.playlistSmartPicks(id: id, count: 10);
+      ThumbCache.precache(r.map((x) => x.thumbnail));
+      if (mounted) setState(() => _recs = r);
+    } catch (_) {
+      if (mounted) setState(() => _recs = const []);
+    } finally {
+      if (mounted) setState(() => _recsLoading = false);
+    }
   }
 
   Future<void> _menu(String v) async {
@@ -76,8 +185,13 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         await api.playlistAutoDownload(id: id, on_: true);
         setState(() => _autoDl = true);
         var n = 0;
-        for (final s in _songs.where((s) => !s.downloaded)) {
-          if (await p.download(s) == null) n++;
+        setState(() => _downloadingAll = true);
+        try {
+          for (final s in _songs.where((s) => !s.downloaded)) {
+            if (await p.download(s) == null) n++;
+          }
+        } finally {
+          if (mounted) setState(() => _downloadingAll = false);
         }
         if (mounted) toast(context, 'Downloaded $n songs. New songs here will download too.');
       case 'delete':
@@ -145,16 +259,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                   Text(_name, textAlign: TextAlign.center, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: -0.4)),
                   Text('${_songs.length} songs${_autoDl ? ' · new songs download automatically' : ''}', style: TextStyle(color: tok.textDim, fontSize: 14)),
                   const SizedBox(height: 16),
-                  if (_songs.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Row(children: [
-                        Expanded(child: ListPlayButton(player: p, kind: 'playlist', id: '$id', onPlay: () => p.playPlaylist(id))),
-                        const SizedBox(width: 12),
-                        Expanded(child: OutlinedButton.icon(onPressed: () => p.playPlaylist(id, shuffle: true), icon: const Icon(Icons.shuffle_rounded), label: const Text('Shuffle'))),
-                      ]),
-                    ),
-                  const SizedBox(height: 8),
+                  if (_songs.isNotEmpty) _actions(context),
+                  const SizedBox(height: 4),
                 ]),
               ),
               if (_songs.isEmpty)
@@ -202,9 +308,100 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                     ),
                   ),
                 ),
+              if (_songs.isNotEmpty && !p.settings.offline) SliverToBoxAdapter(child: _recommended(context)),
               const SliverToBoxAdapter(child: SizedBox(height: 24)),
             ]),
     );
+  }
+
+  /// Spotify-style: download and share on the left; shuffle, smart shuffle and
+  /// a big round play / pause on the right.
+  Widget _actions(BuildContext context) {
+    final tok = context.tok;
+    final accent = Theme.of(context).colorScheme.primary;
+    final allDown = _songs.every((s) => s.downloaded);
+    Widget toggle(IconData icon, bool on, String tip, VoidCallback onTap) => Column(mainAxisSize: MainAxisSize.min, children: [
+          IconButton(tooltip: tip, iconSize: 26, icon: Icon(icon, color: on ? accent : tok.textDim), onPressed: onTap),
+          // A dot under it while on, as on Spotify.
+          Container(width: 4, height: 4, decoration: BoxDecoration(shape: BoxShape.circle, color: on ? accent : Colors.transparent)),
+        ]);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 0, 16, 0),
+      child: Row(children: [
+        IconButton(
+          tooltip: _downloadingAll ? 'Downloading…' : (allDown ? 'Downloaded' : 'Download'),
+          iconSize: 28,
+          icon: Icon(
+            _downloadingAll ? Icons.downloading_rounded : Icons.download_for_offline_rounded,
+            color: allDown || _downloadingAll ? accent : tok.textDim,
+          ),
+          onPressed: _downloadAll,
+        ),
+        IconButton(
+          tooltip: net.playlistShareLink(id: id) != null ? 'Sharing: tap for the link' : 'Share',
+          iconSize: 26,
+          icon: Icon(Icons.ios_share_rounded, color: net.playlistShareLink(id: id) != null ? accent : tok.textDim),
+          onPressed: _share,
+        ),
+        const Spacer(),
+        toggle(Icons.shuffle_rounded, _shuffle, _shuffle ? 'Shuffle: on' : 'Shuffle: off', _toggleShuffle),
+        toggle(Icons.auto_awesome_rounded, _smart, _smart ? 'Smart Shuffle: on' : 'Smart Shuffle: mix in songs like these', _toggleSmart),
+        const SizedBox(width: 8),
+        ListenableBuilder(
+          listenable: p,
+          builder: (context, _) {
+            final pause = _isThis && p.playing;
+            return SizedBox(
+              width: 56,
+              height: 56,
+              child: FilledButton(
+                style: FilledButton.styleFrom(shape: const CircleBorder(), padding: EdgeInsets.zero),
+                onPressed: _play,
+                child: Icon(pause ? Icons.pause_rounded : Icons.play_arrow_rounded, size: 34),
+              ),
+            );
+          },
+        ),
+      ]),
+    );
+  }
+
+  /// Songs like this playlist's: tap + to add one.
+  Widget _recommended(BuildContext context) {
+    final tok = context.tok;
+    final accent = Theme.of(context).colorScheme.primary;
+    final recs = _recs;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      SectionHeader('Recommended', subtitle: 'Based on what’s in this playlist', action: recs == null ? null : 'Refresh', onAction: () {
+        setState(() => _recs = null);
+        _loadRecs();
+      }),
+      if (recs == null)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: _recsLoading
+              ? const Center(child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator()))
+              : OutlinedButton.icon(onPressed: _loadRecs, icon: const Icon(Icons.auto_awesome_rounded), label: const Text('Find songs for this playlist')),
+        )
+      else if (recs.isEmpty)
+        Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Text('Nothing found right now.', style: TextStyle(color: tok.textDim)))
+      else
+        for (final r in recs)
+          SongTile(
+            song: r,
+            player: p,
+            trailing: IconButton(
+              tooltip: 'Add to this playlist',
+              icon: Icon(Icons.add_circle_outline_rounded, color: accent),
+              onPressed: () async {
+                await api.playlistAdd(id: id, songs: [r]);
+                setState(() => _recs = [...recs]..removeWhere((x) => x.id == r.id));
+                p.libraryRev.value++;
+                if (context.mounted) toast(context, 'Added “${r.title}”');
+              },
+            ),
+          ),
+    ]);
   }
 }
 

@@ -50,6 +50,7 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="harp" android:host="party" />
                 <data android:scheme="harp" android:host="sync" />
+                <data android:scheme="harp" android:host="playlist" />
             </intent-filter>
             <!-- Chat apps often don't make harp:// tappable: share the message to Harp instead. -->
             <intent-filter>

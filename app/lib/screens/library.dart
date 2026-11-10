@@ -8,6 +8,7 @@ import '../widgets/shelf.dart';
 import '../widgets/song_actions.dart';
 import '../widgets/play_button.dart';
 import '../widgets/song_tile.dart';
+import '../links.dart';
 import 'collection.dart';
 import 'import_screen.dart';
 import 'local_screen.dart';
@@ -106,7 +107,17 @@ class _LibraryScreenState extends State<LibraryScreen> {
           const Divider(indent: 56),
         ]);
     return ListView(padding: const EdgeInsets.only(bottom: 24), children: [
-      PageTitle('Library', actions: [IconButton(tooltip: 'New playlist', icon: Icon(Icons.add_rounded, color: accent), onPressed: _newPlaylist)]),
+      PageTitle('Library', actions: [
+        IconButton(
+          tooltip: 'Open a shared link (playlist, party, sync)',
+          icon: Icon(Icons.add_link_rounded, color: accent),
+          onPressed: () async {
+            final link = await promptText(context, title: 'Paste a shared link', hint: 'harp://…');
+            if (link != null && link.trim().startsWith('harp://')) Links.open(link.trim());
+          },
+        ),
+        IconButton(tooltip: 'New playlist', icon: Icon(Icons.add_rounded, color: accent), onPressed: _newPlaylist),
+      ]),
       row(Icons.favorite_rounded, 'Liked Songs', '$_liked', () => _push(SongListScreen(player: p, kind: 'liked')), on: _playing('liked')),
       row(Icons.arrow_circle_down_rounded, 'Downloaded', '$_downloads', () => _push(SongListScreen(player: p, kind: 'downloads')), on: _playing('downloads')),
       row(Icons.folder_special_rounded, 'On This Device', null, () => _push(LocalScreen(player: p)), on: _playing('local')),

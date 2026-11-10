@@ -143,6 +143,26 @@ impl Queue {
         self.source = source;
     }
 
+    /// Smart shuffle: mixes `picks` into the playing list, one after every
+    /// `every` of its songs (songs already there are skipped).
+    pub fn mix_into_context(&mut self, picks: Vec<Song>, every: usize) {
+        let every = every.max(1);
+        let mut have: std::collections::HashSet<String> = self.context.iter().map(|s| s.id.clone()).collect();
+        if let Some(c) = &self.current {
+            have.insert(c.id.clone());
+        }
+        let mut picks = picks.into_iter().filter(|p| have.insert(p.id.clone()));
+        let old: Vec<Song> = self.context.drain(..).collect();
+        for (i, s) in old.into_iter().enumerate() {
+            self.context.push_back(s);
+            if (i + 1) % every == 0 {
+                if let Some(p) = picks.next() {
+                    self.context.push_back(p);
+                }
+            }
+        }
+    }
+
     /// Removes an upcoming song from its section.
     pub fn remove_in(&mut self, s: Section, index: usize) -> Option<Song> {
         self.section(s).remove(index)
@@ -491,5 +511,13 @@ mod tests {
         let mut back: Queue = serde_json::from_str(&serde_json::to_string(&new).unwrap()).unwrap();
         back.upgrade();
         assert_eq!(back.user_len(), 1, "your own queued songs stay");
+    }
+
+    #[test]
+    fn smart_shuffle_mixes_picks_into_the_list() {
+        let mut q = Queue::new();
+        q.play_context(vec![s("cur"), s("a"), s("b"), s("c"), s("d")], None);
+        q.mix_into_context(vec![s("x"), s("a"), s("y"), s("z")], 2);
+        assert_eq!(q.context().map(|x| x.id.as_str()).collect::<Vec<_>>(), ["a", "b", "x", "c", "d", "y"], "one pick after every two; duplicates skipped");
     }
 }

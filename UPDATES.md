@@ -8,6 +8,29 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-10 (evening): playlists like Spotify, sharing, the ✓, smarter menus
+
+**Playlists**
+- **A new action row** (same look as before otherwise): on the left, **download** (a filled
+  circle-arrow; accent when everything is downloaded; the "downloading" icon while it works) and
+  **share**; on the right, **shuffle** and **Smart Shuffle** toggles (accent with a dot under them
+  when on, remembered per playlist), and a big round **Play / Pause**. No more "Resume": it's Play
+  or Pause, like Spotify.
+- **Smart Shuffle** mixes songs like the playlist's into it as it plays (one after every three of its
+  songs), picked from a few of its songs. Fetched after the music starts, so nothing waits. 🧪 mixing.
+- **Recommended** at the bottom of every playlist: songs like its own, each with a + to add it.
+- **Share a playlist**, the same way as Sync: Share shows a link; friends open it in Harp, see the
+  name and song count, and save a copy. Works while sharing is on and Harp is open on your device.
+  Links open Harp (Android: tap, or share the message to Harp; laptop: click), or paste them in
+  Library › 🔗. 🧪 several friends fetch the same shared playlist.
+
+**Songs**
+- **A ✓ on songs that are in one of your playlists.** Tap or hold it to see which playlists, tick
+  others to add it there, untick to take it out, or make a new playlist with it. "Add to playlist"
+  everywhere opens the same sheet. 🧪
+- **The song that's playing no longer offers "Play next" or "Add to queue"** in its menu: it can't
+  come after itself.
+
 ## 2026-11-10 (later): gapless, custom equalizer, device sync, offline picks, links that open Harp
 
 **Fixed**

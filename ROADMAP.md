@@ -138,6 +138,10 @@ the idea and the code. `UPDATES.md` is the dated log of changes; this file is th
 | B31 | Old playlist songs stuck in "Next in Queue" | 🟡 | Old saved queues are converted on load. 🧪 |
 | B32 | Opening the player on the laptop is slow | 🟡 | The full-window blur is gone (tiny stretched cover instead). |
 | B33 | A playlist stopped after its first song | ✅ | The next-song check ignored the list; fixed. |
+| F57 | Playing song's menu shouldn't offer Play next / Add to queue | ✅ | Hidden for the current song. |
+| F58 | Share playlists like Sync | 🟡 | Share link (iroh); friends open it and save a copy. 🧪 |
+| F59 | Spotify-style playlist row: Play/Pause, shuffle + Smart Shuffle toggles, filled download icon | 🟡 | Done; Smart Shuffle mixes similar songs in while playing; Recommended section with +. |
+| F60 | ✓ on songs in a playlist; see and change which playlists | ✅ | ✓ on rows, "Saved in" sheet with checkboxes. 🧪 |
 | F33 | The same for Amazon Music | ⛔ | No public API for listeners (Amazon's web API is invite-only), and shared playlist pages are a JavaScript app with no songs in the page (checked). Workarounds: paste the list, or a CSV from a converter such as TuneMyMusic (already imports). |
 
 **Features (48): 29 done and checked, 15 done but waiting for your confirmation, 3 in progress,

@@ -132,6 +132,26 @@ impl Store {
         Ok(fresh.len() as u32)
     }
 
+    /// The playlists a song is in (for the ✓ "saved in" sheet).
+    pub fn playlists_with_song(&self, song_id: &str) -> Result<Vec<i64>> {
+        let mut st = self.conn.prepare("SELECT DISTINCT playlist_id FROM playlist_items WHERE song_id=? ORDER BY playlist_id")?;
+        let rows = st.query_map([song_id], |r| r.get(0))?;
+        Ok(rows.collect::<std::result::Result<_, _>>()?)
+    }
+
+    /// Every song that's in at least one playlist (song rows show a ✓).
+    pub fn playlisted_ids(&self) -> Result<Vec<String>> {
+        let mut st = self.conn.prepare("SELECT DISTINCT song_id FROM playlist_items")?;
+        let rows = st.query_map([], |r| r.get(0))?;
+        Ok(rows.collect::<std::result::Result<_, _>>()?)
+    }
+
+    /// Takes a song out of a playlist by its id (wherever it is in the order).
+    pub fn remove_song_from_playlist(&self, id: i64, song_id: &str) -> Result<()> {
+        self.conn.execute("DELETE FROM playlist_items WHERE playlist_id=? AND song_id=?", params![id, song_id])?;
+        Ok(())
+    }
+
     /// "Download All" was chosen: songs added later get downloaded too.
     pub fn set_playlist_auto_download(&self, id: i64, on: bool) -> Result<()> {
         self.conn.execute("UPDATE playlists SET autodl=? WHERE id=?", params![on as i64, id])?;
@@ -303,6 +323,26 @@ mod tests {
 
     fn ids(v: &[Song]) -> Vec<&str> {
         v.iter().map(|s| s.id.as_str()).collect()
+    }
+
+    #[test]
+    fn which_playlists_a_song_is_in() {
+        let st = Store::open_memory().unwrap();
+        let a = st.create_playlist("A").unwrap();
+        let b = st.create_playlist("B").unwrap();
+        st.add_to_playlist(a, &[song("x", "x", "X"), song("y", "y", "Y")]).unwrap();
+        st.add_to_playlist(b, &[song("x", "x", "X")]).unwrap();
+        assert_eq!(st.playlists_with_song("x").unwrap(), [a, b]);
+        let mut ids = st.playlisted_ids().unwrap();
+        ids.sort();
+        assert_eq!(ids, ["x", "y"]);
+        st.remove_song_from_playlist(a, "x").unwrap();
+        assert_eq!(st.playlists_with_song("x").unwrap(), [b]);
+        assert_eq!(ids_of(&st.playlist_songs(a).unwrap()), ["y"]);
+    }
+
+    fn ids_of(v: &[Song]) -> Vec<String> {
+        v.iter().map(|s| s.id.clone()).collect()
     }
 
     #[test]

@@ -81,6 +81,18 @@ class SongTile extends StatelessWidget {
             ]),
           ),
           if (song.liked) Padding(padding: const EdgeInsets.only(left: 6), child: Icon(Icons.favorite_rounded, size: 15, color: accent)),
+          // In one of your playlists: a ✓. Tap (or hold) to see which, and change it.
+          ValueListenableBuilder<Set<String>>(
+            valueListenable: player.playlisted,
+            builder: (context, ids, _) => ids.contains(song.id)
+                ? InkResponse(
+                    radius: 18,
+                    onTap: () => showSavedInSheet(context, player, song),
+                    onLongPress: () => showSavedInSheet(context, player, song),
+                    child: Padding(padding: const EdgeInsets.only(left: 8), child: Icon(Icons.check_circle_rounded, size: 18, color: accent)),
+                  )
+                : const SizedBox.shrink(),
+          ),
           trailing ?? SongMenu(song: song, player: player, onRemoveFromList: onRemoveFromList, removeLabel: removeLabel),
         ]),
       ),

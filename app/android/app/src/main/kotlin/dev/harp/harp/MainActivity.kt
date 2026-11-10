@@ -50,7 +50,7 @@ class MainActivity : AudioServiceActivity() {
         i.dataString?.let { if (it.startsWith("harp://")) return it }
         if (i.action == android.content.Intent.ACTION_SEND) {
             val text = i.getStringExtra(android.content.Intent.EXTRA_TEXT) ?: return null
-            return Regex("harp://(party|sync)/\\S+").find(text)?.value
+            return Regex("harp://(party|sync|playlist)/\\S+").find(text)?.value
         }
         return null
     }

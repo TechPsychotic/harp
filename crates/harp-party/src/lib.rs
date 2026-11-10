@@ -35,6 +35,7 @@ use tokio::{
     sync::mpsc,
 };
 
+pub mod share;
 pub mod sync;
 
 pub const ALPN: &[u8] = b"harp/party/1";

@@ -39,3 +39,6 @@ pub fn party(name: &str) -> anyhow::Result<std::sync::Arc<Party>> {
 
 /// A library-sync offer waiting for the other device.
 pub static OFFER: Mutex<Option<std::sync::Arc<harp_party::sync::Offer>>> = Mutex::new(None);
+
+/// Playlists being shared right now, by playlist id.
+pub static SHARES: Mutex<Option<std::collections::HashMap<i64, std::sync::Arc<harp_party::share::Share>>>> = Mutex::new(None);

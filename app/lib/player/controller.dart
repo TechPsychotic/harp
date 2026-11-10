@@ -165,6 +165,15 @@ class PlayerController extends ChangeNotifier {
   /// Bumped when you follow an artist or save an album (pages showing those reload).
   final ValueNotifier<int> savedRev = ValueNotifier(0);
 
+  /// Songs that are in at least one of your playlists (their rows show a ✓).
+  final ValueNotifier<Set<String>> playlisted = ValueNotifier(const {});
+
+  Future<void> refreshPlaylisted() async {
+    try {
+      playlisted.value = (await api.playlistedSongIds()).toSet();
+    } catch (_) {}
+  }
+
   /// The playing song's artwork colour (the app tints itself with it).
   final ValueNotifier<Color> accent = ValueNotifier(HarpColors.harpRed);
 
@@ -245,6 +254,8 @@ class PlayerController extends ChangeNotifier {
       viz.songSeed = queue.current!.id;
       unawaited(_updateAccent(queue.current!));
     }
+    unawaited(refreshPlaylisted());
+    libraryRev.addListener(refreshPlaylisted);
     _spotTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       if (playing) _saveSpot();
     });
@@ -383,11 +394,29 @@ class PlayerController extends ChangeNotifier {
     }
   }
 
-  Future<void> playPlaylist(int id, {bool shuffle = false}) async {
+  Future<void> playPlaylist(int id, {bool shuffle = false, bool smart = false}) async {
     _mood = null;
     await _supersede();
     queue = await api.queuePlayPlaylist(id: id, shuffle: shuffle);
     await _afterQueueReplaced();
+    if (smart) unawaited(mixInSmartPicks(id));
+  }
+
+  /// Smart shuffle: songs like this playlist's, mixed in (one after every
+  /// three of its songs) while it plays. Fetched after it started, so the
+  /// music doesn't wait.
+  Future<void> mixInSmartPicks(int playlistId) async {
+    try {
+      final picks = await api.playlistSmartPicks(id: playlistId, count: 12);
+      final src = queue.source;
+      if (picks.isEmpty || src == null || src.kind != 'playlist' || src.id != '$playlistId') return;
+      for (final s in picks) {
+        reasons[s.id] = 'Smart Shuffle: picked to go with this playlist';
+      }
+      queue = await api.queueMixIn(songs: picks, every: 3);
+      notifyListeners();
+      _prefetch();
+    } catch (_) {}
   }
 
   /// Plays a list (an album, a podcast, liked songs, downloads…) as the
@@ -1013,6 +1042,7 @@ class PlayerController extends ChangeNotifier {
     position.dispose();
     duration.dispose();
     palette.dispose();
+    playlisted.dispose();
     libraryRev.dispose();
     downloading.dispose();
     accent.dispose();

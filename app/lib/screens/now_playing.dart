@@ -309,7 +309,7 @@ class _Controls extends StatelessWidget {
           style: IconButton.styleFrom(backgroundColor: lyricsOn ? fg.withValues(alpha: 0.16) : Colors.transparent),
           onPressed: onLyrics,
         ),
-        IconButton(tooltip: 'Add to playlist', icon: Icon(Icons.playlist_add_rounded, color: dim), onPressed: () => addToPlaylistDialog(context, player, [s])),
+        IconButton(tooltip: 'Add to playlist', icon: Icon(Icons.playlist_add_rounded, color: dim), onPressed: () => showSavedInSheet(context, player, s)),
         ValueListenableBuilder<Set<String>>(
           valueListenable: player.downloading,
           builder: (context, busy, _) => IconButton(

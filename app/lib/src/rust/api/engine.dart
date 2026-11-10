@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `cached_view`, `collection_view`, `e`, `eng`, `export_songs`, `home_artists`, `import_view`, `lyrics_view`, `queue_view`, `request`, `section_of`, `sections`, `serde_json_string`, `song_from_json`, `song`, `spotify_embed_url`, `spotify_token`, `this_year`, `view`, `views`, `youtube_list_id`
+// These functions are ignored because they are not marked as `pub`: `cached_view`, `collection_view`, `e`, `eng`, `export_songs`, `home_artists`, `import_view`, `lyrics_view`, `playlist_contents`, `queue_view`, `request`, `section_of`, `sections`, `serde_json_string`, `song_from_json`, `song`, `spotify_embed_url`, `spotify_token`, `this_year`, `view`, `views`, `youtube_list_id`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Engine`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
@@ -475,6 +475,37 @@ Future<List<SongView>> recommendOffline({
   count: count,
   exclude: exclude,
 );
+
+/// The playlists a song is in.
+Future<Int64List> playlistsContaining({required String songId}) =>
+    RustLib.instance.api.crateApiEnginePlaylistsContaining(songId: songId);
+
+/// Every song that's in some playlist (rows show a ✓).
+Future<List<String>> playlistedSongIds() =>
+    RustLib.instance.api.crateApiEnginePlaylistedSongIds();
+
+/// Takes a song out of a playlist.
+Future<void> playlistRemoveSong({
+  required PlatformInt64 id,
+  required String songId,
+}) => RustLib.instance.api.crateApiEnginePlaylistRemoveSong(
+  id: id,
+  songId: songId,
+);
+
+/// Songs like the ones in a playlist but not in it: for smart shuffle and the
+/// "recommended for this playlist" list. Uses a few of its songs as seeds.
+Future<List<SongView>> playlistSmartPicks({
+  required PlatformInt64 id,
+  required int count,
+}) =>
+    RustLib.instance.api.crateApiEnginePlaylistSmartPicks(id: id, count: count);
+
+/// Smart shuffle: mixes picks into the list playing now, one after every `every` songs.
+Future<QueueView> queueMixIn({
+  required List<SongView> songs,
+  required int every,
+}) => RustLib.instance.api.crateApiEngineQueueMixIn(songs: songs, every: every);
 
 class BrowseGroupView {
   final String title;
