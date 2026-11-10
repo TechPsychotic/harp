@@ -12,22 +12,6 @@
   const canvas = document.getElementById("field");
   const ctx = canvas.getContext("2d");
 
-  // ---------- smooth scrolling (desktop wheels; touch scrolling stays native) ----------
-  let lenis = null;
-  if (!reduce && window.Lenis) {
-    lenis = new window.Lenis({ duration: 1.15, easing: (t) => 1 - Math.pow(1 - t, 3.2), smoothWheel: true });
-    root.classList.add("lenis-on");
-    document.querySelectorAll('a[href^="#"]').forEach((a) =>
-      a.addEventListener("click", (e) => {
-        const id = a.getAttribute("href");
-        const el = id === "#top" ? 0 : document.querySelector(id);
-        if (el === null) return;
-        e.preventDefault();
-        lenis.scrollTo(el, { duration: 1.4 });
-      }),
-    );
-  }
-
   // ---------- colour helpers ----------
   const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
   const mix = (a, b, t) => {
@@ -132,7 +116,7 @@
   let W = 0, H = 0, dpr = 1, small = false;
   let balls = [];
   function build() {
-    const n = small ? 36 : 62;
+    const n = small ? 44 : 62;
     balls = [];
     for (let i = 0; i < n; i++) {
       const roll = (i * 7919) % 100;
@@ -181,109 +165,123 @@
   const ease = (t) => t * t * (3 - 2 * t);
 
   // ---------- shapes ----------
-  // Each returns, for every sphere, a target {x, y, r, z} in a local frame;
-  // place() then centres and scales it into the section's area.
+  // Each returns, for every sphere, a target {x, y, r, z} in a local frame
+  // (z: 0 far .. 1 near); place() then centres and scales it into the
+  // section's area. The rounded shapes are real 3D arrangements, turned
+  // slowly and seen in perspective; your pointer tilts them a little.
   const GOLD = 2.399963;
   const BPM = 104;
   const beat = (time) => Math.exp(-(((time * BPM) / 60) % 1) * 5); // a sharp hit that fades
-  let s_g = 0; // where the second cluster starts
+  const tilt = { x: 0, y: 0 };
 
-  function shape(mode, time) {
+  // Points spread evenly over a sphere (or its upper half), each with a size.
+  function shell(count, R, size, half, jitterSeed = 0) {
+    const pts = [];
+    for (let k = 0; k < count; k++) {
+      const y = half ? (k + 0.5) / count : 1 - (2 * (k + 0.5)) / count;
+      const rad = Math.sqrt(Math.max(0, 1 - y * y)), phi = k * GOLD + jitterSeed;
+      pts.push({ x: Math.cos(phi) * rad * R, y: half ? -y * R : y * R, z: Math.sin(phi) * rad * R, r: size(k) });
+    }
+    return pts;
+  }
+
+  // Turn (yaw, then pitch, then roll) and look at it in perspective.
+  function view(pts, yaw, pitch, roll, depthR, ox = 0, oy = 0) {
+    const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch), cr = Math.cos(roll), sr = Math.sin(roll);
+    return pts.map((p) => {
+      const x = p.x * cy - p.z * sy, z = p.x * sy + p.z * cy;
+      const y2 = p.y * cp - z * sp, z2 = p.y * sp + z * cp;
+      const x3 = x * cr - y2 * sr, y3 = x * sr + y2 * cr;
+      const f = 1100 / (1100 + z2);
+      return { x: ox + x3 * f, y: oy + y3 * f, r: p.r * f, z: Math.min(1, Math.max(0, 0.5 - z2 / (2 * depthR))) };
+    });
+  }
+
+  function shape(mode, time, still) {
     const n = balls.length;
-    const out = new Array(n);
-    const wob = reduce ? 0 : 1;
+    const wob = reduce || still ? 0 : 1;
+    const tx = still ? 0 : tilt.x, ty = still ? 0 : tilt.y;
+    const size = (lo, span) => (k) => lo + span * balls[k % n].base;
+    let out;
     switch (mode) {
       case "cluster": {
+        // A ball of spheres, with a few inside so it never looks hollow.
+        const outer = Math.round(n * 0.76);
+        const pts = shell(outer, 210, size(32, 20)).concat(shell(n - outer, 120, (k) => 28 + 12 * balls[(k + outer) % n].base, false, 1.3));
+        out = view(pts, time * 0.16 * wob + tx, 0.32 + ty, 0.12, 240);
+        return { pts: out, fit: true };
+      }
+      case "helix": {
+        // Two strands turning around each other: your taste, two ways.
+        const pts = [];
+        const half = Math.ceil(n / 2);
         for (let i = 0; i < n; i++) {
-          const b = balls[i];
-          const d = Math.sqrt(i + 0.5) * 31;
-          const a = i * GOLD + time * 0.06 * wob;
-          out[i] = {
-            x: Math.cos(a) * d + Math.sin(time * 0.8 + b.seed * 9) * 5 * wob,
-            y: Math.sin(a) * d * 0.86 + Math.cos(time * 0.7 + b.seed * 9) * 5 * wob,
-            r: 13 + 42 * b.base, z: b.base,
-          };
+          const strand = i % 2, t = Math.floor(i / 2) / (half - 1);
+          const a = t * Math.PI * 2.4 + strand * Math.PI;
+          pts.push({ x: Math.cos(a) * 140, y: (t - 0.5) * 560, z: Math.sin(a) * 140, r: 21 + 12 * balls[i].base });
         }
-        return { pts: out, fit: true, still: true };
+        out = view(pts, time * 0.4 * wob + tx, 0.1 + ty, 0.22, 160);
+        return { pts: out, fit: true };
       }
       case "floor": {
-        // A mound: rows from the floor up, each a little shorter.
-        const M = Math.ceil((Math.sqrt(8 * n + 1) - 1) / 2) + 1, R = 24;
-        let i = 0, k = 0;
-        while (i < n) {
-          const left = Math.min(Math.max(1, M - k), n - i);
-          for (let c = 0; c < left; c++, i++) {
-            const b = balls[i];
-            out[i] = { x: (c - (left - 1) / 2) * R * 2.02, y: -R - k * R * 1.74 + Math.sin(time * 1.4 + b.seed * 6) * 1.2 * wob, r: R * (0.82 + 0.3 * b.base), z: 0.3 + 0.5 * b.seed };
-          }
-          k++;
-        }
-        return { pts: out, fit: true, anchor: "bottom", still: true };
+        // A dome resting on the floor, turning slowly.
+        const outer = Math.round(n * 0.72);
+        const pts = shell(outer, 230, size(30, 18), true).concat(shell(n - outer, 140, (k) => 26 + 12 * balls[(k + outer) % n].base, true, 0.7));
+        out = view(pts, time * 0.12 * wob + tx, 0.28 + ty * 0.5, 0, 240);
+        return { pts: out, fit: true, anchor: "bottom", shadow: true };
       }
       case "eq": {
+        out = new Array(n);
         const cols = small ? 6 : 8, rows = Math.ceil(n / cols), R = 20;
         for (let i = 0; i < n; i++) {
           const col = i % cols, k = Math.floor(i / cols);
-          const level = reduce ? 0.7 : 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(time * 2.4 + col * 1.3) * Math.cos(time * 0.9 + col * 0.4));
+          const level = reduce || still ? 0.7 : 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(time * 2.4 + col * 1.3) * Math.cos(time * 0.9 + col * 0.4));
           const on = k < Math.max(1, Math.round(level * rows));
-          out[i] = { x: (col - (cols - 1) / 2) * R * 2.5, y: -R - k * R * 2.2, r: on ? R : R * 0.28, z: 0.5 };
+          out[i] = { x: (col - (cols - 1) / 2) * R * 2.5, y: -R - k * R * 2.2, r: still ? R : on ? R : R * 0.28, z: 0.5 };
         }
-        return { pts: out, fit: true, anchor: "bottom", still: true, fullR: true };
+        return { pts: out, fit: true, anchor: "bottom" };
       }
       case "wave": {
+        out = new Array(n);
         for (let i = 0; i < n; i++) {
           const b = balls[i], u = i / (n - 1);
           out[i] = { x: (u - 0.5) * 900, y: Math.sin(u * Math.PI * 3 - time * 1.8 * wob) * 110, r: (10 + 14 * b.base) * (0.8 + 0.4 * Math.sin(u * 9 + time * wob)), z: b.base };
         }
-        return { pts: out, fit: true, still: true };
+        return { pts: out, fit: true };
       }
       case "duo": {
-        // Two clusters (two devices) whose centres hit on the same beat, and
-        // the whole of each swells with it; small spheres carry the music
-        // across between them.
-        const hit = reduce ? 0.4 : beat(time);
+        // Two small balls (two devices) that swell on the same beat; little
+        // spheres carry the music across between them.
+        const hit = reduce || still ? 0.3 : beat(time);
         const runners = small ? 6 : 10, g = Math.floor((n - runners) / 2);
-        let i = 0;
-        for (const cx of [-210, 210]) {
-          for (let k = 0; k < g; k++, i++) {
-            const b = balls[i];
-            if (k === 0) { out[i] = { x: cx, y: 0, r: 46 * (1 + 0.22 * hit), z: 0.95 }; continue; }
-            const d = Math.sqrt(k + 0.5) * 30 * (1 + 0.05 * hit);
-            const a = k * GOLD + time * 0.05 * wob * (cx < 0 ? 1 : -1);
-            out[i] = { x: cx + Math.cos(a) * d, y: Math.sin(a) * d * 0.9, r: 10 + 26 * b.base, z: 0.2 + 0.6 * b.base };
-          }
+        out = [];
+        for (const [side, ox] of [[1, -230], [-1, 230]]) {
+          const pts = shell(g, 118 * (1 + 0.07 * hit), (k) => (20 + 16 * balls[k].base) * (1 + 0.12 * hit), false, side);
+          out.push(...view(pts, time * 0.3 * wob * side + tx, 0.3 + ty, 0, 140, ox, 0));
         }
-        for (let j = 0; i < n; i++, j++) {
+        for (let j = 0; out.length < n; j++) {
           const dir = j % 2 ? 1 : -1;
-          const p = (time * 0.42 * wob + j / Math.max(1, n - 2 * g)) % 1;
+          const p = (time * 0.42 * wob + j / runners) % 1;
           const u = dir > 0 ? p : 1 - p;
-          out[i] = { x: -210 + 420 * u, y: -Math.sin(u * Math.PI) * (dir > 0 ? 150 : 95) - 30, r: 6 + 5 * Math.sin(u * Math.PI), z: 0.6 };
+          out.push({ x: -230 + 460 * u, y: -Math.sin(u * Math.PI) * (dir > 0 ? 170 : 110) - 40, r: 6 + 5 * Math.sin(u * Math.PI), z: 0.7 });
         }
-        s_g = g;
-        return { pts: out, fit: true, still: true, duo: true };
+        return { pts: out, fit: true, duo: [{ x: -230, y: 0 }, { x: 230, y: 0 }] };
       }
       case "orbit": {
-        for (let i = 0; i < n; i++) {
-          const b = balls[i], ring = i % 3 === 0 ? 0 : 1;
-          const R = ring ? 300 : 170;
-          const a = (i / n) * Math.PI * 2 * (ring ? 1 : 3) + time * (ring ? 0.25 : -0.4) * wob;
-          const depth = (Math.sin(a) + 1) / 2;
-          out[i] = { x: Math.cos(a) * R, y: Math.sin(a) * R * 0.38, r: (12 + 16 * b.base) * (0.65 + 0.6 * depth), z: depth };
+        // A small planet of spheres with a tilted ring passing behind and in front.
+        const core = Math.round(n * 0.34);
+        const pts = shell(core, 100, size(24, 12));
+        const ringN = n - core;
+        const ring = [];
+        for (let k = 0; k < ringN; k++) {
+          const a = (k / ringN) * Math.PI * 2 + time * 0.25 * wob;
+          ring.push({ x: Math.cos(a) * 255, y: 0, z: Math.sin(a) * 255, r: 12 + 3 * balls[(k + core) % n].base });
         }
-        return { pts: out, fit: true, still: true };
-      }
-      case "frame": {
-        // Small spheres drifting up the screen's edges, clear of the text.
-        const band = Math.max(28, (W - Math.min(W, 1400)) / 2 + 30), span = H + 120;
-        for (let i = 0; i < n; i++) {
-          const b = balls[i], side = i % 2;
-          const fx = 0.3 + 0.55 * ((i * 0.618034) % 1), phase = (i * 0.381966) % 1;
-          const y = (((phase * span - time * (14 + 10 * b.base) * wob) % span) + span) % span - 60;
-          out[i] = { x: side ? W - band * fx : band * fx, y, r: i < (small ? 22 : 36) ? (6 + 14 * b.base) * (small ? 0.6 : 1) : 0, z: b.base };
-        }
-        return { pts: out, fit: false };
+        out = view(pts, time * 0.2 * wob + tx, 0.25 + ty, 0, 290).concat(view(ring, tx * 0.5, 0.36 + ty, -0.26, 290));
+        return { pts: out, fit: true };
       }
       default: { // scatter: out past the edges of the screen, growing as they go
+        out = new Array(n);
         for (let i = 0; i < n; i++) {
           const b = balls[i], a = i * GOLD, d = Math.max(W, H) * (0.8 + 0.3 * b.base);
           out[i] = { x: W / 2 + Math.cos(a) * d, y: H / 2 + Math.sin(a) * d, r: (40 + 60 * b.base) * 2, z: b.base };
@@ -294,18 +292,19 @@
   }
 
   // The frame each shape is measured in, once per mode and screen size: the
-  // shape at rest (no beat, no drift), so it never breathes out of its area.
+  // shape at rest (not turned, no beat), so it never breathes out of its area.
   const bounds = new Map();
   function boundsOf(mode) {
     const key = mode + (small ? "s" : "l");
     let b = bounds.get(key);
     if (b) return b;
-    const pts = shape(mode, 0).pts;
     let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
-    for (const p of pts) {
-      const r = mode === "eq" ? 20 : p.r;
-      x0 = Math.min(x0, p.x - r); x1 = Math.max(x1, p.x + r);
-      y0 = Math.min(y0, p.y - r); y1 = Math.max(y1, p.y + r);
+    // Turning changes the outline a little: measure a few angles.
+    for (const t of [0, 2, 4, 6, 8]) {
+      for (const p of shape(mode, t, t === 0).pts) {
+        x0 = Math.min(x0, p.x - p.r); x1 = Math.max(x1, p.x + p.r);
+        y0 = Math.min(y0, p.y - p.r); y1 = Math.max(y1, p.y + p.r);
+      }
     }
     b = { x0, x1, y0, y1 };
     bounds.set(key, b);
@@ -314,21 +313,19 @@
 
   // A section's shape, centred in its area and scaled to fit it.
   function place(sec, time) {
-    const s = shape(sec.mode, time);
+    const s = shape(sec.mode, time, false);
     if (!s.fit) return s;
     const area = (sec.stage || sec.el).getBoundingClientRect();
     const { x0, x1, y0, y1 } = boundsOf(sec.mode);
-    const wide = !small && (sec.mode === "duo" || sec.mode === "wave") ? 1.18 : 0.92;
-    const k = Math.min((area.width * wide) / (x1 - x0), (area.height * 0.92) / (y1 - y0), small ? 1.1 : 1.6);
+    const wide = !small && (sec.mode === "duo" || sec.mode === "wave") ? 1.15 : 0.94;
+    const k = Math.max(0, Math.min((area.width * wide) / (x1 - x0), (area.height * 0.94) / (y1 - y0), small ? 1.1 : 1.6));
     const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
     const ax = area.left + area.width / 2;
-    const ay = s.anchor === "bottom" ? area.top + area.height * 0.96 - (y1 - cy) * k : area.top + area.height / 2;
-    for (const p of s.pts) {
-      p.x = ax + (p.x - cx) * k;
-      p.y = ay + (p.y - cy) * k;
-      p.r *= k;
-    }
-    if (s.duo) s.marks = { a: s.pts[0], b: s.pts[s_g], k };
+    const ay = s.anchor === "bottom" ? area.top + area.height * 0.95 - (y1 - cy) * k : area.top + area.height / 2;
+    const at = (p) => { p.x = ax + (p.x - cx) * k; p.y = ay + (p.y - cy) * k; };
+    for (const p of s.pts) { at(p); p.r *= k; }
+    if (s.duo) { s.duo.forEach(at); s.marks = { a: s.duo[0], b: s.duo[1], k }; }
+    if (s.shadow) s.floor = { x: ax, y: ay + (y1 - cy) * k, w: (x1 - x0) * k * 0.55 };
     return s;
   }
 
@@ -343,12 +340,19 @@
   // middle stretch between two sections, so you see shapes, not a jumble.
   const morph = (t) => ease(Math.min(1, Math.max(0, (t - 0.28) / 0.44)));
 
+  let floor = null; // the dome's shadow while it's on screen
   function step(w, time, dt) {
     const e = morph(w.t);
+    const lean = 1 - Math.exp(-dt * 3);
+    const wantX = pointer.x < -9000 ? 0 : (pointer.x / W - 0.5) * 0.7, wantY = pointer.y < -9000 ? 0 : (pointer.y / H - 0.5) * 0.35;
+    tilt.x += (wantX - tilt.x) * lean;
+    tilt.y += (wantY - tilt.y) * lean;
     const A = place(w.a, time);
     const B = w.b === w.a ? A : place(w.b, time);
     const weight = Math.pow((w.a.mode === "duo" ? 1 - e : 0) + (w.b.mode === "duo" ? e : 0), 3);
     duo = weight > 0.02 ? { marks: A.marks || B.marks, weight } : null;
+    const fw = (w.a.mode === "floor" ? 1 - e : 0) + (w.b.mode === "floor" ? e : 0);
+    floor = fw > 0.02 ? { ...(A.floor || B.floor), weight: fw } : null;
     // Follow the blended target closely (so the spheres stay with the page)
     // but smoothly: a time-based ease, the same at any frame rate.
     const follow = reduce ? 1 : 1 - Math.exp(-dt * 10);
@@ -360,7 +364,7 @@
       let px = 0, py = 0;
       const dx = tx - pointer.x, dy = ty - pointer.y, d = Math.hypot(dx, dy), R = 110 + tr;
       if (d < R && d > 0.5 && !reduce) {
-        const f = Math.pow(1 - d / R, 2) * 46;
+        const f = Math.pow(1 - d / R, 2) * 22;
         px = (dx / d) * f;
         py = (dy / d) * f;
       }
@@ -381,6 +385,21 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
     if (duo && duo.marks) drawDuo(time);
+    if (floor && floor.w) {
+      // A soft shadow where the dome meets the floor.
+      ctx.save();
+      ctx.translate(floor.x, floor.y);
+      ctx.scale(1, 0.16);
+      const g = ctx.createRadialGradient(0, 0, 0, 0, 0, floor.w);
+      g.addColorStop(0, `rgba(0,0,0,${0.55 * floor.weight})`);
+      g.addColorStop(0.6, hexA(accentNow, 0.12 * floor.weight));
+      g.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(0, 0, floor.w, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
     const order = balls.slice().sort((p, q) => p.z - q.z);
     const k = SPRITE / CORE;
     for (const ball of order) {
@@ -409,8 +428,8 @@
     ctx.setLineDash([3, 9]);
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.moveTo(a.x, a.y - 30 * k);
-    ctx.quadraticCurveTo((a.x + b.x) / 2, a.y - 270 * k, b.x, b.y - 30 * k);
+    ctx.moveTo(a.x, a.y - 40 * k);
+    ctx.quadraticCurveTo((a.x + b.x) / 2, a.y - 300 * k, b.x, b.y - 40 * k);
     ctx.stroke();
     ctx.setLineDash([]);
     const phase = reduce ? 0.5 : ((time * BPM) / 60) % 1;
@@ -420,7 +439,7 @@
         ctx.strokeStyle = hexA(accentNow, (1 - ph) * 0.45 * weight);
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.arc(c.x, c.y, 46 * k * (1.6 + ph * 1.8), 0, Math.PI * 2);
+        ctx.arc(c.x, c.y, 135 * k * (1 + ph * 0.55), 0, Math.PI * 2);
         ctx.stroke();
       }
     }
@@ -463,7 +482,6 @@
   function frame(now) {
     const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
     last = now;
-    if (lenis) lenis.raf(now);
     const time = (now - start) / 1000;
     const w = where();
     paintSky(w);
