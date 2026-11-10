@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Harp: music that learns you, on your device</title>
 <meta name="description" content="Harp is a free, open-source music app for Android, Linux, Windows and macOS. No account, no ads, no servers: your taste stays on your device.">
-<meta name="theme-color" content="#fff4f1">
+<meta name="theme-color" content="#08080c">
+<meta name="color-scheme" content="dark">
 <meta property="og:title" content="Harp: music that learns you, on your device">
 <meta property="og:description" content="Free and open source. No account, no ads, no servers. Android, Linux, Windows and macOS.">
 <meta property="og:image" content="assets/icon.png">
@@ -13,12 +14,47 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@300;400;500;600&family=Inter:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+<!-- The ?v= changes with each update, so browsers never mix a new page with an old stylesheet. -->
+<link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
 
+<!-- Icons: drawn for Harp, line style, coloured by the current accent. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-shuffle" viewBox="0 0 24 24"><path d="M3 7h3c4.5 0 6.5 10 11 10h4"/><path d="M3 17h3c1.7 0 3-1.4 4-3.2"/><path d="M13.6 9.6C14.6 8 15.8 7 17 7h4"/><path d="M18 4l3 3-3 3"/><path d="M18 14l3 3-3 3"/></symbol>
+    <symbol id="i-mood" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 14.2c1.1 1.4 2.4 2.1 4 2.1s2.9-.7 4-2.1"/><path d="M9 9.5v.5M15 9.5v.5"/></symbol>
+    <symbol id="i-fair" viewBox="0 0 24 24"><path d="M12 4v16M7 20h10M5 7h14"/><path d="M5 7l-2.5 6a2.5 2.5 0 005 0zM19 7l-2.5 6a2.5 2.5 0 005 0z"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5"/><circle cx="10" cy="16.5" r="1.6"/><path d="M11.6 16.5V11l3.4-1"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></symbol>
+    <symbol id="i-ahead" viewBox="0 0 24 24"><path d="M4 6h12M4 11h12M4 16h6"/><path d="M14.5 14v6l5-3z"/></symbol>
+    <symbol id="i-offline" viewBox="0 0 24 24"><path d="M2.5 9a14 14 0 015.3-3.1M12 5c3.6 0 7 1.4 9.5 4"/><path d="M5.5 12.5a9 9 0 013.7-2.2M14.8 10.6a9 9 0 013.7 1.9"/><path d="M8.8 16a4.5 4.5 0 016.4 0"/><path d="M12 19.6v.1M3 3l18 18"/></symbol>
+    <symbol id="i-headphones" viewBox="0 0 24 24"><path d="M4 16v-4a8 8 0 0116 0v4"/><path d="M4 15h3.5v6H5.5A1.5 1.5 0 014 19.5zM20 15h-3.5v6h2a1.5 1.5 0 001.5-1.5z"/></symbol>
+    <symbol id="i-eq" viewBox="0 0 24 24"><path d="M6 4v5M6 13v7M12 4v1M12 9v11M18 4v9M18 17v3"/><circle cx="6" cy="11" r="2"/><circle cx="12" cy="7" r="2"/><circle cx="18" cy="15" r="2"/></symbol>
+    <symbol id="i-fade" viewBox="0 0 24 24"><path d="M3 18c5 0 6.5-12 9-12s4 12 9 12"/><path d="M3 6c5 0 6.5 12 9 12s4-12 9-12" opacity=".5"/></symbol>
+    <symbol id="i-party" viewBox="0 0 24 24"><circle cx="8" cy="8.5" r="3"/><circle cx="16.5" cy="9.5" r="2.5"/><path d="M2.5 19.5c.7-3 2.8-4.6 5.5-4.6s4.8 1.6 5.5 4.6"/><path d="M14.5 15c.6-.3 1.3-.4 2-.4 2.2 0 3.9 1.3 4.5 3.9"/></symbol>
+    <symbol id="i-devices" viewBox="0 0 24 24"><rect x="2.5" y="7" width="7" height="13" rx="1.5"/><path d="M12.5 5H20a1.5 1.5 0 011.5 1.5V15h-9"/><path d="M11 18h11"/><path d="M5.5 17h1"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4.2 4.2 0 006 0l3-3a4.2 4.2 0 00-6-6l-1 1"/><path d="M14 10a4.2 4.2 0 00-6 0l-3 3a4.2 4.2 0 006 6l1-1"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20h16"/><path d="M7 16v-4M12 16V6M17 16v-7"/></symbol>
+    <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M11 3l1.9 5.1L18 10l-5.1 1.9L11 17l-1.9-5.1L4 10l5.1-1.9z"/><path d="M18.5 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2.2"/><path d="M8 11V8a4 4 0 018 0v3M12 15v2"/></symbol>
+    <symbol id="i-library" viewBox="0 0 24 24"><path d="M5 4v16M9 4v16"/><path d="M13 5.2l4.6-1.2 3.4 15.6-4.6 1.2z"/></symbol>
+    <symbol id="i-import" viewBox="0 0 24 24"><path d="M3 12h11M10 8l4 4-4 4"/><path d="M15 4h3a2 2 0 012 2v12a2 2 0 01-2 2h-3"/></symbol>
+    <symbol id="i-car" viewBox="0 0 24 24"><path d="M3 16h18v-4l-2.4-5H5.4L3 12z"/><path d="M5 16v3M19 16v3M3 12h18"/><path d="M7 14h.1M17 14h.1"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 11-2.3-5.7L20 8.6"/><path d="M20 4v4.6h-4.6"/></symbol>
+    <symbol id="i-archive" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="4.5" rx="1.2"/><path d="M5 8.5V19a1 1 0 001 1h12a1 1 0 001-1V8.5M10 12.5h4"/></symbol>
+    <symbol id="i-code" viewBox="0 0 24 24"><path d="M8 8l-4 4 4 4M16 8l4 4-4 4M14 5l-4 14"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M11 18h2"/></symbol>
+    <symbol id="i-terminal" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.2"/><path d="M7 10l3 2.2L7 14.4M12.5 15h4.5"/></symbol>
+    <symbol id="i-window" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.2"/><path d="M3 9h18M12 9v11"/></symbol>
+    <symbol id="i-laptop" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="10" rx="1.5"/><path d="M2.5 19h19"/></symbol>
+    <symbol id="i-github" viewBox="0 0 24 24"><path d="M9 19c-4 1.3-4-2-5.6-2.5M14.6 21v-3.3a2.9 2.9 0 00-.8-2.2c2.7-.3 5.6-1.3 5.6-6a4.6 4.6 0 00-1.3-3.2 4.3 4.3 0 00-.1-3.2s-1-.3-3.3 1.2a11.4 11.4 0 00-6 0C6.8 2.8 5.8 3.1 5.8 3.1a4.3 4.3 0 00-.1 3.2 4.6 4.6 0 00-1.3 3.2c0 4.6 2.9 5.6 5.6 6a2.9 2.9 0 00-.8 2.2V21"/></symbol>
+  </defs>
+</svg>
+
 <div class="sky" aria-hidden="true"></div>
 <canvas id="field" aria-hidden="true"></canvas>
+<div class="grain" aria-hidden="true"></div>
 
 <header class="nav" id="nav">
   <a class="brand" href="#top"><img src="assets/icon.png" alt="" width="30" height="30"><span>HARP</span></a>
@@ -39,13 +75,13 @@
   <div class="stage hero-stage"></div>
   <div class="hero-text">
     <p class="tag">[ Music, on your device ]</p>
-    <h1>Music that<br>learns you.</h1>
+    <h1>Music that<br>learns <em>you</em>.</h1>
   </div>
   <aside class="hero-side">
     <p>A free music app that builds its picks from what you play, right on your phone or computer. No sign-in, no ads, no servers of ours.</p>
     <div class="cta">
-      <a class="pill dark" href="#download"><span>Get Harp</span><i class="arrow" aria-hidden="true"></i></a>
-      <a class="pill plain" href="https://github.com/TechPsychotic/harp"><span>Source</span></a>
+      <a class="pill solid" href="#download"><span>Get Harp</span><i class="arrow" aria-hidden="true"></i></a>
+      <a class="pill plain" href="https://github.com/TechPsychotic/harp"><svg class="ic sm"><use href="#i-github"/></svg><span>Source</span></a>
     </div>
     <p class="mono">© 2026 — Free &amp; open source · GPL-3.0</p>
     <a class="mono scroll" href="#discover">↓ Scroll</a>
@@ -56,15 +92,15 @@
 <section class="sec" id="discover" data-mode="cluster" data-palette="violet">
   <div class="copy">
     <p class="tag">[ 02 — Discover ]</p>
-    <h2>Picks that<br>know you.</h2>
+    <h2>Picks that<br><em>know you</em>.</h2>
     <p class="lead">Harp keeps a small taste model on your device: what you finish, like, skip, and when. Smart Shuffle and the moods lean on the artists you love, and old habits fade so your picks move with you.</p>
   </div>
   <div class="stage"></div>
   <div class="cards">
-    <article class="card"><p class="num">01 <span>Smart Shuffle</span></p><h3>Endless, and yours</h3><p>Starts broad, then learns from every play.</p></article>
-    <article class="card"><p class="num">02 <span>Moods &amp; charts</span></p><h3>Chill, Focus, Party…</h3><p>Moods tuned to the artists you like, charts from around the world.</p></article>
-    <article class="card"><p class="num">03 <span>Fair to songs</span></p><h3>One skip isn't a verdict</h3><p>A song only drops out after you skip it again and again.</p></article>
-    <article class="card"><p class="num">04 <span>Your files</span></p><h3>Your own music, too</h3><p>Files on your device play right alongside.</p></article>
+    <article class="card"><span class="ico"><svg class="ic"><use href="#i-shuffle"/></svg></span><div><p class="num">01 <span>Smart Shuffle</span></p><h3>Endless, and yours</h3><p>Starts broad, then learns from every play.</p></div></article>
+    <article class="card"><span class="ico"><svg class="ic"><use href="#i-mood"/></svg></span><div><p class="num">02 <span>Moods &amp; charts</span></p><h3>Chill, Focus, Party…</h3><p>Moods tuned to the artists you like; charts from around the world.</p></div></article>
+    <article class="card"><span class="ico"><svg class="ic"><use href="#i-fair"/></svg></span><div><p class="num">03 <span>Fair to songs</span></p><h3>One skip isn't a verdict</h3><p>A song only drops out after you skip it again and again.</p></div></article>
+    <article class="card"><span class="ico"><svg class="ic"><use href="#i-file"/></svg></span><div><p class="num">04 <span>Your files</span></p><h3>Your own music, too</h3><p>Files on your device play right alongside.</p></div></article>
   </div>
 </section>
 
@@ -72,14 +108,14 @@
 <section class="sec" id="offline" data-mode="floor" data-palette="mint">
   <div class="copy">
     <p class="tag">[ 03 — Offline ]</p>
-    <h2>When the signal<br>lets go.</h2>
+    <h2>When the signal<br><em>lets go</em>.</h2>
     <p class="lead">Download songs and whole playlists. While you listen, the next five songs are fetched onto your device, so skips start instantly and the music keeps going through tunnels and flights.</p>
   </div>
   <div class="stage"></div>
   <div class="cards">
-    <article class="card"><p class="num">01 <span>Downloads</span></p><h3>Playlists, albums, likes</h3><p>Downloaded songs never use data again.</p></article>
-    <article class="card"><p class="num">02 <span>Fetch ahead</span></p><h3>Five songs ready</h3><p>Fetched quietly, cleaned up after they've played.</p></article>
-    <article class="card"><p class="num">03 <span>Offline mode</span></p><h3>Picks from what's here</h3><p>Smart Shuffle works from your downloads alone.</p></article>
+    <article class="card"><span class="ico"><svg class="ic"><use href="#i-download"/></svg></span><div><p class="num">01 <span>Downloads</span></p><h3>Playlists, albums, likes</h3><p>Downloaded songs never use data again.</p></div></article>
+    <article class="card"><span class="ico"><svg class="ic"><use href="#i-ahead"/></svg></span><div><p class="num">02 <span>Fetch ahead</span></p><h3>Five songs ready</h3><p>Fetched quietly, cleaned up after they've played.</p></div></article>
+    <article class="card"><span class="ico"><svg class="ic"><use href="#i-offline"/></svg></span><div><p class="num">03 <span>Offline mode</span></p><h3>Picks from what's here</h3><p>Smart Shuffle works from your downloads alone.</p></div></article>
   </div>
 </section>
 
@@ -87,14 +123,14 @@
 <section class="sec" id="sound" data-mode="eq" data-palette="sky">
   <div class="copy">
     <p class="tag">[ 04 — Sound ]</p>
-    <h2>Tuned to<br>your ears.</h2>
+    <h2>Tuned to<br><em>your ears</em>.</h2>
     <p class="lead">Pick your headphones from about 9,000 measured models and Harp corrects them to a neutral sound. Then shape it your way, keep volume even between songs, and let tracks flow gaplessly or crossfade.</p>
   </div>
   <div class="stage"></div>
   <div class="cards">
-    <article class="card"><p class="num">01 <span>AutoEq</span></p><h3>Headphone correction</h3><p>Measured profiles, applied with headroom so nothing clips.</p></article>
-    <article class="card"><p class="num">02 <span>Equalizer</span></p><h3>10 bands and presets</h3><p>Plus even volume (EBU R128) and playback speed.</p></article>
-    <article class="card"><p class="num">03 <span>Transitions</span></p><h3>Gapless or crossfade</h3><p>Albums flow; playlists blend, up to 12 seconds.</p></article>
+    <article class="card"><span class="ico"><svg class="ic"><use href="#i-headphones"/></svg></span><div><p class="num">01 <span>AutoEq</span></p><h3>Headphone correction</h3><p>Measured profiles, applied with headroom so nothing clips.</p></div></article>
+    <article class="card"><span class="ico"><svg class="ic"><use href="#i-eq"/></svg></span><div><p class="num">02 <span>Equalizer</span></p><h3>10 bands and presets</h3><p>Plus even volume (EBU R128) and playback speed.</p></div></article>
+    <article class="card"><span class="ico"><svg class="ic"><use href="#i-fade"/></svg></span><div><p class="num">03 <span>Transitions</span></p><h3>Gapless or crossfade</h3><p>Albums flow; playlists blend, up to 12 seconds.</p></div></article>
   </div>
 </section>
 
@@ -102,7 +138,7 @@
 <section class="sec" id="lyrics" data-mode="wave" data-palette="amber">
   <div class="copy">
     <p class="tag">[ 05 — Lyrics ]</p>
-    <h2>Every line,<br>on time.</h2>
+    <h2>Every line,<br><em>on time</em>.</h2>
     <p class="lead">Synced lyrics from several free sources follow the song line by line. Hindi, Urdu, Punjabi and other Indian scripts can be shown in English letters, so you can sing along to anything.</p>
   </div>
   <div class="stage"></div>
@@ -118,14 +154,14 @@
 <section class="sec" id="together" data-mode="duo" data-palette="lime">
   <div class="copy">
     <p class="tag">[ 06 — Together ]</p>
-    <h2>Two devices,<br>one beat.</h2>
+    <h2>Two devices,<br><em>one beat</em>.</h2>
     <p class="lead">Start a party and send the link: friends hear the same moment and can play, pause or suggest the next song. Pair your phone and computer once and they stay in step. Direct, device to device.</p>
   </div>
   <div class="stage"></div>
   <div class="cards">
-    <article class="card"><p class="num">01 <span>Listen together</span></p><h3>In sync to the beat</h3><p>Kept within milliseconds, with an offset for Bluetooth.</p></article>
-    <article class="card"><p class="num">02 <span>Device sync</span></p><h3>Pair once, done</h3><p>Likes, playlists and history merge; nothing is overwritten.</p></article>
-    <article class="card"><p class="num">03 <span>Shared playlists</span></p><h3>A link that stays fresh</h3><p>Friends who save it get your changes.</p></article>
+    <article class="card"><span class="ico"><svg class="ic"><use href="#i-party"/></svg></span><div><p class="num">01 <span>Listen together</span></p><h3>In sync to the beat</h3><p>Kept within milliseconds, with an offset for Bluetooth.</p></div></article>
+    <article class="card"><span class="ico"><svg class="ic"><use href="#i-devices"/></svg></span><div><p class="num">02 <span>Device sync</span></p><h3>Pair once, done</h3><p>Likes, playlists and history merge; nothing is overwritten.</p></div></article>
+    <article class="card"><span class="ico"><svg class="ic"><use href="#i-link"/></svg></span><div><p class="num">03 <span>Shared playlists</span></p><h3>A link that stays fresh</h3><p>Friends who save it get your changes.</p></div></article>
   </div>
 </section>
 
@@ -133,14 +169,14 @@
 <section class="sec" id="rhythm" data-mode="orbit" data-palette="pink">
   <div class="copy">
     <p class="tag">[ 07 — Rhythm ]</p>
-    <h2>Your year,<br>in orbit.</h2>
+    <h2>Your year,<br><em>in orbit</em>.</h2>
     <p class="lead">Your Rhythm shows your minutes, top artists and songs, streaks and favourite hours for any week, month or year. From the second week of December, Harp Encore tells the story of your year.</p>
   </div>
   <div class="stage"></div>
   <div class="cards">
-    <article class="card"><p class="num">01 <span>Your Rhythm</span></p><h3>Week, month, year</h3><p>And what kind of listener you are.</p></article>
-    <article class="card"><p class="num">02 <span>Harp Encore</span></p><h3>Your year as a story</h3><p>Save your top 50 as a playlist at the end.</p></article>
-    <article class="card"><p class="num">03 <span>Private</span></p><h3>Seen by no one else</h3><p>Worked out on your device.</p></article>
+    <article class="card"><span class="ico"><svg class="ic"><use href="#i-chart"/></svg></span><div><p class="num">01 <span>Your Rhythm</span></p><h3>Week, month, year</h3><p>And what kind of listener you are.</p></div></article>
+    <article class="card"><span class="ico"><svg class="ic"><use href="#i-sparkle"/></svg></span><div><p class="num">02 <span>Harp Encore</span></p><h3>Your year as a story</h3><p>Save your top 50 as a playlist at the end.</p></div></article>
+    <article class="card"><span class="ico"><svg class="ic"><use href="#i-lock"/></svg></span><div><p class="num">03 <span>Private</span></p><h3>Seen by no one else</h3><p>Worked out on your device.</p></div></article>
   </div>
 </section>
 
@@ -148,30 +184,29 @@
 <section class="sec more" id="more" data-mode="frame" data-palette="lilac">
   <div class="copy wide">
     <p class="tag">[ 08 — Everything else ]</p>
-    <h2>Everything you'd expect.<br>Nothing you wouldn't.</h2>
+    <h2>Everything you'd expect.<br><em>Nothing you wouldn't.</em></h2>
   </div>
   <div class="grid">
-    <article class="card"><p class="num">01 <span>Library</span></p><h3>Organised your way</h3><p>Folders, pins, covers, sorting; saved albums, podcasts and artists.</p></article>
-    <article class="card"><p class="num">02 <span>Import</span></p><h3>Bring your music over</h3><p>From Spotify, Apple Music links, YouTube and playlist files.</p></article>
-    <article class="card"><p class="num">03 <span>Everywhere</span></p><h3>Car, lock screen, widget</h3><p>Android Auto, media keys, a home-screen widget and a mini player.</p></article>
-    <article class="card"><p class="num">04 <span>Updates</span></p><h3>Keeps itself current</h3><p>From GitHub Releases, checksum-checked before installing.</p></article>
-    <article class="card"><p class="num">05 <span>Backup</span></p><h3>Restore adds, never wipes</h3><p>Merge a backup into what you have.</p></article>
-    <article class="card"><p class="num">06 <span>Open</span></p><h3>Free software</h3><p>GPL-3.0. Read it, build it, make it yours.</p></article>
+    <article class="card"><span class="ico"><svg class="ic"><use href="#i-library"/></svg></span><div><p class="num">01 <span>Library</span></p><h3>Organised your way</h3><p>Folders, pins, covers, sorting; saved albums, podcasts and artists.</p></div></article>
+    <article class="card"><span class="ico"><svg class="ic"><use href="#i-import"/></svg></span><div><p class="num">02 <span>Import</span></p><h3>Bring your music over</h3><p>From Spotify, Apple Music links, YouTube and playlist files.</p></div></article>
+    <article class="card"><span class="ico"><svg class="ic"><use href="#i-car"/></svg></span><div><p class="num">03 <span>Everywhere</span></p><h3>Car, lock screen, widget</h3><p>Android Auto, media keys, a home-screen widget and a mini player.</p></div></article>
+    <article class="card"><span class="ico"><svg class="ic"><use href="#i-refresh"/></svg></span><div><p class="num">04 <span>Updates</span></p><h3>Keeps itself current</h3><p>From GitHub Releases, checksum-checked before installing.</p></div></article>
+    <article class="card"><span class="ico"><svg class="ic"><use href="#i-archive"/></svg></span><div><p class="num">05 <span>Backup</span></p><h3>Restore adds, never wipes</h3><p>Merge a backup into what you have.</p></div></article>
+    <article class="card"><span class="ico"><svg class="ic"><use href="#i-code"/></svg></span><div><p class="num">06 <span>Open</span></p><h3>Free software</h3><p>GPL-3.0. Read it, build it, make it yours.</p></div></article>
   </div>
 </section>
 
 <!-- 09 PRIVACY -->
 <section class="sec privacy" id="privacy" data-mode="scatter" data-palette="blue">
-  <div class="stage hidden-stage"></div>
   <div class="copy center">
     <p class="tag">[ 09 — Privacy ]</p>
-    <h2>No account. No ads.<br>Weightless.</h2>
+    <h2>No account. No ads.<br><em>Weightless.</em></h2>
     <p class="lead">Your history, taste and library live on your devices. Harp only talks to YouTube Music for songs, free lyrics sources, GitHub for updates, and, when you use them, iroh's relays to reach your own devices or friends. No analytics. No servers of ours.</p>
   </div>
 </section>
 
-<!-- DARK BAND -->
-<section class="band" id="download" data-mode="scatter" data-palette="blue">
+<!-- DOWNLOAD -->
+<section class="band" id="download" data-mode="scatter" data-palette="coral">
   <div class="marquee" aria-hidden="true">
     <div class="track">
       <span>Music that learns you</span><span>No account</span><span>Your taste stays yours</span><span>Free &amp; open source</span>
@@ -180,27 +215,27 @@
   </div>
   <div class="dl">
     <div class="dl-head">
-      <p class="tag light">[ Download ]</p>
-      <h2>Get Harp.</h2>
+      <p class="tag">[ Download ]</p>
+      <h2>Get <em>Harp</em>.</h2>
       <p>Free, from GitHub Releases. Each release lists its SHA-256 checksums.</p>
     </div>
     <div class="dl-grid">
-      <a class="dl-card" href="https://github.com/TechPsychotic/harp/releases/latest"><span class="mono">01</span><b>Android</b><small>Android 9+, 64-bit · signed APK</small><i class="arrow" aria-hidden="true"></i></a>
-      <a class="dl-card" href="https://github.com/TechPsychotic/harp/releases/latest"><span class="mono">02</span><b>Linux</b><small>x64 · tar.gz</small><i class="arrow" aria-hidden="true"></i></a>
-      <a class="dl-card" href="https://github.com/TechPsychotic/harp/releases/latest"><span class="mono">03</span><b>Windows</b><small>x64 · zip</small><i class="arrow" aria-hidden="true"></i></a>
-      <a class="dl-card" href="https://github.com/TechPsychotic/harp/releases/latest"><span class="mono">04</span><b>macOS</b><small>zip · right-click › Open the first time</small><i class="arrow" aria-hidden="true"></i></a>
+      <a class="dl-card" href="https://github.com/TechPsychotic/harp/releases/latest"><span class="ico"><svg class="ic"><use href="#i-phone"/></svg></span><b>Android</b><small>Android 9+, 64-bit · signed APK</small><i class="arrow" aria-hidden="true"></i></a>
+      <a class="dl-card" href="https://github.com/TechPsychotic/harp/releases/latest"><span class="ico"><svg class="ic"><use href="#i-terminal"/></svg></span><b>Linux</b><small>x64 · tar.gz</small><i class="arrow" aria-hidden="true"></i></a>
+      <a class="dl-card" href="https://github.com/TechPsychotic/harp/releases/latest"><span class="ico"><svg class="ic"><use href="#i-window"/></svg></span><b>Windows</b><small>x64 · zip</small><i class="arrow" aria-hidden="true"></i></a>
+      <a class="dl-card" href="https://github.com/TechPsychotic/harp/releases/latest"><span class="ico"><svg class="ic"><use href="#i-laptop"/></svg></span><b>macOS</b><small>zip · right-click › Open the first time</small><i class="arrow" aria-hidden="true"></i></a>
     </div>
     <p class="fine">Harp streams through yt-dlp, which may go against YouTube's terms of service. Harp isn't affiliated with YouTube, Google, Spotify or Apple, and isn't on Google Play or the App Store.</p>
   </div>
   <footer class="foot">
     <div class="brand"><img src="assets/icon.png" alt="" width="26" height="26"><span>HARP</span></div>
     <p class="mono">GNU GPL v3.0 or later</p>
-    <nav><a href="https://github.com/TechPsychotic/harp">GitHub</a><a href="https://github.com/TechPsychotic/harp/releases">Releases</a><a href="https://github.com/TechPsychotic/harp/blob/main/ROADMAP.md">Roadmap</a></nav>
+    <nav><a href="https://github.com/TechPsychotic/harp"><svg class="ic sm"><use href="#i-github"/></svg>GitHub</a><a href="https://github.com/TechPsychotic/harp/releases"><svg class="ic sm"><use href="#i-download"/></svg>Releases</a></nav>
   </footer>
 </section>
 
 </main>
 
-<script src="main.js" defer></script>
+<script src="main.js?v=3" defer></script>
 </body>
 </html>

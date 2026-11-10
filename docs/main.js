@@ -11,71 +11,103 @@
   const canvas = document.getElementById("field");
   const ctx = canvas.getContext("2d");
 
-  const PALETTES = {
-    coral: { bg: ["#fff8f6", "#ffd3c8"], accent: "#d9344a", tones: ["#ef3b4f", "#ffab96", "#fff4f0"] },
-    violet: { bg: ["#f8f6ff", "#dcd2ff"], accent: "#6342f5", tones: ["#7b5cff", "#c3b4ff", "#f6f3ff"] },
-    mint: { bg: ["#f3fff9", "#c4f0db"], accent: "#0d8a57", tones: ["#1fbf7a", "#a3eac6", "#f2fff9"] },
-    sky: { bg: ["#f4f8ff", "#cddfff"], accent: "#1f55e8", tones: ["#2f6bff", "#a9c4ff", "#f3f7ff"] },
-    amber: { bg: ["#fffaf1", "#ffe0b0"], accent: "#b45309", tones: ["#ff9a1f", "#ffd193", "#fff8ee"] },
-    lime: { bg: ["#fbfff0", "#def3a8"], accent: "#4d7c0f", tones: ["#8cc63f", "#d3ee98", "#fbfff1"] },
-    pink: { bg: ["#fff5f8", "#ffd0de"], accent: "#d61f5e", tones: ["#ff4d7e", "#ffb0c6", "#fff4f7"] },
-    lilac: { bg: ["#faf7ff", "#e7dcff"], accent: "#7c3aed", tones: ["#9b6bff", "#d9c8ff", "#fbf9ff"] },
-    blue: { bg: ["#f5f6ff", "#d3d9ff"], accent: "#3442f0", tones: ["#4152ff", "#b8c0ff", "#f5f6ff"] },
-  };
-
   // ---------- colour helpers ----------
   const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
   const mix = (a, b, t) => {
     const x = hex(a), y = hex(b);
     return "#" + x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, "0")).join("");
   };
-  const shade = (h, k) => mix(h, k > 0 ? "#ffffff" : "#000000", Math.abs(k));
 
-  // A glossy sphere (or a glass bubble) drawn once into a small canvas.
-  const SPRITE = 160;
+  // Each section's accent, a deep glow for the sky behind it, and four sphere
+  // tones (accent, light, deep, pearl) lit for a dark background.
+  const PALETTE = (accent, glow) => ({
+    accent, glow,
+    tones: [accent, mix(accent, "#ffffff", 0.45), mix(accent, "#05050a", 0.32), mix(accent, "#ece9f5", 0.82)],
+  });
+  const PALETTES = {
+    coral: PALETTE("#ff5a6e", "#3d1119"),
+    violet: PALETTE("#9b7bff", "#24164a"),
+    mint: PALETTE("#34d399", "#0b3326"),
+    sky: PALETTE("#5b8cff", "#10224a"),
+    amber: PALETTE("#ffb020", "#3a2608"),
+    lime: PALETTE("#a3e635", "#22320a"),
+    pink: PALETTE("#ff5c93", "#3d1027"),
+    lilac: PALETTE("#c084fc", "#2c1544"),
+    blue: PALETTE("#6b7bff", "#161c4a"),
+  };
+
+  // Spheres drawn once into small canvases: a lit body with a soft bloom, a
+  // reflected light from below, a rim in the sphere's own colour, a soft and a
+  // sharp highlight. Glass ones are see-through with a bright edge. Far ones
+  // get a blurred copy (depth of field).
+  const CORE = 128, PAD = 26, SPRITE = CORE + PAD * 2;
   const sprites = new Map();
-  function sprite(color, glass) {
-    const key = color + (glass ? "g" : "");
+  function sprite(color, glass, far) {
+    const key = color + (glass ? "g" : "s") + (far ? "f" : "");
     let s = sprites.get(key);
     if (s) return s;
     s = document.createElement("canvas");
     s.width = s.height = SPRITE;
     const c = s.getContext("2d");
-    const r = SPRITE / 2 - 2;
-    const g = c.createRadialGradient(SPRITE * 0.36, SPRITE * 0.32, r * 0.05, SPRITE / 2, SPRITE / 2, r);
+    if (far) {
+      const src = sprite(color, glass, false);
+      if ("filter" in c) c.filter = "blur(3px)";
+      c.globalAlpha = 0.75;
+      c.drawImage(src, 0, 0);
+      sprites.set(key, s);
+      return s;
+    }
+    const m = SPRITE / 2, r = CORE / 2;
+    const at = (fx, fy) => [m - r + CORE * fx, m - r + CORE * fy];
+    c.save();
+    // Bloom: the body casts a glow of its own colour onto the dark.
+    c.shadowColor = hexA(color, glass ? 0.35 : 0.55);
+    c.shadowBlur = PAD * 0.9;
+    const body = c.createRadialGradient(...at(0.36, 0.3), r * 0.04, m, m, r);
     if (glass) {
-      g.addColorStop(0, "rgba(255,255,255,0.75)");
-      g.addColorStop(0.35, hexA(color, 0.35));
-      g.addColorStop(0.85, hexA(shade(color, -0.15), 0.55));
-      g.addColorStop(1, hexA(shade(color, -0.35), 0.8));
+      body.addColorStop(0, "rgba(255,255,255,0.55)");
+      body.addColorStop(0.4, hexA(color, 0.16));
+      body.addColorStop(0.85, hexA(color, 0.28));
+      body.addColorStop(1, hexA(mix(color, "#ffffff", 0.3), 0.75));
     } else {
-      g.addColorStop(0, shade(color, 0.75));
-      g.addColorStop(0.28, shade(color, 0.12));
-      g.addColorStop(0.75, color);
-      g.addColorStop(1, shade(color, -0.28));
+      body.addColorStop(0, mix(color, "#ffffff", 0.6));
+      body.addColorStop(0.22, mix(color, "#ffffff", 0.18));
+      body.addColorStop(0.62, color);
+      body.addColorStop(0.92, mix(color, "#000000", 0.55));
+      body.addColorStop(1, mix(color, "#000000", 0.4));
     }
-    c.fillStyle = g;
+    c.fillStyle = body;
     c.beginPath();
-    c.arc(SPRITE / 2, SPRITE / 2, r, 0, Math.PI * 2);
+    c.arc(m, m, r, 0, Math.PI * 2);
     c.fill();
-    // Rim light from below, and a sharp highlight.
-    const rim = c.createRadialGradient(SPRITE / 2, SPRITE * 0.86, 0, SPRITE / 2, SPRITE * 0.86, r * 0.7);
-    rim.addColorStop(0, "rgba(255,255,255,0.28)");
-    rim.addColorStop(1, "rgba(255,255,255,0)");
+    c.restore();
+    c.save();
+    c.beginPath();
+    c.arc(m, m, r, 0, Math.PI * 2);
+    c.clip();
+    // Light bounced up from below.
+    const bounce = c.createRadialGradient(...at(0.62, 0.92), 0, ...at(0.62, 0.92), r * 0.75);
+    bounce.addColorStop(0, hexA(mix(color, "#ffffff", 0.5), glass ? 0.55 : 0.45));
+    bounce.addColorStop(1, hexA(color, 0));
+    c.fillStyle = bounce;
+    c.fillRect(0, 0, SPRITE, SPRITE);
+    // Rim (fresnel): the edge catches light.
+    const rim = c.createRadialGradient(m, m, r * 0.72, m, m, r);
+    rim.addColorStop(0, "rgba(255,255,255,0)");
+    rim.addColorStop(1, hexA(mix(color, "#ffffff", 0.55), glass ? 0.65 : 0.28));
     c.fillStyle = rim;
-    c.fill();
-    c.fillStyle = "rgba(255,255,255,0.85)";
+    c.fillRect(0, 0, SPRITE, SPRITE);
+    // Soft highlight, then a sharp one.
+    const spec = c.createRadialGradient(...at(0.35, 0.28), 0, ...at(0.35, 0.28), r * 0.42);
+    spec.addColorStop(0, "rgba(255,255,255,0.75)");
+    spec.addColorStop(1, "rgba(255,255,255,0)");
+    c.fillStyle = spec;
+    c.fillRect(0, 0, SPRITE, SPRITE);
+    c.fillStyle = "rgba(255,255,255,0.95)";
     c.beginPath();
-    c.ellipse(SPRITE * 0.35, SPRITE * 0.3, r * 0.16, r * 0.1, -0.6, 0, Math.PI * 2);
+    c.ellipse(...at(0.33, 0.25), r * 0.11, r * 0.065, -0.65, 0, Math.PI * 2);
     c.fill();
-    if (glass) {
-      c.fillStyle = "rgba(255,255,255,0.9)";
-      for (const [x, y, d] of [[0.62, 0.58, 2.2], [0.44, 0.7, 1.6], [0.7, 0.4, 1.4]]) {
-        c.beginPath();
-        c.arc(SPRITE * x, SPRITE * y, d, 0, Math.PI * 2);
-        c.fill();
-      }
-    }
+    c.restore();
     sprites.set(key, s);
     return s;
   }
@@ -95,8 +127,8 @@
       balls.push({
         x: W / 2 + Math.cos(i) * 80, y: H * 0.4 + Math.sin(i) * 80, vx: 0, vy: 0,
         r: 10, base: 0.3 + 0.7 * Math.pow(((i * 37) % 97) / 96, 1.6), // relative size: many small, a few big
-        tone: roll < 45 ? 0 : roll < 75 ? 1 : 2,
-        glass: roll % 7 === 0 && roll < 75,
+        tone: roll < 38 ? 0 : roll < 60 ? 1 : roll < 82 ? 2 : 3,
+        glass: roll % 6 === 0,
         seed: i * 1.7,
       });
     }
@@ -120,8 +152,7 @@
     pal: PALETTES[el.dataset.palette] || PALETTES.coral,
     stage: el.querySelector(".stage"),
   }));
-  const band = document.querySelector(".band");
-  const lyrics = document.querySelector(".lyrics");
+    const lyrics = document.querySelector(".lyrics");
 
   // Where we are: the section at the middle of the screen, how far into the next, and its stage.
   function where() {
@@ -297,29 +328,44 @@
     const { a, b, t } = w;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
-    const order = balls.slice().sort((p, q) => (p.z ?? p.r / 100) - (q.z ?? q.r / 100));
+    const order = balls.slice().sort((p, q) => (p.z ?? p.base) - (q.z ?? q.base));
+    const k = SPRITE / CORE;
     for (const ball of order) {
-      if (ball.x + ball.r < -50 || ball.x - ball.r > W + 50 || ball.y + ball.r < -50 || ball.y - ball.r > H + 50) continue;
-      const d = ball.r * 2;
-      ctx.globalAlpha = 1 - t;
-      if (1 - t > 0.01) ctx.drawImage(sprite(a.pal.tones[ball.tone], ball.glass), ball.x - ball.r, ball.y - ball.r, d, d);
-      ctx.globalAlpha = t;
-      if (t > 0.01) ctx.drawImage(sprite(b.pal.tones[ball.tone], ball.glass), ball.x - ball.r, ball.y - ball.r, d, d);
+      if (ball.x + ball.r < -60 || ball.x - ball.r > W + 60 || ball.y + ball.r < -60 || ball.y - ball.r > H + 60) continue;
+      const far = (ball.z ?? ball.base) < 0.2;
+      const d = ball.r * 2 * k, x = ball.x - ball.r * k, y = ball.y - ball.r * k;
+      if (1 - t > 0.01) {
+        ctx.globalAlpha = 1 - t;
+        ctx.drawImage(sprite(a.pal.tones[ball.tone], ball.glass, far), x, y, d, d);
+      }
+      if (t > 0.01) {
+        ctx.globalAlpha = t;
+        ctx.drawImage(sprite(b.pal.tones[ball.tone], ball.glass, far), x, y, d, d);
+      }
     }
     ctx.globalAlpha = 1;
   }
 
+  let lastSky = "";
   function paintSky(w) {
     const { a, b, t } = w;
-    root.style.setProperty("--bg1", mix(a.pal.bg[0], b.pal.bg[0], t));
-    root.style.setProperty("--bg2", mix(a.pal.bg[1], b.pal.bg[1], t));
-    root.style.setProperty("--accent", mix(a.pal.accent, b.pal.accent, t));
+    const accent = mix(a.pal.accent, b.pal.accent, t), glow = mix(a.pal.glow, b.pal.glow, t);
+    if (accent + glow === lastSky) return;
+    lastSky = accent + glow;
+    root.style.setProperty("--accent", accent);
+    root.style.setProperty("--glow", glow);
   }
 
+  const navLinks = [...document.querySelectorAll(".links a")];
   function chrome() {
     nav.classList.toggle("scrolled", scrollY > 20);
-    const br = band.getBoundingClientRect();
-    nav.classList.toggle("on-dark", br.top < 60);
+    // The link for the section you're in is underlined in its accent.
+    let current = null;
+    for (const l of navLinks) {
+      const el = document.querySelector(l.getAttribute("href"));
+      if (el) { const r = el.getBoundingClientRect(); if (r.top < H * 0.5) current = l; }
+    }
+    navLinks.forEach((l) => l.classList.toggle("on", l === current));
     if (lyrics) {
       const r = lyrics.getBoundingClientRect();
       const lines = lyrics.querySelectorAll("p");

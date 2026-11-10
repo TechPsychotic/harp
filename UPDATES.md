@@ -10,12 +10,13 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ## 2026-11-10 (evening, later): website; HRTF plan
 
-- **Website** in `docs/` (GitHub Pages), redesigned light and airy: pastel skies that change colour per
-  section, and a field of glossy spheres behind the page that takes a shape for each section (a cluster,
-  a pile that falls when "the signal lets go", equalizer bars, a lyric wave, two groups breathing in
-  step, an orbit, flying away for "weightless") and moves aside for your pointer. Light text, mono labels,
-  glass cards, a dark download band. Phones and tablets get one-column layouts; reduced motion keeps it
-  still. ✅ checked in Chrome at desktop and narrow widths.
+- **Website** in `docs/` (live at techpsychotic.github.io/harp): dark theme whose accent changes with each
+  section as you scroll (headline words, labels, icons, buttons, the sky's glow and the spheres all
+  follow it); custom line icons on accent-tinted tiles; glossy lit spheres with bloom, a coloured rim,
+  light from below and depth of field, shaped per section (cluster, pile, equalizer, lyric wave, two
+  groups in step, orbit, edges, flying away); the nav underlines the section you're in. Fixed: the live
+  site showed the new page with the old cached stylesheet (unstyled); the CSS and JS links now carry a
+  version so updates always load together. ✅ checked in Chrome on desktop and narrow widths.
 - **HRTF (true 3D):** checked the engine's FFmpeg: it has no `sofalizer`, `headphone` or `afir`, so
   it needs our own engine build with libmysofa. Planned as the milestone after v0.9.0.
 
