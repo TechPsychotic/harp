@@ -111,5 +111,3 @@ Projects and work that shaped Harp, beyond the libraries it's built on:
 - [Better Lyrics](https://github.com/better-lyrics) and [YouLy+](https://github.com/ibratabian17/youlyplus): ideas for word-synced lyrics.
 - [SwiftyTube](https://github.com/686udjie/SwiftyTube): the approach in the iOS plan (`ROADMAP.md`).
 - [Equalizer314](https://f-droid.org/en/packages/com.bearinmind.equalizer314/), [Steam Audio](https://github.com/ValveSoftware/steam-audio) and [OpenAL-MOB](https://github.com/6779660/OpenAL-MOB): research for the sound work and the planned 3D (HRTF) mode.
-- ["Gravity"](https://codepen.io/editor/Abdughafur-Khujzoda/pen/01a1a59a-ef98-76f4-bbb3-1ecefb3bf32f) by Abdughafur Khujzoda: the look of the website (its code is Harp's own).
-- Spotify's Sound Capsule and Wrapped: the idea behind Your Rhythm and Harp Encore.
