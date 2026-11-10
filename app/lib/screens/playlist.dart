@@ -332,7 +332,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           tooltip: _downloadingAll ? 'Downloading…' : (allDown ? 'Downloaded' : 'Download'),
           iconSize: 28,
           icon: Icon(
-            _downloadingAll ? Icons.downloading_rounded : Icons.download_for_offline_rounded,
+            _downloadingAll ? Icons.downloading_rounded : (allDown ? Icons.download_for_offline_rounded : Icons.download_for_offline_outlined),
             color: allDown || _downloadingAll ? accent : tok.textDim,
           ),
           onPressed: _downloadAll,

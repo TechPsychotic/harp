@@ -1,4 +1,3 @@
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 
@@ -7,6 +6,7 @@ import '../player/controller.dart';
 import '../src/rust/api/engine.dart' as api;
 import '../theme/glass.dart';
 import '../theme/spectrum_waves.dart';
+import '../widgets/blurred_art.dart';
 import '../widgets/cover.dart';
 import '../widgets/lyrics_pane.dart';
 import '../widgets/song_actions.dart';
@@ -170,20 +170,10 @@ class _Backdrop extends StatelessWidget {
     return RepaintBoundary(
       child: Stack(fit: StackFit.expand, children: [
         DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [topC, bottom]))),
-        // The cover as a soft wash: decoded at 24 px and stretched with smooth
-        // filtering. Looks like a heavy blur, but costs nothing per frame (a real
-        // full-window blur made opening the player slow on big desktop windows).
-        if (blurArt && ThumbCache.peek(song.thumbnail) != null)
+        if (blurArt)
           Opacity(
             opacity: dark ? 0.45 : 0.30,
-            child: Image.file(
-              File(ThumbCache.peek(song.thumbnail)!),
-              cacheWidth: 24,
-              fit: BoxFit.cover,
-              filterQuality: FilterQuality.medium,
-              gaplessPlayback: true,
-              errorBuilder: (_, _, _) => const SizedBox.shrink(),
-            ),
+            child: BlurredArt(url: song.thumbnail, seed: song.id),
           ),
         DecoratedBox(
           decoration: BoxDecoration(
@@ -309,12 +299,27 @@ class _Controls extends StatelessWidget {
           style: IconButton.styleFrom(backgroundColor: lyricsOn ? fg.withValues(alpha: 0.16) : Colors.transparent),
           onPressed: onLyrics,
         ),
-        IconButton(tooltip: 'Add to playlist', icon: Icon(Icons.playlist_add_rounded, color: dim), onPressed: () => showSavedInSheet(context, player, s)),
+        // Like Spotify's: + when the song isn't in a playlist, a filled ✓ when it is
+        // (tap to see which, add it to others, or take it out).
+        ValueListenableBuilder<Set<String>>(
+          valueListenable: player.playlisted,
+          builder: (context, ids, _) {
+            final saved = ids.contains(s.id);
+            return IconButton(
+              tooltip: saved ? 'In your playlists' : 'Add to playlist',
+              icon: Icon(saved ? Icons.check_circle_rounded : Icons.add_circle_outline_rounded, color: saved ? Theme.of(context).colorScheme.primary : dim),
+              onPressed: () => showSavedInSheet(context, player, s),
+            );
+          },
+        ),
         ValueListenableBuilder<Set<String>>(
           valueListenable: player.downloading,
           builder: (context, busy, _) => IconButton(
             tooltip: s.downloaded ? 'Downloaded' : 'Download',
-            icon: Icon(busy.contains(s.id) ? Icons.downloading_rounded : (s.downloaded ? Icons.download_done_rounded : Icons.download_rounded), color: dim),
+            icon: Icon(
+              busy.contains(s.id) ? Icons.downloading_rounded : (s.downloaded ? Icons.download_for_offline_rounded : Icons.download_for_offline_outlined),
+              color: s.downloaded ? Theme.of(context).colorScheme.primary : dim,
+            ),
             onPressed: busy.contains(s.id)
                 ? null
                 : () async {

@@ -75,24 +75,13 @@ class SongTile extends StatelessWidget {
               Text(song.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 16, color: playing ? accent : tok.text)),
               const SizedBox(height: 2),
               Row(children: [
-                if (song.downloaded) Padding(padding: const EdgeInsets.only(right: 4), child: Icon(Icons.arrow_circle_down_rounded, size: 14, color: tok.textDim)),
+                // Downloaded: a filled badge (not the hollow outline).
+                if (song.downloaded) Padding(padding: const EdgeInsets.only(right: 4), child: Icon(Icons.download_for_offline_rounded, size: 15, color: accent)),
                 Expanded(child: Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: tok.textDim, fontSize: 13.5))),
               ]),
             ]),
           ),
           if (song.liked) Padding(padding: const EdgeInsets.only(left: 6), child: Icon(Icons.favorite_rounded, size: 15, color: accent)),
-          // In one of your playlists: a ✓. Tap (or hold) to see which, and change it.
-          ValueListenableBuilder<Set<String>>(
-            valueListenable: player.playlisted,
-            builder: (context, ids, _) => ids.contains(song.id)
-                ? InkResponse(
-                    radius: 18,
-                    onTap: () => showSavedInSheet(context, player, song),
-                    onLongPress: () => showSavedInSheet(context, player, song),
-                    child: Padding(padding: const EdgeInsets.only(left: 8), child: Icon(Icons.check_circle_rounded, size: 18, color: accent)),
-                  )
-                : const SizedBox.shrink(),
-          ),
           trailing ?? SongMenu(song: song, player: player, onRemoveFromList: onRemoveFromList, removeLabel: removeLabel),
         ]),
       ),
