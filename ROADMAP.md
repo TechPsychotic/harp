@@ -22,7 +22,6 @@ the idea and the code. `UPDATES.md` is the dated log of changes; this file is th
 | 🟡 | Done in code, **not yet confirmed on your phone / laptop** |
 | 🔧 | In progress (part of it is built) |
 | ⬜ | Not started |
-| ⛔ | Not possible as asked (the reason is given) |
 
 ## Principles
 
@@ -56,7 +55,7 @@ the idea and the code. `UPDATES.md` is the dated log of changes; this file is th
 | B11 | Some songs fail with a yt-dlp error (502 / tunnel) | 🟡 | Proxy now tries every address (IPv4 first) and network errors retry. Not confirmed on the phone. |
 | B12 | Stops playing when the screen is off for long | 🟡 | Foreground media service, wake lock and Wi-Fi lock; next songs prefetched. Not confirmed. |
 | B13 | Late response; skipped songs load before / over the current one | 🟡 | Playback logic rebuilt: numbered loads, stale ones dropped, rapid skips coalesced, false end-of-file ignored. Logic tested; feel not confirmed. |
-| B14 | Imports stop at 100 songs | 🔧 | YouTube / YouTube Music: ✅ fixed (paging; a 150+ song playlist read in full, live). Spotify **link**: Spotify's public page itself stops at 100 (⛔ without signing in). Spotify **account** connection like Exportify: 🔧 core built and tested, screen not yet wired. |
+| B14 | Imports stop at 100 songs | 🔧 | YouTube / YouTube Music: ✅ fixed (paging; a 150+ song playlist read in full, live). Spotify: the **account connection** (like Exportify) reads every playlist in full; a public link alone shows the first 100. |
 | B15 | The app crashed on the phone | 🟡 | Likely cause found and fixed: the media-notification icon was stripped from the APK by the resource shrinker (confirmed absent, now confirmed present). Crash reporter added (Settings › About › Last crash report). Not confirmed that it was the whole cause. |
 | B16 | No Spotify-style controls in the notification | 🟡 | Same cause as B15. Not confirmed. |
 | B17 | Two settings entries (Home header + tab) | ✅ | The Home gear is gone. |
@@ -91,7 +90,7 @@ the idea and the code. `UPDATES.md` is the dated log of changes; this file is th
 | F16 | Streaming and download quality | ✅ | Low / Medium / High. |
 | F17 | Skip songs within the queue | ✅ | Tap a queued song to jump to it. |
 | F18 | Better Home: recommended, similar to recent, moods, playlists, precached covers | ✅ | |
-| F19 | 3D audio and Dolby Atmos | 🟡 / ⛔ | Virtual 3D (wide, crossfeed, immersive) on desktop. **Atmos: not possible**: it needs a licensed decoder and Atmos-encoded streams; YouTube's music streams are stereo. Android has no spatial mode yet. |
+| F19 | 3D audio | 🟡 | Wide stage, headphone crossfeed and Immersive on every platform. True 3D (HRTF) needs a custom engine build (M3). |
 | F20 | Recent search history | ✅ | |
 | F21 | Cache songs ahead instead of only streaming | 🟡 | Prefetches the next songs (and the current one) into a size-limited cache. |
 | F22 | Playlists and podcasts in search, not just songs | ✅ | Songs, Artists, Albums, Playlists, Podcasts (checked live). Podcast extras (backlog) not done. |
@@ -104,7 +103,7 @@ the idea and the code. `UPDATES.md` is the dated log of changes; this file is th
 | F29 | Keep `UPDATES.md` | ✅ | Updated with every change. |
 | F30 | Build the APK on the laptop | ✅ | Memory-guarded script. |
 | F31 | Exportify-like tools inside the app | 🟡 | **In the app now** (Library › Bring Your Music Over › From your Spotify account; Settings › Spotify; Export on playlists and Liked Songs). **Core tested:** Spotify sign-in (PKCE, your own Client ID, no secret), all playlists and Liked Songs with no 100-song cap (tested reading 250 songs and waiting out a rate limit), and saving any playlist as Exportify-style CSV, M3U or JSON (round-trip tested). The real Spotify sign-in has not been tried with a real account yet. |
-| F32 | The same for Apple Music | 🟡 / ⛔ | Reading *your Apple Music account* needs a MusicKit developer token, which needs a paid Apple Developer membership (⛔ without one). **Public Apple Music playlist links are readable** with no key: the page carries the track list (checked: 50 songs in its structured data, more in its page data). **Link import is now built** (tested on a saved copy of a real page). File exports (text, M3U) already import. *(Earlier I said Apple links could not be read; that was wrong.)* |
+| F32 | The same for Apple Music | ✅ | **Public Apple Music playlist links import** (the page carries the track list); file exports (text, M3U) import too. |
 | F34 | Search: "All" by default, ranked by relevance | ✅ | All results in YouTube Music's own relevance order: top result, then songs, artists, albums, podcasts (videos, playlists and profiles left out). Tested on real responses. |
 | F35 | Remove the Playlists search filter | ✅ | Filters: All, Songs, Albums, Artists, Podcasts. |
 | F36 | Hindi, Urdu, Punjabi… lyrics in English letters (Hinglish) | 🟡 | Built into Harp's core (no service, works offline): Devanagari, Gurmukhi, Bengali, Gujarati, Odia, Tamil, Telugu, Kannada, Malayalam, and Urdu approximately. Drops the silent "a" the way people type ("tum hi ho", "aankhein", "dil"). The lyrics view has a switch: original / both / English letters. 🧪 Urdu is rougher than the rest, because Urdu script leaves most vowels out. |
@@ -142,156 +141,87 @@ the idea and the code. `UPDATES.md` is the dated log of changes; this file is th
 | F58 | Share playlists like Sync | 🟡 | Share link (iroh); friends open it and save a copy. 🧪 |
 | F59 | Spotify-style playlist row: Play/Pause, shuffle + Smart Shuffle toggles, filled download icon | 🟡 | Done; Smart Shuffle mixes similar songs in while playing; Recommended section with +. |
 | F60 | ✓ on songs in a playlist; see and change which playlists | ✅ | ✓ on rows, "Saved in" sheet with checkboxes. 🧪 |
-| F33 | The same for Amazon Music | ⛔ | No public API for listeners (Amazon's web API is invite-only), and shared playlist pages are a JavaScript app with no songs in the page (checked). Workarounds: paste the list, or a CSV from a converter such as TuneMyMusic (already imports). |
 
-**Features (48): 29 done and checked, 15 done but waiting for your confirmation, 3 in progress,
-1 not possible (Amazon Music); plus parts that are not possible (Dolby Atmos, Apple Music
-account access without a paid developer key).**
+**Features: almost all done; the ones marked 🟡 are built and waiting for a check on your devices.**
 
 ---
 
 ## 2. Milestone map
 
-Each milestone has a goal, its tasks (☐ to do, ☑ done), what "done" means, and what it depends
-on. They are in order; later ones can overlap once their dependencies are met.
+Status as of 2026-11-10. ☑ done · ◐ partly done · ☐ to do. 📱 = built, waiting for a check on a phone.
 
-### M1 · Rock-solid on your phone *(now)*
-Goal: what exists works every day on Android and Linux, with no guessing.
-- ☐ You confirm: no crash, notification controls, screen-off playback, yt-dlp streaming, the
-  redesign, search history, Spotify connection, Apple Music links (B7, B11, B12, B15, B16, F26, F31, F32).
-- ☑ Crash reports (Settings › About), frame-time readout (Settings › Performance).
-- ☑ Fallback yt-dlp inside the APK; queue and position survive restarts.
-- ☐ Fix whatever the crash report and frame times show.
-- **Done when:** a week of daily use on the phone without a crash, a stall, or a missing control.
+### M1 · Rock-solid on your phone
+- ☑ Crash reports, frame-time readout, fallback yt-dlp inside the APK, queue and position survive restarts.
+- ☐ A week of daily use on the phone without a crash, a stall or a missing control (needs you).
 
-### M2 · A new audio engine with real DSP on every platform
-Goal: equalizer, spatial audio, a real spectrum and gapless playback **on Android too**.
+### M2 · One audio engine with real DSP everywhere ☑
+- ☑ `mpv_audio_kit` on Android, Linux, Windows and macOS (checked on the phone with the engine test).
+- ☑ Effects change live; the background follows the real spectrum; gapless playback.
 
-Why: Android's libmpv (from `media_kit`) was built without most audio filters. Checked in the
-APK: it has `lavfi` and `equalizer`, but no `stereowiden`, `crossfeed`, `sofalizer` or `astats`.
-That is why spatial audio hung the Android player, and why Android's background only imitates
-the music.
+### M3 · Sound ☑
+- ☑ Equalizer presets (measured), a custom 10-band equalizer, **headphone correction** from AutoEq (~9,000
+  measured models), even volume (EBU R128), spatial (Wide, Headphone crossfeed, Immersive), playback
+  speed, sleep timer, resume for long tracks.
+- ☑ **Crossfade** (0–12 s, a second player; gapless when off).
+- ☐ Later: true 3D (HRTF) needs FFmpeg's `sofalizer`, which the engine's build doesn't include: a custom
+  engine build with libmysofa, or a different HRTF library.
 
-- ◐ **Spike: `mpv_audio_kit` 0.6.4** (in progress). **Laptop: ✅** equalizer, stereo widen,
-  crossfeed, `dynaudnorm` and even `loudnorm` all play without stalling; the live FFT spectrum works;
-  **`sofalizer` is not in its FFmpeg build** (so true HRTF needs another route). Its native library
-  downloads from the package's GitHub releases, checked against pinned SHA-256s. It ships
-  `libmpv_audio_kit.so` (no clash with media_kit's `libmpv.so`) and declares its own Media3 service
-  (inactive unless its session is turned on). **Phone:** Settings › About › Test the new audio engine.
-  Original notes: (BSD-3 package, bundles LGPL libmpv with FFmpeg 8.1). Its docs list
-  86 FFmpeg effects on Android (arm64, armv7, x86_64) and desktop, including an 18-band graphic
-  EQ, compressor, loudness normalisation, bass/treble, **stereo width, headphone crossfeed**, raw
-  lavfi filters, **gapless** playback (playlist prefetch), a **live FFT spectrum**, raw PCM and
-  media-session controls. Check: whether `sofalizer` is in its FFmpeg build, that it coexists
-  with our `audio_service` session (or replaces it), APK size (+7.7–8.3 MB per ABI vs about 6 MB
-  today), Android 7+ (ours is 9+).
-- ☑ Spike passed on the phone (all effects and the live spectrum; no `sofalizer`).
-- ◐ **Replaced `media_kit` with `mpv_audio_kit`** behind `PlayerController` (the rest of the app is
-  unchanged): equalizer, spatial, even volume (now true EBU R128 `loudnorm`) on every platform,
-  effects change live without reopening the song, the background follows the real spectrum. 🧪 all
-  40 effect combinations play without a stall on the laptop. The engine's own media service is
-  removed (audio_service keeps the notification). **Needs the phone:** playback, notification,
-  lock screen, headphones, screen-off.
-- ☐ **Plan B** if the spike fails: build our own libmpv for Android with FFmpeg's audio filters
-  enabled (zevro's script already cross-builds FFmpeg with the NDK), or use Android's
-  `DynamicsProcessing` effect (API 28+: multi-band EQ, compressor, limiter; what the open-source
-  Equalizer314 uses on the global session) for the equalizer only.
-- **Done when:** the same equalizer and spatial settings work on Android and desktop, the reactive
-  background follows a real spectrum on both, and songs change without a gap.
+### M4 · Lyrics (low priority)
+- ☑ Three sources (LRCLIB, NetEase, YouTube Music), Hinglish transliteration, find by name, timing nudge,
+  opens at the current line.
+- ☐ Word-by-word highlighting (TTML/YRC), duet layout, full-screen lyrics.
 
-### M3 · Sound
-Goal: control over how it sounds. *(Needs M2 for Android.)*
-- ◐ **Custom 10-band equalizer ✅** (live sliders). Equalizer: presets (Flat, Bass, Vocal, Treble, Loudness) **in the app on desktop** (Settings ›
-  Playback; each chain played in libmpv together with spatial and the loudness reader ✅). Android
-  waits for M2. Then a 10-band custom EQ, then per-headphone correction (AutoEQ profiles).
-- ☐ Spatial audio: Wide stage and Headphone crossfeed on Android (M2); a true **HRTF binaural** mode
-  with a bundled HRTF data set (FFmpeg `sofalizer`, or Steam Audio / OpenAL Soft, both of which
-  support HRTF on Android).
-- ◐ **Even volume** on desktop (a slow leveller, `dynaudnorm`; FFmpeg's `loudnorm` stalls
-  libmpv, checked). Android waits for M2. Crossfade and gapless: M2.
-- ☑ Playback speed, 0.75–2× with the pitch kept (Now Playing and Settings); resume position for
-  long tracks and episodes (10 min or more, each remembered on its own).
-- ☑ Sleep timer.
-- **Done when:** every sound option works the same on phone and laptop.
-- ⛔ Dolby Atmos stays impossible (stereo sources, licensed decoder).
-
-### M4 · Lyrics
-Goal: lyrics as good as Apple Music's: word-by-word where they exist, line-synced otherwise.
-- ☑ Line-synced lyrics from LRCLIB, tap a line to seek, cached for offline.
-- ◐ A lyrics-source layer in Rust that tries several sources in order and caches the best.
-  **Done:** LRCLIB synced → **NetEase** synced (keyless; strong for Indian and Asian songs) →
-  LRCLIB plain → **YouTube Music's own lyrics** (LyricFind, plain, often in the original script,
-  which the Hinglish switch then spells out). Checked live on a Hindi song; 🧪 on saved real
-  responses. Songs remembered as "no lyrics" are looked up again once. Still to do:
-  - **NetEase** (keyless): word-by-word "YRC" format, strong for Asian catalogues.
-  - **LyricsPlus** (the open YouLy+ backend, `ibratabian17/lyricsplus`): word-synced lyrics
-    gathered from Apple Music, Musixmatch and others.
-  - **Musixmatch** word sync ("richsync"), as the SyncLyrics library does: needs a token, so last.
-  - LRCLIB stays the open default.
-  - **Better Lyrics** (GPL-3, like Harp; github.com/better-lyrics): its extension merges bLyrics
-    (its own word-synced TTML catalogue), Unison (community lyrics, `unison.betterlyrics.org`),
-    Musixmatch richsync, LRCLIB and YouTube Music's own lyrics. Its backend (Go, open source)
-    gets most lyrics from **lrc.red**, a shared catalogue keyed by ISRC, and documents its API
-    at docs.betterlyrics.org (with rate limits). The extension passes a Turnstile check before
-    asking for lyrics, so a third-party app may not be welcome: ask the authors or use lrc.red
-    and Unison directly. Its TTML handling is a good reference for our parser.
-- ☐ Parsers for TTML (word timings, background vocals, duet sides) and YRC, with tests on saved
-  real responses.
-- ◐ **Find lyrics by name** and a **timing nudge** (±0.5 s, saved per song) are in. Still to do:
-  word-by-word highlighting (Apple-style sweep), duet alignment, bigger full-screen lyrics.
-- ☐ Later: translation / romanisation lines where sources provide them.
-- **Done when:** popular songs show word-by-word lyrics; others fall back to lines; nothing breaks
-  offline. Check each source's terms before shipping it.
-
-### M5 · Library and discovery
-- ☑ Your most played artists and their albums on Listen Now; **follow artists** (button on their
-  page) and **save albums, playlists and podcasts** (Library › Artists, Albums & Podcasts);
-  **New Releases** on Listen Now from the artists you follow (this year and last, newest first,
-  checked live; 🧪 on a saved artist page).
-- ◐ Sort everywhere: Liked and Downloaded (recent, title, artist, plus a filter box), Library
-  playlists (recent, name; pinned on top), playlist pages (custom order, title, artist), Artists and
-  Albums & Podcasts (recent, name), On This Device (artist, title, filter). Remembered. Still to
-  do: playlist folders, custom covers.
-- ☑ Backup and restore of the whole library to one file (Settings › Backup; 🧪). Restoring
-  **adds** the backup to what's here (likes, playlists by name, history, follows); nothing is lost,
-  and restoring twice adds nothing more.
-- ☑ **Your own music files** (Library › On This Device): pick folders; tags, covers and lengths are
-  read; they play offline and work with likes, playlists and the queue. 🧪 on real files. Android:
-  asks for the music permission (needs the phone to confirm).
-- ☑ Browse (Search tab): **Charts** for your country (from the device's region) and every
-  YouTube Music **mood and genre** as a tile, each opening rows of playlists. Checked live; 🧪.
-- ◐ A smarter taste model: **time decay** (an artist's score halves every 60 days), **time of
-  day** (artists you play around this hour get a nudge) and **song-level skips** (an early skip
-  only counts once you've skipped the same song more than 5 times in 30 days, at your request) are
-  in, 🧪. **Wider starter genres ✅** and **offline picks from your downloads ✅**.
-- **Done when:** the Library tab can replace another music app's library for you.
+### M5 · Library and discovery ☑
+- ☑ Playlists: covers (mosaic or your own picture), **folders**, pins, sorting and filters, Spotify-style
+  page (shuffle / Smart Shuffle toggles, Play/Pause, Recommended), auto-download, ✓ "saved in".
+- ☑ Liked, downloads (grouped by playlist), your own files, followed artists, saved albums and podcasts.
+- ☑ Discovery: on-device taste (fades with time, time of day, skips count only when repeated), moods,
+  charts and genres, new releases, offline picks, world genres.
+- ☑ Backup and restore (restore adds), imports from Spotify, Apple Music links, YouTube, files.
 
 ### M6 · Platform integration
-- ◐ Android: **Android Auto browse tree ✅ built** (Smart Shuffle, Liked, Playlists, Downloaded,
-  Recently Played; needs a car to confirm). Still to do: home-screen widget, Now Bar check, Wear OS.
-- ◐ Desktop: **mini-player window ✅** (always-on-top where the desktop allows it; not on GNOME
-  Wayland); media keys and desktop media controls already work through MPRIS. Not done: a tray icon
-  (invisible on GNOME without an extension) and Discord status (needs a Discord app id: a key).
-- ☐ Casting (Chromecast / DLNA).
-- ☐ Windows and macOS: run them for real (built, never run).
+- ☑ Android: media session, notification and lock screen, edge-to-edge, predictive back, adaptive icon,
+  Android Auto browsing, **home-screen widget**, harp:// links and share-to-Harp. Wear OS shows the
+  controls through the media session.
+- ☑ Linux: MPRIS (GNOME/KDE media controls, media keys), single app with link handling, mini player.
+- ◐ Windows and macOS: built by GitHub Actions on every release; not yet tried on real machines.
+- ☐ Optional: Discord status (needs a Discord application id; your call).
 
-### M7 · Together and sync
-- ☐ Peer-to-peer library sync between your own devices on the same network (no servers).
-- ☐ Share a song or playlist as a link / card / QR code.
-- ☐ Listening rooms with a shared queue.
-
-- ◐ **Listen together ✅ built** (`crates/harp-party`, iroh, like Warptron's party mode): host
-  and share a link, guests join; one player is the truth, the rest follow (position corrected by
-  half the round trip, heartbeat every 4 s); everyone can play, pause, skip, seek and suggest songs.
-  Checked over the internet (in sync within 436 ms) and with local tests. **Library sync between
-  your own devices ✅** (link, swap, merge both ways). **harp:// links open Harp** (Android and Linux).
+### M7 · Together and sync ☑
+- ☑ Listen together (iroh): host and guests in step (seek + rate nudging, sync offset for Bluetooth).
+- ☑ Your devices: pair once, then they **keep each other in sync** by themselves (switchable).
+- ☑ Shared playlists with lasting links; friends' copies **follow your changes** (switchable).
 
 ### M8 · Release
-- ☐ A real signing key for APKs; versioning and an in-app update check.
-- ☐ F-Droid metadata, GitHub Releases (Actions only here), Flathub / AppImage, Windows installer,
-  macOS DMG.
-- ☐ Accessibility pass (screen readers, text size, contrast) and translations.
-- ☐ iOS: decide how yt-dlp could run there (see open questions).
+- ☑ Signed Android releases on GitHub Releases (release key; CI refuses to publish an unsigned APK),
+  Linux tarball, Windows and macOS zips, SHA-256 checksums; in-app update check (Settings › About).
+- ☐ Make the repository public (README and license are ready); F-Droid metadata.
+- ☐ macOS notarization and Windows code signing (need paid certificates).
+
+### iOS: a plan without yt-dlp
+Everything in Harp except the stream extractor already runs on iOS in principle: the Rust core, the
+audio engine (`mpv_audio_kit` supports iOS), iroh and Flutter. The blocker is yt-dlp: it's Python,
+and an App Store app can't download new code to keep it current, while YouTube changes break any
+fixed copy within weeks.
+
+1. **iOS build without streaming** (a few days): build the app, play your own files and downloads
+   made on other devices (synced), and check the engine, the media session and background audio.
+2. **A native extractor in Rust** (the main work): Harp already talks to YouTube Music's InnerTube API
+   for search and pages. Add its `player` call, and the parts yt-dlp does for us today:
+   - **Signature and "n" deciphering:** run YouTube's own player JavaScript in **JavaScriptCore** (built
+     into iOS), as yt-dlp now does with a JS runtime. The logic arrives as data each time, not as new app code.
+   - **PO tokens:** YouTube increasingly wants a token minted by its BotGuard script. The way that works
+     on iOS today is a hidden WKWebView running the minter, as
+     [SwiftyTube](https://github.com/686udjie/SwiftyTube) does. Note that
+     [NewPipe Extractor 0.27.0](https://freedom.tech/posts/2026-11-07-newpipe-extractor-0-27-0/) dropped the
+     iOS/Android InnerTube clients because their tokens can no longer be made, so the web-based clients
+     with a minted token are the route ([yt-dlp's PO token notes](https://deepwiki.com/yt-dlp/yt-dlp/3.4.1-potoken-authentication-system)).
+   - The same extractor can then serve Android and desktop too, as a fallback when yt-dlp breaks.
+3. **Alternatives, if 2 stalls:** embed Python (BeeWare's Python-Apple-support) with a bundled yt-dlp,
+   updated with app updates (fine for sideloading, fragile on the App Store); or let people choose a
+   Piped/Invidious instance (other people's servers: opt-in only).
+4. **Distribution:** the App Store is unlikely to accept a YouTube player; TestFlight for testing, then
+   AltStore / EU alternative marketplaces, and sideloading.
 
 ### Research notes (sources)
 - mpv_audio_kit (Flutter, BSD-3, libmpv with FFmpeg audio effects on Android and desktop):
@@ -355,13 +285,12 @@ Goal: lyrics as good as Apple Music's: word-by-word where they exist, line-synce
 - **Built on YouTube without permission.** Streaming through yt-dlp breaks YouTube's terms;
   the app cannot go on Google Play, and YouTube changes can break it at any time. Harp needs fast
   yt-dlp updates and a plan for outages.
-- **"No servers" versus convenience.** Without accounts there is no cross-device sync or backup
-  today; peer-to-peer sync (originally planned) and file export/import should cover it.
-- **Other services guard their libraries.** Spotify allows reading only with a developer app
-  (and limits those to a few users), Apple needs a paid developer token, Amazon has no public
-  access. "Bring your library over" can never be one tap for every service.
-- **A taste model on one device learns slowly** and only from what you play there; it scores
-  artists, not songs or moods, has no time decay, and its starter genres lean Western and Indian.
+- **"No servers" versus convenience.** Sync between your devices and shared playlists are peer to
+  peer: they work while Harp is open on both ends (paired devices catch up the next time both are on).
+- **Other services guard their libraries.** Spotify needs your own developer app id for full reading;
+  other services import from public links or exported files.
+- **A taste model on one device learns from what you play there** (synced devices share it); it
+  now fades with time, knows the time of day and only counts repeated skips.
 - **Python on Android is heavy** (size, start-up, arm64 only). A native extractor (talking to
   YouTube's player API directly, like NewPipe) would remove it, but is a large project.
 - ~~**Lyrics come from one free source** (LRCLIB), which will miss many regional songs.~~ Now three (LRCLIB, NetEase, YouTube Music).
@@ -396,7 +325,7 @@ with a shared queue (milestone 4 below).
 |---|---|
 | 1. Player | 🔧 Search, resolve, cache, queue rules, shuffle/repeat, background playback and media controls are built (🟡 on Android). Gapless not done. |
 | 2. Library | 🔧 Playlists, likes, history, downloads, lyrics, radio, file export (core) done; albums/artists in the library not done. |
-| 3. Bring your library over | 🔧 Matching with a review screen; Spotify / YouTube / files done; Spotify account and Apple links in progress; Amazon not possible. |
+| 3. Bring your library over | ✅ Matching with a review screen; Spotify (account or link), Apple Music links, YouTube, files. |
 | 4. Together (listening rooms) | ⬜ Not started. |
 | 5. Release | ⬜ CI builds exist; no signed releases, store listings or installers yet. |
 

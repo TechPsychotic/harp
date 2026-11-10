@@ -24,6 +24,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: The tag matches the app's version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          grep -q "^version: $v+" app/pubspec.yaml && grep -q "appVersion = '$v'" app/lib/version.dart \
+            || { echo "::error::tag $GITHUB_REF_NAME doesn't match pubspec.yaml / lib/version.dart"; exit 1; }
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --workspace
@@ -32,6 +38,10 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
+      - name: Build tools for the plugins' native parts (window manager)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libx11-dev libxi-dev
       - working-directory: app
         run: |
           flutter pub get
@@ -54,7 +64,7 @@ jobs:
       - name: System packages
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libmpv-dev mpv libasound2-dev
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libasound2-dev libx11-dev libxi-dev
       - working-directory: app
         run: flutter build linux --release
       - name: Package
@@ -91,7 +101,6 @@ jobs:
           path: |
             ~/.gradle/wrapper/dists
             ~/.gradle/caches/modules-2
-            ~/.pub-cache/hosted/pub.dev/media_kit_libs_android_audio-*/android/build
           key: android-gradle-${{ hashFiles('app/pubspec.lock', 'app/android/gradle/wrapper/gradle-wrapper.properties', 'app/android/**/*.gradle*') }}
           restore-keys: android-gradle-
       - name: Remember the downloaded Python and QuickJS between runs
@@ -108,8 +117,24 @@ jobs:
             sleep 45
           done
           exit 1
+      - name: The release signing key (from the repo's secrets; see scripts/release-secrets.sh)
+        env:
+          KEYSTORE_B64: ${{ secrets.HARP_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            if [ "${{ startsWith(github.ref, 'refs/tags/v') }}" = "true" ]; then
+              echo "::error::No signing key in secrets: run scripts/release-secrets.sh. A release must be signed with Harp's key."; exit 1
+            fi
+            echo "no signing key: this test build uses the debug key"; exit 0
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/harp-release.jks"
+          echo "HARP_KEYSTORE_FILE=$RUNNER_TEMP/harp-release.jks" >> "$GITHUB_ENV"
       - name: Build the APK (retried on temporary download errors)
         working-directory: app
+        env:
+          HARP_KEYSTORE_PASSWORD: ${{ secrets.HARP_KEYSTORE_PASSWORD }}
+          HARP_KEY_ALIAS: ${{ secrets.HARP_KEY_ALIAS }}
+          HARP_KEY_PASSWORD: ${{ secrets.HARP_KEY_PASSWORD }}
         run: |
           # GitHub's release downloads can return 504 for several minutes, so wait it out.
           for attempt in 1 2 3 4 5 6; do
@@ -126,10 +151,18 @@ jobs:
           AAPT2=$(ls -d "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -1)
           "$AAPT2" dump resources app/build/app/outputs/flutter-apk/app-release.apk | grep -q "drawable/ic_stat_harp" || { echo "ic_stat_harp was stripped: the media notification would crash"; exit 1; }
           echo "notification icon present"
+      - name: Check the APK is signed with Harp's release key (not the debug key)
+        run: |
+          APKSIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --print-certs app/build/app/outputs/flutter-apk/app-release.apk | tee certs.txt
+          if [ "${{ startsWith(github.ref, 'refs/tags/v') }}" = "true" ]; then
+            grep -q "CN=Harp" certs.txt || { echo "::error::not signed with Harp's release key"; exit 1; }
+          fi
+          cp app/build/app/outputs/flutter-apk/app-release.apk harp-android-arm64.apk
       - uses: actions/upload-artifact@v4
         with:
           name: harp-android-arm64
-          path: app/build/app/outputs/flutter-apk/app-release.apk
+          path: harp-android-arm64.apk
 
   # Windows and macOS minutes cost 2x and 10x on private repos, so these run
   # for release tags and when started by hand.
@@ -198,7 +231,14 @@ jobs:
         with:
           path: dist
           merge-multiple: true
-      - name: Create release
+      - name: Checksums
+        run: cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ github.ref_name }}" dist/* --repo "${{ github.repository }}" --title "Harp ${{ github.ref_name }}" --generate-notes --draft
+        run: >-
+          gh release create "${{ github.ref_name }}" dist/*
+          --repo "${{ github.repository }}"
+          --title "Harp ${{ github.ref_name }}"
+          --latest --generate-notes
+          --notes "Android: harp-android-arm64.apk, signed with Harp's release key. Linux: harp-linux-x64.tar.gz. Windows: harp-windows-x64.zip. macOS: harp-macos.zip (not notarized; right-click and Open the first time). SHA256SUMS.txt lists the checksums."

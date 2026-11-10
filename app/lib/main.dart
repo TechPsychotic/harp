@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:audio_service/audio_service.dart';
@@ -13,6 +14,7 @@ import 'player/controller.dart';
 import 'screens/shell.dart';
 import 'settings.dart';
 import 'links.dart';
+import 'update.dart';
 import 'src/rust/frb_generated.dart';
 import 'theme/glass.dart';
 import 'theme/logo.dart';
@@ -86,6 +88,7 @@ class _HarpAppState extends State<HarpApp> {
       await p.init();
       if (mounted) setState(() => _player = p);
       await Links.ready(p);
+      unawaited(Updates.check());
     } catch (e) {
       if (mounted) setState(() => _error = e);
     }

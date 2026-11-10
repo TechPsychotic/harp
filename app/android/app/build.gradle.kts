@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -31,11 +33,34 @@ android {
         versionName = flutter.versionName
     }
 
+    // Release signing: the key lives outside the repo. Locally its details are in
+    // ~/.local/share/harp-signing/key.properties; on GitHub Actions in secrets
+    // (HARP_KEYSTORE_FILE, HARP_KEYSTORE_PASSWORD, HARP_KEY_ALIAS, HARP_KEY_PASSWORD).
+    // Without either, release builds fall back to the debug key (development only).
+    val keyProps = Properties().apply {
+        val f = file(System.getProperty("user.home") + "/.local/share/harp-signing/key.properties")
+        if (f.exists()) f.inputStream().use { load(it) }
+        System.getenv("HARP_KEYSTORE_FILE")?.let { put("storeFile", it) }
+        System.getenv("HARP_KEYSTORE_PASSWORD")?.let { put("storePassword", it) }
+        System.getenv("HARP_KEY_ALIAS")?.let { put("keyAlias", it) }
+        System.getenv("HARP_KEY_PASSWORD")?.let { put("keyPassword", it) }
+    }
+    val haveReleaseKey = keyProps.getProperty("storeFile")?.let { file(it).exists() } == true
+
+    signingConfigs {
+        if (haveReleaseKey) {
+            create("release") {
+                storeFile = file(keyProps.getProperty("storeFile"))
+                storePassword = keyProps.getProperty("storePassword")
+                keyAlias = keyProps.getProperty("keyAlias")
+                keyPassword = keyProps.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (haveReleaseKey) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
         }
     }
 }

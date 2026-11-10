@@ -7,6 +7,9 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
 
 import '../native.dart';
+import '../update.dart';
+import '../version.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../player/engine_probe.dart';
 import 'spotify_screen.dart';
 import 'sync_screen.dart';
@@ -381,7 +384,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ]),
               _Section('About', [
-                ListTile(title: const Text('Harp'), subtitle: Text('No accounts, no servers. Your taste stays on this device.', style: TextStyle(color: tok.textDim))),
+                ListTile(title: const Text('Harp $appVersion'), subtitle: Text('No accounts, no servers. Your taste stays on this device.', style: TextStyle(color: tok.textDim))),
+                ValueListenableBuilder(
+                  valueListenable: Updates.available,
+                  builder: (context, up, _) => up == null
+                      ? ListTile(
+                          leading: const Icon(Icons.system_update_rounded),
+                          title: const Text('Check for updates'),
+                          onTap: () async {
+                            await Updates.check(force: true);
+                            if (context.mounted && Updates.available.value == null) toast(context, 'You have the latest Harp');
+                          },
+                        )
+                      : ListTile(
+                          leading: Icon(Icons.new_releases_rounded, color: Theme.of(context).colorScheme.primary),
+                          title: Text('Update available: ${up.tag}'),
+                          subtitle: Text('Opens the release page to download it.', style: TextStyle(color: tok.textDim)),
+                          onTap: () => launchUrl(Uri.parse(up.url), mode: LaunchMode.externalApplication),
+                        ),
+                ),
                 ListTile(title: const Text('yt-dlp'), subtitle: Text(_ytdlp, style: TextStyle(color: tok.textDim))),
                 ListTile(
                   leading: const Icon(Icons.science_rounded),
