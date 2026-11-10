@@ -159,9 +159,20 @@ h1 em, h2 em { text-shadow: 0 0 2px rgba(8, 8, 12, .7), 0 0 26px rgba(8, 8, 12, 
 .more .copy, .more .grid { position: relative; z-index: 1; }
 .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 
-.lyrics { display: grid; gap: 12px; font: 300 clamp(24px, 2.6vw, 36px)/1.2 var(--display); letter-spacing: -0.02em; }
-.lyrics p { color: rgba(244, 242, 248, .18); transition: color .5s, transform .5s, text-shadow .5s; transform-origin: left center; }
-.lyrics p.on { color: var(--text); transform: scale(1.03); text-shadow: 0 0 30px color-mix(in srgb, var(--accent) 60%, transparent); }
+.lyrics { display: grid; gap: 14px; font: 300 clamp(22px, 2.3vw, 34px)/1.2 var(--display); letter-spacing: -0.02em; }
+.lyrics p { white-space: nowrap; width: max-content; }
+.lyrics p {
+  color: rgba(244, 242, 248, .18); transition: color .5s, transform .5s, opacity .5s; transform-origin: left center;
+}
+.lyrics p.sung { color: rgba(244, 242, 248, .42); }
+/* The line being sung fills in from left to right, in white, ahead of the dim rest. */
+.lyrics p.on {
+  transform: scale(1.03);
+  color: transparent;
+  background: linear-gradient(90deg, var(--text) 0 var(--fill, 0%), rgba(244, 242, 248, .3) var(--fill, 0%) 100%);
+  -webkit-background-clip: text; background-clip: text;
+  filter: drop-shadow(0 0 22px color-mix(in srgb, var(--accent) 45%, transparent));
+}
 
 .privacy { min-height: 110vh; grid-template-columns: 1fr; }
 

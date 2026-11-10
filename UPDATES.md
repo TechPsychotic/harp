@@ -35,6 +35,10 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
   one gesture. The download area at the end scrolls freely. Touch screens keep their own scrolling and
   settle gently on sections. (Plain CSS snapping was tried first: small wheel turns snapped straight
   back.) ✅ checked in Chrome with real wheel turns, down, up and through the download area.
+- **Website, fixes:** the Lyrics section now sings by itself while it's on screen (each line fills in
+  from left to right, then the next) instead of following the scroll, which snapping had made
+  invisible; sections taller than the screen (08) line up by their top, so the heading isn't under the
+  menu; from Privacy (09) on, scrolling is free. ✅ checked in Chrome.
 - **HRTF (true 3D):** checked the engine's FFmpeg: it has no `sofalizer`, `headphone` or `afir`, so
   it needs our own engine build with libmysofa. Planned as the milestone after v0.9.0.
 

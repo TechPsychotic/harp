@@ -457,6 +457,7 @@
     root.style.setProperty("--glow", glow);
   }
 
+  let lyricsSince = 0;
   function chrome() {
     nav.classList.toggle("scrolled", scrollY > 20);
     let current = null;
@@ -466,11 +467,23 @@
     }
     navLinks.forEach((l) => l.classList.toggle("on", l === current));
     if (lyrics) {
+      // Sung, not scrolled: while the section is on screen, one line at a time
+      // fills in from left to right, then the next.
       const r = lyrics.getBoundingClientRect();
+      const visible = r.bottom > 0 && r.top < H;
       const lines = lyrics.querySelectorAll("p");
-      const u = (H * 0.8 - (r.top + r.height / 2)) / (H * 0.6);
-      const i = Math.max(0, Math.min(lines.length - 1, Math.floor(u * lines.length)));
-      lines.forEach((p, k) => p.classList.toggle("on", k === i));
+      const LINE = 2.6;
+      const now = performance.now() / 1000;
+      if (visible && !lyricsSince) lyricsSince = now;
+      if (!visible) lyricsSince = 0;
+      const t = lyricsSince ? now - lyricsSince : 0;
+      const i = Math.floor(t / LINE) % lines.length;
+      const fill = reduce ? 1 : Math.min(1, (t % LINE) / (LINE * 0.8));
+      lines.forEach((p, k) => {
+        p.classList.toggle("on", k === i);
+        p.classList.toggle("sung", lyricsSince > 0 && (k < i));
+        if (k === i) p.style.setProperty("--fill", (fill * 100).toFixed(1) + "%");
+      });
     }
   }
 
@@ -501,27 +514,27 @@
   // next (or previous) section, centred. The download area at the end is
   // taller than the screen, so it scrolls freely. Touch screens keep their
   // own scrolling.
-  const band = document.querySelector(".band");
+  // Stops: the centre of each section up to Privacy (09), or its top when it's
+  // taller than the screen. Past Privacy, scrolling is free.
+  const privacy = document.getElementById("privacy");
   const stops = () => {
     const y = scrollY, out = [];
     for (const s of sections) {
-      if (s.el === band) break;
       const r = s.el.getBoundingClientRect();
       const top = r.top + y;
-      out.push(s.el.classList.contains("hero") ? 0 : Math.max(0, top + r.height / 2 - H / 2));
+      if (s.el.classList.contains("hero")) out.push(0);
+      else if (r.height > H - 20) out.push(Math.max(0, top));
+      else out.push(Math.max(0, top + r.height / 2 - H / 2));
+      if (s.el === privacy) break;
     }
-    out.push(band.getBoundingClientRect().top + y);
     return out;
   };
   let busyUntil = 0, wheelSum = 0;
   function glide(dir) {
-    const list = stops(), y = scrollY, bandTop = list[list.length - 1];
-    // Inside the download area: scroll freely, until going up past its top.
-    if (y > bandTop + 4) {
-      if (dir > 0) return false;
-      if (y - 140 > bandTop) return false;
-    }
-    if (y >= bandTop - 4 && dir > 0) return false;
+    const list = stops(), y = scrollY, freeTop = list[list.length - 1];
+    // From Privacy on, scrolling is free (until you're back up at Privacy).
+    if (y > freeTop + 4) return false;
+    if (y >= freeTop - 4 && dir > 0) return false;
     let i = 0;
     for (let k = 0; k < list.length; k++) if (Math.abs(list[k] - y) < Math.abs(list[i] - y)) i = k;
     // Between two stops: the next one in the direction you're going.
@@ -538,8 +551,8 @@
       if (e.ctrlKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return; // zoom, sideways
       const now = performance.now();
       const dir = Math.sign(e.deltaY);
-      const list = stops(), bandTop = list[list.length - 1];
-      const free = scrollY > bandTop + 4 && !(dir < 0 && scrollY - Math.abs(e.deltaY) <= bandTop) || (scrollY >= bandTop - 4 && dir > 0);
+      const list = stops(), freeTop = list[list.length - 1];
+      const free = scrollY > freeTop + 4 || (scrollY >= freeTop - 4 && dir > 0);
       if (free) return;
       e.preventDefault();
       // A trackpad's glide keeps sending events: one move per gesture.
