@@ -1,4 +1,14 @@
-# Harp
+<p align="center">
+  <img src="docs/assets/icon.png" alt="Harp logo" width="128" height="128">
+</p>
+
+<h1 align="center">Harp</h1>
+
+<p align="center">
+  <a href="https://techpsychotic.github.io/harp/">Website</a> ·
+  <a href="https://github.com/TechPsychotic/harp/releases/latest">Download</a> ·
+  <a href="LICENSE">GPL-3.0</a>
+</p>
 
 **A music app that learns your taste on your own device.** No account, no sign-in, no API keys and
 no servers of ours. For Android, Linux, Windows and macOS.
