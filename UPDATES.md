@@ -8,6 +8,59 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-10 (night): M3, M5, M6, M7, M8: crossfade, headphone correction, folders, widget, device sync, releases
+
+**Fixes first**
+- **The playlist ✓ is on the player** (like Spotify's: + when the song isn't in a playlist, a filled ✓
+  when it is; tap to see which), not on song rows.
+- **Download icons:** downloaded songs show a filled badge; download buttons are an outline when not
+  downloaded, filled when they are, and the "downloading" icon while it works.
+- **The player's blurred background is back** (the stand-in spoiled the look). What made opening the
+  player stutter on the laptop was the blur being recalculated on every frame of the slide-in; it's now
+  worked out once per song into a picture. 🧪 the result matches the full blur (average difference
+  under 2/255).
+- **Listen together stays in step.** Guests used to correct only when 1.5 s off, by jumping. Now a gap
+  over 0.4 s is closed with one exact seek, and smaller drift by playing up to 8 % faster or slower
+  (pitch kept) until back on the host's beat; the host sends its real position every 2 s. ✅ on the
+  laptop's engine: 800 ms apart → one seek → 16 ms apart after 12 s. A **sync offset** (Listen
+  Together, guests) makes up for Bluetooth delay, which no app can measure.
+
+**M3 · Sound**
+- **Crossfade** (Settings › Playback: off/3/6/9/12 s): the next song starts on a second player and the
+  volumes cross over; off means gapless. ✅ two players overlapping and handing over, on the engine.
+- **Headphone correction:** pick your headphones or earbuds from ~9,000 measured models (AutoEq); their
+  correction applies before your equalizer. ✅ live (Sony WH-1000XM4: 10 filters) and played through the
+  engine with every other effect on.
+
+**M5 · Library**
+- **Playlist folders** (… › Move to folder; folders sit at the top of the Library, renameable) and
+  **custom covers** (… › Change cover). Folders carry over in backups and device sync. 🧪
+
+**M6 · Platform**
+- **Android home-screen widget:** cover, title, artist, previous / play-pause / next; tap to open. 📱
+- Windows and macOS builds run on GitHub Actions with each release.
+
+**M7 · Together and sync**
+- **Pair your devices once; they keep in sync by themselves** (when Harp opens and every 10 minutes
+  while both are on). Only paired devices are let in. 🧪 pairing, automatic sync, a stranger refused.
+- **Shared playlists keep their link and stay up to date:** friends who saved one get your changes. 🧪
+- **Switches** (Settings › Backup, and the Sync page): "Keep my devices in sync" and "Keep saved
+  playlists up to date". Off means only when you ask (a device with it off also refuses automatic syncs).
+
+**M8 · Releases**
+- Android releases are **signed with Harp's release key**; the release workflow refuses to publish an
+  APK signed any other way, adds SHA-256 checksums and publishes (not a draft). Version **0.9.0**.
+- **Update check** in Settings › About (looks at the latest GitHub release once a day).
+- **One-time step for you:** run `scripts/release-secrets.sh` to put the signing key into the repo's
+  GitHub secrets (I wasn't allowed to write secrets myself). And keep a copy of
+  `~/.local/share/harp-signing/`: without it, future updates can't install over this version.
+- **Your phone:** this build is signed with the new key, so it can't update the old one in place:
+  back up (Settings › Backup), uninstall, install, restore (restore adds, so nothing is lost). Once.
+
+**Docs:** README and the GPL-3.0 LICENSE ready for a public repository; the roadmap shows today's
+status without the impossible items, plus an **iOS plan** (a Rust extractor running YouTube's player
+code in JavaScriptCore with tokens from a hidden web view, since yt-dlp can't stay current there).
+
 ## 2026-11-10 (evening): playlists like Spotify, sharing, the ✓, smarter menus
 
 **Playlists**
