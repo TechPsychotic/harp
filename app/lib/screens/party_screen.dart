@@ -32,6 +32,7 @@ class _PartyScreenState extends State<PartyScreen> {
   @override
   void initState() {
     super.initState();
+    api.settingGet(key: 'party_offset').then((v) => p.syncOffsetMs = int.tryParse(v ?? '') ?? 0);
     api.settingGet(key: 'party_name').then((v) {
       if (mounted) _name.text = v ?? (Platform.isAndroid ? 'My phone' : 'My computer');
     });
@@ -180,6 +181,22 @@ class _PartyScreenState extends State<PartyScreen> {
                     ),
                   ),
                 ]),
+              ],
+              if (party.role == 'guest') ...[
+                const SizedBox(height: 12),
+                Text('Sync offset: ${p.syncOffsetMs > 0 ? '+' : ''}${p.syncOffsetMs} ms', style: const TextStyle(fontWeight: FontWeight.w600)),
+                Text('If your sound runs behind the host’s (Bluetooth adds delay), move this right; if ahead, left.', style: TextStyle(color: tok.textDim, fontSize: 12.5)),
+                StatefulBuilder(
+                  builder: (context, set) => Slider(
+                    value: p.syncOffsetMs.toDouble(),
+                    min: -500,
+                    max: 500,
+                    divisions: 40,
+                    label: '${p.syncOffsetMs} ms',
+                    onChanged: (v) => set(() => p.syncOffsetMs = v.round()),
+                    onChangeEnd: (v) => api.settingSet(key: 'party_offset', value: '${v.round()}'),
+                  ),
+                ),
               ],
               SectionHeader('In the party (${party.members.length})'),
               for (final (i, m) in party.members.indexed)

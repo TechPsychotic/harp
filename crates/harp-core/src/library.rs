@@ -13,6 +13,10 @@ pub struct PlaylistInfo {
     pub pinned: bool,
     /// New songs get downloaded (set by "Download All").
     pub auto_download: bool,
+    /// A picture you chose (a file path); empty: the mosaic of its songs.
+    pub cover: String,
+    /// The folder it's in ("" for none).
+    pub folder: String,
     /// Artwork of the first (up to) four songs, for a cover mosaic.
     pub covers: Vec<String>,
 }
@@ -62,11 +66,11 @@ impl Store {
 
     pub fn playlists(&self) -> Result<Vec<PlaylistInfo>> {
         let mut st = self.conn.prepare(
-            "SELECT p.id, p.name, (SELECT COUNT(*) FROM playlist_items i WHERE i.playlist_id=p.id), p.pinned, p.autodl
+            "SELECT p.id, p.name, (SELECT COUNT(*) FROM playlist_items i WHERE i.playlist_id=p.id), p.pinned, p.autodl, p.cover, p.folder
              FROM playlists p ORDER BY p.pinned DESC, p.created DESC, p.id DESC",
         )?;
         let rows = st.query_map([], |r| {
-            Ok(PlaylistInfo { id: r.get(0)?, name: r.get(1)?, count: r.get(2)?, pinned: r.get::<_, i64>(3)? != 0, auto_download: r.get::<_, i64>(4)? != 0, covers: vec![] })
+            Ok(PlaylistInfo { id: r.get(0)?, name: r.get(1)?, count: r.get(2)?, pinned: r.get::<_, i64>(3)? != 0, auto_download: r.get::<_, i64>(4)? != 0, cover: r.get(5)?, folder: r.get(6)?, covers: vec![] })
         })?;
         let mut out: Vec<PlaylistInfo> = rows.collect::<std::result::Result<_, _>>()?;
         let mut cov = self.conn.prepare("SELECT song_json FROM playlist_items WHERE playlist_id=? ORDER BY pos LIMIT 4")?;
@@ -130,6 +134,24 @@ impl Store {
         }
         tx.commit()?;
         Ok(fresh.len() as u32)
+    }
+
+    /// Sets (or clears, with "") a playlist's own cover picture.
+    pub fn set_playlist_cover(&self, id: i64, path: &str) -> Result<()> {
+        self.conn.execute("UPDATE playlists SET cover=? WHERE id=?", params![path, id])?;
+        Ok(())
+    }
+
+    /// Puts a playlist in a folder ("" takes it out).
+    pub fn set_playlist_folder(&self, id: i64, folder: &str) -> Result<()> {
+        self.conn.execute("UPDATE playlists SET folder=? WHERE id=?", params![folder.trim(), id])?;
+        Ok(())
+    }
+
+    /// Renames a folder (every playlist in it moves along).
+    pub fn rename_folder(&self, old: &str, new: &str) -> Result<()> {
+        self.conn.execute("UPDATE playlists SET folder=? WHERE folder=?", params![new.trim(), old])?;
+        Ok(())
     }
 
     /// The playlists a song is in (for the ✓ "saved in" sheet).
@@ -323,6 +345,23 @@ mod tests {
 
     fn ids(v: &[Song]) -> Vec<&str> {
         v.iter().map(|s| s.id.as_str()).collect()
+    }
+
+    #[test]
+    fn covers_and_folders() {
+        let st = Store::open_memory().unwrap();
+        let a = st.create_playlist("A").unwrap();
+        let b = st.create_playlist("B").unwrap();
+        st.set_playlist_cover(a, "/covers/a.jpg").unwrap();
+        st.set_playlist_folder(a, " Workout ").unwrap();
+        st.set_playlist_folder(b, "Workout").unwrap();
+        let p = st.playlists().unwrap();
+        let pa = p.iter().find(|x| x.id == a).unwrap();
+        assert_eq!((pa.cover.as_str(), pa.folder.as_str()), ("/covers/a.jpg", "Workout"));
+        st.rename_folder("Workout", "Gym").unwrap();
+        assert!(st.playlists().unwrap().iter().all(|x| x.folder == "Gym"));
+        st.set_playlist_folder(b, "").unwrap();
+        assert_eq!(st.playlists().unwrap().iter().find(|x| x.id == b).unwrap().folder, "");
     }
 
     #[test]

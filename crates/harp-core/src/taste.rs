@@ -140,6 +140,8 @@ const MIGRATIONS: &[&str] = &[
     "ALTER TABLE playlists ADD COLUMN autodl INTEGER NOT NULL DEFAULT 0;",
     // 4: artist scores fade with time; this is when each was last brought up to date.
     "ALTER TABLE artist_scores ADD COLUMN updated INTEGER NOT NULL DEFAULT 0;",
+    // 5: a playlist's own cover picture, and the folder it sits in.
+    "ALTER TABLE playlists ADD COLUMN cover TEXT NOT NULL DEFAULT ''; ALTER TABLE playlists ADD COLUMN folder TEXT NOT NULL DEFAULT '';",
 ];
 
 /// Taste fades: an artist's score halves every 60 days without new plays,

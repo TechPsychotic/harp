@@ -9,7 +9,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `cached_view`, `collection_view`, `e`, `eng`, `export_songs`, `home_artists`, `import_view`, `lyrics_view`, `playlist_contents`, `queue_view`, `request`, `section_of`, `sections`, `serde_json_string`, `song_from_json`, `song`, `spotify_embed_url`, `spotify_token`, `this_year`, `view`, `views`, `youtube_list_id`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Engine`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// Starts the engine: opens the database, makes sure yt-dlp is installed.
 /// Safe to call again (does nothing the second time).
@@ -507,6 +507,69 @@ Future<QueueView> queueMixIn({
   required int every,
 }) => RustLib.instance.api.crateApiEngineQueueMixIn(songs: songs, every: every);
 
+/// Headphones and earbuds matching `query` (AutoEq has ~9,000 measured models).
+Future<List<AutoEqProfileView>> autoeqSearch({required String query}) =>
+    RustLib.instance.api.crateApiEngineAutoeqSearch(query: query);
+
+/// One model's correction filters.
+Future<AutoEqView> autoeqLoad({
+  required String name,
+  required String source,
+  required String path,
+}) => RustLib.instance.api.crateApiEngineAutoeqLoad(
+  name: name,
+  source: source,
+  path: path,
+);
+
+class AutoEqProfileView {
+  final String name;
+  final String source;
+  final String path;
+
+  const AutoEqProfileView({
+    required this.name,
+    required this.source,
+    required this.path,
+  });
+
+  @override
+  int get hashCode => name.hashCode ^ source.hashCode ^ path.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AutoEqProfileView &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          source == other.source &&
+          path == other.path;
+}
+
+class AutoEqView {
+  final String name;
+  final double preampDb;
+  final List<EqFilterView> filters;
+
+  const AutoEqView({
+    required this.name,
+    required this.preampDb,
+    required this.filters,
+  });
+
+  @override
+  int get hashCode => name.hashCode ^ preampDb.hashCode ^ filters.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AutoEqView &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          preampDb == other.preampDb &&
+          filters == other.filters;
+}
+
 class BrowseGroupView {
   final String title;
   final List<BrowseTileView> tiles;
@@ -693,6 +756,35 @@ class EngineConfig {
           caDir == other.caDir &&
           ytdlpOverride == other.ytdlpOverride &&
           bundledYtdlp == other.bundledYtdlp;
+}
+
+class EqFilterView {
+  /// "peak", "low_shelf" or "high_shelf"
+  final String kind;
+  final double freq;
+  final double gainDb;
+  final double q;
+
+  const EqFilterView({
+    required this.kind,
+    required this.freq,
+    required this.gainDb,
+    required this.q,
+  });
+
+  @override
+  int get hashCode =>
+      kind.hashCode ^ freq.hashCode ^ gainDb.hashCode ^ q.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is EqFilterView &&
+          runtimeType == other.runtimeType &&
+          kind == other.kind &&
+          freq == other.freq &&
+          gainDb == other.gainDb &&
+          q == other.q;
 }
 
 class ExportFile {

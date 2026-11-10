@@ -40,43 +40,7 @@ class PlayerController extends ChangeNotifier {
       ..position = (() => position.value)
       ..enabled = settings.reactiveBackground && settings.fullEffects;
     unawaited(viz.attach(_player).then((_) => _applyAudioFx()));
-    _subs.addAll([
-      _player.stream.position.listen((p) => position.value = p),
-      _player.stream.duration.listen((d) {
-        duration.value = d;
-        // Songs from search often come without a length. The notification
-        // only draws its progress bar when it knows one, so pass on the real
-        // length as soon as the player has it.
-        final s = current;
-        if (s != null && d > Duration.zero) session.setDuration(s.id, d);
-      }),
-      _player.stream.playing.listen((p) {
-        if (!p) _saveSpot();
-        playing = p;
-        viz.playing = p;
-        settings.animating = p && settings.fullEffects;
-        Native.wakeLock(p);
-        if (p) unawaited(_focus?.setActive(true));
-        _syncSession();
-        onTransport?.call();
-        notifyListeners();
-      }),
-      _player.stream.completed.listen((done) {
-        // Only a real end counts: not the old file being replaced.
-        final d = duration.value.inMilliseconds;
-        if (done && !_loading && d > 0 && position.value.inMilliseconds >= d - 2500) {
-          if (sleepAfterSong) {
-            // The sleep timer said "at the end of this song".
-            cancelSleep();
-            return;
-          }
-          _pendingAuto = true;
-          unawaited(_drain());
-        }
-      }),
-      _player.stream.error.listen(_onPlayerError),
-      _player.stream.playlist.listen(_onEnginePlaylist),
-    ]);
+    _bind(_player);
     String lastFx = _fxKey();
     var lastSpeed = settings.speed;
     if (lastSpeed != 1) unawaited(_player.setRate(lastSpeed));
@@ -106,6 +70,59 @@ class PlayerController extends ChangeNotifier {
     unawaited(_player.setGapless(mak.Gapless.weak).catchError((_) {}));
     unawaited(_player.setPrefetchPlaylist(true).catchError((_) {}));
   }
+
+  /// Listens to a player (the current one; a crossfade swaps in another).
+  /// The previous player's listeners go, so a song fading out can't move
+  /// the queue or the screen.
+  void _bind(mak.Player p) {
+    for (final s in _playerSubs) {
+      s.cancel();
+    }
+    _playerSubs
+      ..clear()
+      ..addAll([
+        p.stream.position.listen((d) {
+          position.value = d;
+          _maybeCrossfade(d);
+        }),
+        p.stream.duration.listen((d) {
+          duration.value = d;
+          // Songs from search often come without a length. The notification
+          // only draws its progress bar when it knows one, so pass on the real
+          // length as soon as the player has it.
+          final s = current;
+          if (s != null && d > Duration.zero) session.setDuration(s.id, d);
+        }),
+        p.stream.playing.listen((p) {
+          if (!p) _saveSpot();
+          playing = p;
+          viz.playing = p;
+          settings.animating = p && settings.fullEffects;
+          Native.wakeLock(p);
+          if (p) unawaited(_focus?.setActive(true));
+          _syncSession();
+          onTransport?.call();
+          notifyListeners();
+        }),
+        p.stream.completed.listen((done) {
+          // Only a real end counts: not the old file being replaced.
+          final d = duration.value.inMilliseconds;
+          if (done && !_loading && d > 0 && position.value.inMilliseconds >= d - 2500) {
+            if (sleepAfterSong) {
+              // The sleep timer said "at the end of this song".
+              cancelSleep();
+              return;
+            }
+            _pendingAuto = true;
+            unawaited(_drain());
+          }
+        }),
+        p.stream.error.listen(_onPlayerError),
+        p.stream.playlist.listen(_onEnginePlaylist),
+      ]);
+  }
+
+  final List<StreamSubscription<dynamic>> _playerSubs = [];
 
   AudioSession? _focus;
   bool _resumeAfterInterruption = false;
@@ -144,7 +161,7 @@ class PlayerController extends ChangeNotifier {
 
   final AppSettings settings;
   final HarpAudioHandler session;
-  final mak.Player _player = mak.Player();
+  mak.Player _player = mak.Player();
 
   /// Listening together (host or join a party).
   late final PartyController party = PartyController(this);
@@ -231,11 +248,19 @@ class PlayerController extends ChangeNotifier {
   bool get currentSuperliked => _currentSuperliked;
   String? get currentReason => current == null ? null : reasons[current!.id];
 
-  String _fxKey() => '${settings.spatial}|${settings.eq}|${settings.normalize}|${settings.eq == 'custom' ? settings.customEq.join(',') : ''}';
+  String _fxKey() => '${settings.spatial}|${settings.eq}|${settings.normalize}|${settings.eq == 'custom' ? settings.customEq.join(',') : ''}|${settings.hpName}';
 
   /// The effects chain. The engine updates it live, mid-song, without a gap.
   Future<void> _applyAudioFx() =>
-      viz.applyEffects(spatial: settings.spatial, eq: settings.eq, normalize: settings.normalize, custom: settings.customEq, freqs: AppSettings.eqBands);
+      viz.applyEffects(
+        spatial: settings.spatial,
+        eq: settings.eq,
+        normalize: settings.normalize,
+        custom: settings.customEq,
+        freqs: AppSettings.eqBands,
+        headphone: settings.hpFilters,
+        headphonePreamp: settings.hpPreamp,
+      );
 
   Future<void> init() async {
     // The queue comes back as it was; the song waits, paused, where it stopped.
@@ -641,7 +666,9 @@ class PlayerController extends ChangeNotifier {
   Future<void> _armOnce() async {
     final cur = current;
     // Not as a party guest (the host decides what's next), not mid-load.
-    final next = (steer != null || cur == null || _loadedId != cur.id || _loading) ? null : _upNext;
+    // Not as a party guest (the host decides), not mid-load, not while crossfading
+    // (then the next song starts on a second player instead).
+    final next = (steer != null || cur == null || _loadedId != cur.id || _loading || settings.crossfade > 0) ? null : _upNext;
     if (next?.id == _armedId) return;
     final pl = _player.state.playlist;
     for (var i = pl.items.length - 1; i > pl.index; i--) {
@@ -698,6 +725,84 @@ class PlayerController extends ChangeNotifier {
     notifyListeners();
     unawaited(_topUpAutoplay());
     _prefetch();
+  }
+
+  // --- crossfade ---
+
+  bool _fading = false;
+
+  void _maybeCrossfade(Duration pos) {
+    final secs = settings.crossfade;
+    final d = duration.value;
+    if (secs <= 0 || _fading || _loading || steer != null || sleepAfterSong || d <= Duration.zero) return;
+    if (queue.repeat == 'one' || d - pos > Duration(seconds: secs) || pos < const Duration(seconds: 5)) return;
+    final next = _upNext;
+    if (next == null || (settings.offline && !next.downloaded)) return;
+    unawaited(_crossfade(next, secs));
+  }
+
+  /// The next song starts on a second player at volume 0 while this one plays
+  /// on; the two volumes cross over [secs] seconds; then the second player is
+  /// the player and the first goes.
+  Future<void> _crossfade(api.SongView next, int secs) async {
+    _fading = true;
+    final old = _player;
+    mak.Player? b;
+    try {
+      final st = await api.resolveStream(id: next.id, quality: settings.streamQuality);
+      final h = engineHeaders(st.headers, local: st.local);
+      b = mak.Player();
+      final ua = h.userAgent ?? _userAgent;
+      if (ua != null) await b.setRawProperty('user-agent', ua);
+      await b.setVolume(0);
+      if (settings.speed != 1) await b.setRate(settings.speed);
+      await b.open(mak.Media(st.url, httpHeaders: h.headers, extras: {'harpId': next.id}), play: true);
+      // The queue moves on now (the song that ends was heard to the end).
+      final before = queue;
+      await _finishCurrent(skipped: false, completion: 1.0);
+      queue = await api.queueNext(autoAdvance: true);
+      if (queue.current?.id != next.id) {
+        await b.dispose();
+        b = null;
+        await _load();
+        return;
+      }
+      _player = b;
+      _bind(b);
+      await viz.attach(b);
+      await _applyAudioFx();
+      _currentSource = _sourceOf(next, before);
+      _currentSuperliked = false;
+      skippedRecently = null;
+      _loadedId = next.id;
+      _armedId = null;
+      viz.songSeed = next.id;
+      _publishNowPlaying(queue.current!);
+      unawaited(_updateAccent(queue.current!));
+      onTransport?.call();
+      unawaited(api.saveLastPlayed(s: queue.current!));
+      notifyListeners();
+      unawaited(_topUpAutoplay());
+      _prefetch();
+      // The crossing.
+      const steps = 40;
+      for (var i = 1; i <= steps; i++) {
+        await Future<void>.delayed(Duration(milliseconds: secs * 1000 ~/ steps));
+        final t = i / steps;
+        await b.setVolume(100 * t);
+        await old.setVolume(100 * (1 - t));
+      }
+    } catch (_) {
+      // Couldn't start the next one: the song ends and moves on the usual way.
+      if (b != null && !identical(b, _player)) await b.dispose();
+    } finally {
+      if (!identical(old, _player)) {
+        try {
+          await old.dispose();
+        } catch (_) {}
+      }
+      _fading = false;
+    }
   }
 
   // --- Android Auto and other media browsers ---
@@ -775,24 +880,58 @@ class PlayerController extends ChangeNotifier {
   VoidCallback? onTransport;
 
   /// Guest: do what the host's player is doing (without steering it back).
+  ///
+  /// Staying in step, the way multi-room speakers do it: a gap over 0.4 s
+  /// (e.g. a new song that took a while to load) is closed with one exact
+  /// seek; smaller drift by playing up to 8 % faster or slower (the pitch is
+  /// kept) until we're back on the host's beat, so there's no jump.
   Future<void> followHost({required api.SongView? song, required bool playing, required Duration position, required String host}) async {
     if (song == null) {
       if (this.playing) await _player.pause();
       return;
     }
     final received = DateTime.now();
+    // Where the host is now (its position moved on while we worked), plus your
+    // own offset (Bluetooth adds its own delay that no app can measure).
+    Duration hostNow() => (playing ? position + DateTime.now().difference(received) : position) + Duration(milliseconds: syncOffsetMs);
     if (current?.id != song.id || _loadedId != song.id) {
       _mood = null;
       await _start(song, 'party');
       queue = await api.queueSetSource(kind: 'party', id: '', title: host);
       notifyListeners();
-      // Loading took a moment: the host has moved on by that much.
-      final at = playing ? position + DateTime.now().difference(received) : position;
-      if (at > const Duration(seconds: 1)) await _player.seek(at);
-    } else if ((position - this.position.value).abs() > const Duration(milliseconds: 1500)) {
-      await _player.seek(position);
+      final at = hostNow();
+      if (at > const Duration(milliseconds: 500)) await _player.seek(at, exact: true);
+    } else {
+      final diff = hostNow() - this.position.value; // > 0: we're behind
+      if (diff.abs() > const Duration(milliseconds: 400)) {
+        await _player.seek(hostNow(), exact: true);
+        await _nudgeRate(0);
+      } else if (playing) {
+        await _nudgeRate(diff.inMilliseconds);
+      }
     }
     if (playing != this.playing) await (playing ? _player.play() : _player.pause());
+  }
+
+  double _nudge = 1;
+
+  /// Guest: shift where we play relative to the host (ms; + plays ahead), to
+  /// make up for Bluetooth or speaker delay that differs between devices.
+  int syncOffsetMs = 0;
+
+  /// Leaving a party: back to your own speed.
+  Future<void> endFollow() => _nudgeRate(0);
+
+  /// [behindMs] > 0: speed up a little; < 0: slow down; ~0: normal speed.
+  /// The correction is sized to close the gap within about two seconds (the
+  /// time to the host's next update), at most 8 %.
+  Future<void> _nudgeRate(int behindMs) async {
+    final want = behindMs.abs() < 40 ? 1.0 : (1 + (behindMs / 2000).clamp(-0.08, 0.08));
+    if ((want - _nudge).abs() < 0.002) return;
+    _nudge = want;
+    try {
+      await _player.setRate(settings.speed * want);
+    } catch (_) {}
   }
 
   Future<void> togglePlay() async {
@@ -1030,7 +1169,7 @@ class PlayerController extends ChangeNotifier {
 
   @override
   void dispose() {
-    for (final s in _subs) {
+    for (final s in [..._subs, ..._playerSubs]) {
       s.cancel();
     }
     _skipChipTimer?.cancel();

@@ -4,6 +4,7 @@
 //! a static Python shipped as a native library (same technique as zevro) behind
 //! a loopback proxy ([`proxy`]) because that Python cannot resolve DNS names.
 
+pub mod autoeq;
 pub mod android;
 pub mod cache;
 pub mod config;

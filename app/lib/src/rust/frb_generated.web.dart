@@ -36,6 +36,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String dco_decode_String(dynamic raw);
 
   @protected
+  AutoEqProfileView dco_decode_auto_eq_profile_view(dynamic raw);
+
+  @protected
+  AutoEqView dco_decode_auto_eq_view(dynamic raw);
+
+  @protected
   bool dco_decode_bool(dynamic raw);
 
   @protected
@@ -87,6 +93,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   EngineConfig dco_decode_engine_config(dynamic raw);
 
   @protected
+  EqFilterView dco_decode_eq_filter_view(dynamic raw);
+
+  @protected
   ExportFile dco_decode_export_file(dynamic raw);
 
   @protected
@@ -108,6 +117,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<String> dco_decode_list_String(dynamic raw);
 
   @protected
+  List<AutoEqProfileView> dco_decode_list_auto_eq_profile_view(dynamic raw);
+
+  @protected
   List<BrowseGroupView> dco_decode_list_browse_group_view(dynamic raw);
 
   @protected
@@ -118,6 +130,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<DownloadView> dco_decode_list_download_view(dynamic raw);
+
+  @protected
+  List<EqFilterView> dco_decode_list_eq_filter_view(dynamic raw);
 
   @protected
   List<ImportPlaylistView> dco_decode_list_import_playlist_view(dynamic raw);
@@ -260,6 +275,14 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String sse_decode_String(SseDeserializer deserializer);
 
   @protected
+  AutoEqProfileView sse_decode_auto_eq_profile_view(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AutoEqView sse_decode_auto_eq_view(SseDeserializer deserializer);
+
+  @protected
   bool sse_decode_bool(SseDeserializer deserializer);
 
   @protected
@@ -319,6 +342,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   EngineConfig sse_decode_engine_config(SseDeserializer deserializer);
 
   @protected
+  EqFilterView sse_decode_eq_filter_view(SseDeserializer deserializer);
+
+  @protected
   ExportFile sse_decode_export_file(SseDeserializer deserializer);
 
   @protected
@@ -342,6 +368,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<String> sse_decode_list_String(SseDeserializer deserializer);
 
   @protected
+  List<AutoEqProfileView> sse_decode_list_auto_eq_profile_view(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   List<BrowseGroupView> sse_decode_list_browse_group_view(
     SseDeserializer deserializer,
   );
@@ -358,6 +389,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<DownloadView> sse_decode_list_download_view(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<EqFilterView> sse_decode_list_eq_filter_view(
     SseDeserializer deserializer,
   );
 
@@ -537,6 +573,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_String(String self, SseSerializer serializer);
 
   @protected
+  void sse_encode_auto_eq_profile_view(
+    AutoEqProfileView self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_auto_eq_view(AutoEqView self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bool(bool self, SseSerializer serializer);
 
   @protected
@@ -621,6 +666,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_engine_config(EngineConfig self, SseSerializer serializer);
 
   @protected
+  void sse_encode_eq_filter_view(EqFilterView self, SseSerializer serializer);
+
+  @protected
   void sse_encode_export_file(ExportFile self, SseSerializer serializer);
 
   @protected
@@ -648,6 +696,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_auto_eq_profile_view(
+    List<AutoEqProfileView> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_browse_group_view(
     List<BrowseGroupView> self,
     SseSerializer serializer,
@@ -668,6 +722,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_download_view(
     List<DownloadView> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_eq_filter_view(
+    List<EqFilterView> self,
     SseSerializer serializer,
   );
 

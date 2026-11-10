@@ -41,9 +41,11 @@ class PartyController extends ChangeNotifier {
       role = 'host';
       player.onTransport = _publish;
       _publish();
-      // Belt and braces: the network side repeats the state while playing;
-      // this also catches buffering and drift on our side.
-      _beat = Timer.periodic(const Duration(seconds: 15), (_) => _publish());
+      // Our real position every 2 s (guests fine-tune their speed to it, so
+      // it has to be the true one, not an estimate).
+      _beat = Timer.periodic(const Duration(seconds: 2), (_) {
+        if (player.playing) _publish();
+      });
     } catch (e) {
       error = 'Couldn’t start the party: $e';
     } finally {
@@ -83,6 +85,7 @@ class PartyController extends ChangeNotifier {
     hostName = '';
     player.steer = null;
     player.onTransport = null;
+    unawaited(player.endFollow());
     _beat?.cancel();
     _beat = null;
     notifyListeners();

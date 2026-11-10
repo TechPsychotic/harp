@@ -46,6 +46,15 @@ class AppSettings extends ChangeNotifier {
   /// Even out the volume between songs (desktop for now).
   bool normalize = false;
 
+  /// Headphone correction (AutoEq): the model's name, its preamp (dB, ≤ 0)
+  /// and filters as (kind, freq, gain dB, Q). Empty name: off.
+  String hpName = '';
+  double hpPreamp = 0;
+  List<(String, double, double, double)> hpFilters = const [];
+
+  /// Crossfade between songs, seconds (0 = off: songs follow gaplessly).
+  int crossfade = 0;
+
   /// Playback speed (1 = normal). Pitch stays the same.
   double speed = 1;
 
@@ -111,6 +120,8 @@ class AppSettings extends ChangeNotifier {
     final ce = (await get('eq_custom') ?? '').split(',').map(double.tryParse).toList();
     if (ce.length == 10 && ce.every((v) => v != null)) customEq = [for (final v in ce) v!.clamp(-12.0, 12.0)];
     normalize = await get('normalize') == '1';
+    crossfade = int.tryParse(await get('crossfade') ?? '') ?? 0;
+    _readHp(await get('headphone_eq'));
     speed = double.tryParse(await get('speed') ?? '') ?? 1;
     notifyListeners();
   }
@@ -180,6 +191,38 @@ class AppSettings extends ChangeNotifier {
     customEq = List.filled(10, 0);
     notifyListeners();
     await _save('eq_custom', customEq.join(','));
+  }
+
+  void _readHp(String? v) {
+    // name|preamp|kind,freq,gain,q;kind,freq,gain,q…
+    final parts = (v ?? '').split('|');
+    if (parts.length != 3 || parts[0].isEmpty) {
+      hpName = '';
+      hpFilters = const [];
+      hpPreamp = 0;
+      return;
+    }
+    hpName = parts[0];
+    hpPreamp = double.tryParse(parts[1]) ?? 0;
+    hpFilters = [
+      for (final f in parts[2].split(';'))
+        if (f.split(',').length == 4)
+          (f.split(',')[0], double.parse(f.split(',')[1]), double.parse(f.split(',')[2]), double.parse(f.split(',')[3])),
+    ];
+  }
+
+  /// Turns headphone correction on with a model's filters (or off with an empty name).
+  Future<void> setHeadphone(String name, double preamp, List<(String, double, double, double)> filters) async {
+    final v = name.isEmpty ? '' : '${name.replaceAll('|', '/')}|$preamp|${filters.map((f) => '${f.$1},${f.$2},${f.$3},${f.$4}').join(';')}';
+    _readHp(v);
+    notifyListeners();
+    await _save('headphone_eq', v);
+  }
+
+  Future<void> setCrossfade(int v) async {
+    crossfade = v;
+    notifyListeners();
+    await _save('crossfade', '$v');
   }
 
   Future<void> setSpeed(double v) async {

@@ -1653,3 +1653,60 @@ pub fn queue_mix_in(songs: Vec<SongView>, every: u32) -> Result<QueueView, Strin
     en.queue.lock().unwrap().mix_into_context(songs.iter().map(song).collect(), every as usize);
     Ok(queue_view(en))
 }
+
+// --- headphone correction (AutoEq) ---
+
+#[derive(Clone, Debug)]
+pub struct AutoEqProfileView {
+    pub name: String,
+    pub source: String,
+    pub path: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct EqFilterView {
+    /// "peak", "low_shelf" or "high_shelf"
+    pub kind: String,
+    pub freq: f64,
+    pub gain_db: f64,
+    pub q: f64,
+}
+
+#[derive(Clone, Debug)]
+pub struct AutoEqView {
+    pub name: String,
+    pub preamp_db: f64,
+    pub filters: Vec<EqFilterView>,
+}
+
+/// Headphones and earbuds matching `query` (AutoEq has ~9,000 measured models).
+pub fn autoeq_search(query: String) -> Result<Vec<AutoEqProfileView>, String> {
+    let en = eng()?;
+    let all = harp_ytdlp::autoeq::index(&en.cache_dir).map_err(e)?;
+    Ok(harp_ytdlp::autoeq::search(&all, &query, 40).into_iter().map(|p| AutoEqProfileView { name: p.name, source: p.source, path: p.path }).collect())
+}
+
+/// One model's correction filters.
+pub fn autoeq_load(name: String, source: String, path: String) -> Result<AutoEqView, String> {
+    use harp_ytdlp::autoeq::{Kind, Profile};
+    let c = harp_ytdlp::autoeq::load(&Profile { name: name.clone(), source, path }).map_err(e)?;
+    Ok(AutoEqView {
+        name,
+        preamp_db: c.preamp_db,
+        filters: c
+            .filters
+            .into_iter()
+            .map(|f| EqFilterView {
+                kind: match f.kind {
+                    Kind::Peak => "peak",
+                    Kind::LowShelf => "low_shelf",
+                    Kind::HighShelf => "high_shelf",
+                }
+                .into(),
+                freq: f.freq,
+                gain_db: f.gain_db,
+                q: f.q,
+            })
+            .collect(),
+    })
+}

@@ -112,26 +112,43 @@ class Visualizer {
   /// checked on a phone and on the laptop.
   static const normalizeEffect = mak.LoudnormEffect(i: -16, tp: -1.5, lra: 11);
 
-  /// The whole chain, in order: levelling, then tone, then space.
-  static List<mak.AudioEffect> chain({required String spatial, String eq = 'flat', bool normalize = false, List<double>? custom, List<int>? freqs}) => [
+  /// Headphone correction (AutoEq) as engine effects.
+  static List<mak.AudioEffect> headphoneEffects(List<(String, double, double, double)> filters) => [
+        for (final (kind, f, g, q) in filters)
+          switch (kind) {
+            'low_shelf' => mak.BassEffect(frequency: f, gain: g, width: q, widthType: mak.BassWidthType.q),
+            'high_shelf' => mak.TrebleEffect(frequency: f, gain: g, width: q, widthType: mak.TrebleWidthType.q),
+            _ => mak.EqualizerEffect(frequency: f, gain: g, width: q, widthType: mak.EqualizerWidthType.q),
+          },
+      ];
+
+  /// The whole chain, in order: levelling, your headphones' correction, then
+  /// tone, then space.
+  static List<mak.AudioEffect> chain({required String spatial, String eq = 'flat', bool normalize = false, List<double>? custom, List<int>? freqs, List<(String, double, double, double)> headphone = const []}) => [
         if (normalize) normalizeEffect,
+        ...headphoneEffects(headphone),
         ...(eq == 'custom' && custom != null && freqs != null ? customEqEffects(custom, freqs) : eqEffects(eq)),
         ...spatialEffects(spatial),
       ];
 
+  /// Follows [player] (again, after a crossfade swapped players).
   Future<void> attach(mak.Player player) async {
+    if (!identical(player, _player)) {
+      _fft?.cancel();
+      _fft = null;
+    }
     _player = player;
     _syncFft();
-    _timer = Timer.periodic(const Duration(milliseconds: 50), (_) => _tick());
+    _timer ??= Timer.periodic(const Duration(milliseconds: 50), (_) => _tick());
   }
 
   /// Applies the effects. Never throws: a refused chain leaves the sound as it was.
-  Future<void> applyEffects({required String spatial, String eq = 'flat', bool normalize = false, List<double>? custom, List<int>? freqs}) async {
+  Future<void> applyEffects({required String spatial, String eq = 'flat', bool normalize = false, List<double>? custom, List<int>? freqs, List<(String, double, double, double)> headphone = const [], double headphonePreamp = 0}) async {
     try {
-      await _player?.setAudioEffects(chain(spatial: spatial, eq: eq, normalize: normalize, custom: custom, freqs: freqs));
-      // Custom: leave room for the biggest boost.
+      await _player?.setAudioEffects(chain(spatial: spatial, eq: eq, normalize: normalize, custom: custom, freqs: freqs, headphone: headphone));
+      // Custom: leave room for the biggest boost. Headphone correction brings its own preamp.
       final head = eq == 'custom' && custom != null ? custom.fold<double>(0, (a, b) => b > a ? b : a) : eqHeadroomDb(eq);
-      await _player?.setVolumeGain(-head);
+      await _player?.setVolumeGain(-head + headphonePreamp);
     } catch (_) {}
   }
 

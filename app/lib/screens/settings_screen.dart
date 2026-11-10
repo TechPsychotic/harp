@@ -229,6 +229,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onChanged: PlayerController.fxSupported ? s.setNormalize : null,
                 ),
                 ListTile(
+                  title: const Text('Headphone correction'),
+                  subtitle: Text(s.hpName.isEmpty ? 'Off. Pick your headphones to hear them neutral (measured profiles from AutoEq).' : s.hpName, style: TextStyle(color: tok.textDim)),
+                  trailing: s.hpName.isEmpty
+                      ? const Icon(Icons.chevron_right_rounded)
+                      : IconButton(tooltip: 'Turn off', icon: const Icon(Icons.close_rounded), onPressed: () => s.setHeadphone('', 0, const [])),
+                  onTap: () => showHeadphonePicker(context, s),
+                ),
+                ListTile(
+                  title: const Text('Crossfade'),
+                  subtitle: Text(s.crossfade == 0 ? 'Off: songs follow each other with no gap' : '${s.crossfade} s: each song fades into the next', style: TextStyle(color: tok.textDim)),
+                  trailing: PopupMenuButton<int>(
+                    icon: const Icon(Icons.expand_more_rounded),
+                    initialValue: s.crossfade,
+                    onSelected: s.setCrossfade,
+                    itemBuilder: (_) => [for (final v in const [0, 3, 6, 9, 12]) PopupMenuItem(value: v, child: Text(v == 0 ? 'Off (gapless)' : '$v seconds'))],
+                  ),
+                ),
+                ListTile(
                   title: const Text('Playback speed'),
                   subtitle: Text(s.speed == 1 ? 'Normal' : '${s.speed}× · the pitch stays the same', style: TextStyle(color: tok.textDim)),
                   trailing: PopupMenuButton<double>(
@@ -517,5 +535,73 @@ void showCustomEq(BuildContext context, AppSettings s) {
         },
       ),
     ),
+  );
+}
+
+
+/// Search ~9,000 measured headphones and earbuds (AutoEq) and apply one.
+void showHeadphonePicker(BuildContext context, AppSettings s) {
+  final q = TextEditingController();
+  List<api.AutoEqProfileView> hits = const [];
+  bool busy = false;
+  String? err;
+  showModalBottomSheet<void>(
+    context: context,
+    useRootNavigator: true,
+    isScrollControlled: true,
+    builder: (ctx) => StatefulBuilder(builder: (ctx, set) {
+      final tok = ctx.tok;
+      Future<void> run() async {
+        set(() { busy = true; err = null; });
+        try {
+          hits = await api.autoeqSearch(query: q.text);
+        } catch (e) {
+          err = 'Couldn’t load the list: $e';
+        }
+        set(() => busy = false);
+      }
+      return SafeArea(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.viewInsetsOf(ctx).bottom + 8),
+          child: SizedBox(
+            height: MediaQuery.sizeOf(ctx).height * 0.7,
+            child: Column(children: [
+              const Text('Your headphones', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 4),
+              Text('Measured corrections from AutoEq: your model, tuned to sound neutral. Applied before your equalizer.', style: TextStyle(color: tok.textDim, fontSize: 13)),
+              const SizedBox(height: 8),
+              TextField(
+                controller: q,
+                autofocus: true,
+                decoration: const InputDecoration(hintText: 'Model, e.g. Sony WH-1000XM4, AirPods Pro', prefixIcon: Icon(Icons.search_rounded)),
+                onSubmitted: (_) => run(),
+              ),
+              if (busy) const LinearProgressIndicator(minHeight: 2),
+              if (err != null) Padding(padding: const EdgeInsets.all(8), child: Text(err!, style: const TextStyle(color: Colors.redAccent))),
+              Expanded(
+                child: ListView(children: [
+                  for (final h in hits)
+                    ListTile(
+                      leading: const Icon(Icons.headphones_rounded),
+                      title: Text(h.name),
+                      subtitle: Text('measured by ${h.source}', style: TextStyle(color: tok.textDim, fontSize: 12.5)),
+                      onTap: () async {
+                        set(() => busy = true);
+                        try {
+                          final c = await api.autoeqLoad(name: h.name, source: h.source, path: h.path);
+                          await s.setHeadphone('${c.name} (${h.source.split(' on ').first})', c.preampDb, [for (final f in c.filters) (f.kind, f.freq, f.gainDb, f.q)]);
+                          if (ctx.mounted) Navigator.pop(ctx);
+                        } catch (e) {
+                          set(() { busy = false; err = 'Couldn’t load it: $e'; });
+                        }
+                      },
+                    ),
+                ]),
+              ),
+            ]),
+          ),
+        ),
+      );
+    }),
   );
 }
