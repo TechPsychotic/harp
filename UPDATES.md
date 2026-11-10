@@ -8,6 +8,13 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-10 (night, latest): roadmap kept off GitHub
+
+- `ROADMAP.md` is no longer in the repository; it stays on the maintainer's machine (and is ignored by
+  git). README updated.
+
+---
+
 ## 2026-11-10 (night, later): ready for a public repository
 
 - Checked every tracked file and the whole git history for secrets: no keys, passwords or tokens; the
@@ -16,7 +23,7 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 - GitHub Actions only runs on version tags or by hand, so pull requests from forks can't reach the
   signing secrets.
 - README links the website and the latest release; new `CONTRIBUTING.md` and `SECURITY.md`;
-  `ROADMAP.md` worded for any reader.
+  wording made fit for any reader.
 
 ---
 

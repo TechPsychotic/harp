@@ -71,7 +71,7 @@ scripts/android-tools.sh && flutter build apk --release --target-platform androi
 - `crates/harp-ffi`: the bridge to the app ([flutter_rust_bridge](https://github.com/fzyzcjy/flutter_rust_bridge)).
 - `app/`: the Flutter app; audio through [mpv_audio_kit](https://pub.dev/packages/mpv_audio_kit) (libmpv + FFmpeg).
 
-`ROADMAP.md` tracks what's done and what's next (including an iOS plan); `UPDATES.md` is the changelog.
+`UPDATES.md` is the changelog.
 The website lives in `docs/` (GitHub Pages).
 
 ## Contributing
@@ -109,5 +109,5 @@ Projects and work that shaped Harp, beyond the libraries it's built on:
 - [iroh](https://github.com/n0-computer/iroh): peer-to-peer connections for listening together, device sync and shared playlists.
 - [LRCLIB](https://github.com/tranxuanthang/lrclib): free synced lyrics.
 - [Better Lyrics](https://github.com/better-lyrics) and [YouLy+](https://github.com/ibratabian17/youlyplus): ideas for word-synced lyrics.
-- [SwiftyTube](https://github.com/686udjie/SwiftyTube): the approach in the iOS plan (`ROADMAP.md`).
+- [SwiftyTube](https://github.com/686udjie/SwiftyTube): ideas for an iOS version without yt-dlp.
 - [Equalizer314](https://f-droid.org/en/packages/com.bearinmind.equalizer314/), [Steam Audio](https://github.com/ValveSoftware/steam-audio) and [OpenAL-MOB](https://github.com/6779660/OpenAL-MOB): research for the sound work and the planned 3D (HRTF) mode.

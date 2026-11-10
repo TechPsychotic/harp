@@ -19,3 +19,6 @@ app/assets/yt-dlp.pyz
 key.properties
 .env
 .env.*
+
+# Kept locally, not published.
+ROADMAP.md
