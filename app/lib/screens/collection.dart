@@ -70,6 +70,8 @@ class _CollectionScreenState extends State<CollectionScreen> {
     }
   }
 
+  From _from(String name) => (kind: widget.info.kind, id: widget.info.id, title: name);
+
   Future<void> _saveAsPlaylist(api.CollectionDetail d, String name) async {
     final id = await api.playlistCreate(name: name);
     final n = await api.playlistAdd(id: id, songs: d.songs);
@@ -152,16 +154,16 @@ class _CollectionScreenState extends State<CollectionScreen> {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Row(children: [
-                      Expanded(child: FilledButton.icon(onPressed: () => p.playList(songs), icon: const Icon(Icons.play_arrow_rounded), label: const Text('Play'))),
+                      Expanded(child: FilledButton.icon(onPressed: () => p.playList(songs, from: _from(name)), icon: const Icon(Icons.play_arrow_rounded), label: const Text('Play'))),
                       const SizedBox(width: 12),
-                      Expanded(child: OutlinedButton.icon(onPressed: () => p.playList(songs, shuffle: true), icon: const Icon(Icons.shuffle_rounded), label: const Text('Shuffle'))),
+                      Expanded(child: OutlinedButton.icon(onPressed: () => p.playList(songs, shuffle: true, from: _from(name)), icon: const Icon(Icons.shuffle_rounded), label: const Text('Shuffle'))),
                     ]),
                   ),
                 const SizedBox(height: 8),
                 if (songs.isEmpty && d.related.isEmpty) const EmptyState(icon: Icons.music_off_rounded, text: 'Nothing to show here.'),
                 if (_isArtist && songs.isNotEmpty) SectionHeader('Songs', action: songs.length > 10 ? (_allSongs ? 'Fewer' : 'See All') : null, onAction: () => setState(() => _allSongs = !_allSongs)),
                 for (var i = 0; i < shown.length; i++) ...[
-                  SongTile(song: shown[i], player: p, index: _isAlbum ? i + 1 : null, onPlay: () => p.playList(songs.sublist(i))),
+                  SongTile(song: shown[i], player: p, index: _isAlbum ? i + 1 : null, onPlay: () => p.playList(songs.sublist(i), from: _from(name))),
                   Divider(indent: _isAlbum ? 56 : 78),
                 ],
                 for (final (kind, title) in const [('album', 'Albums & Singles'), ('playlist', 'Playlists'), ('artist', 'Similar Artists')])

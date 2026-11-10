@@ -7,9 +7,9 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `cached_view`, `collection_view`, `e`, `eng`, `export_songs`, `home_artists`, `import_view`, `lyrics_view`, `queue_view`, `request`, `sections`, `serde_json_string`, `song_from_json`, `song`, `spotify_embed_url`, `spotify_token`, `this_year`, `view`, `views`, `youtube_list_id`
+// These functions are ignored because they are not marked as `pub`: `cached_view`, `collection_view`, `e`, `eng`, `export_songs`, `home_artists`, `import_view`, `lyrics_view`, `queue_view`, `request`, `section_of`, `sections`, `serde_json_string`, `song_from_json`, `song`, `spotify_embed_url`, `spotify_token`, `this_year`, `view`, `views`, `youtube_list_id`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Engine`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// Starts the engine: opens the database, makes sure yt-dlp is installed.
 /// Safe to call again (does nothing the second time).
@@ -63,11 +63,41 @@ Future<QueueView> queueJump({required String section, required int index}) =>
 Future<QueueView> queueSetAutoplay({required List<SongView> songs}) =>
     RustLib.instance.api.crateApiEngineQueueSetAutoplay(songs: songs);
 
-Future<QueueView> queueRemove({required int index}) =>
-    RustLib.instance.api.crateApiEngineQueueRemove(index: index);
+/// Removes an upcoming song (`section`: "user", "context" or "auto").
+Future<QueueView> queueRemove({required String section, required int index}) =>
+    RustLib.instance.api.crateApiEngineQueueRemove(
+      section: section,
+      index: index,
+    );
 
-Future<QueueView> queueMove({required int from, required int to}) =>
-    RustLib.instance.api.crateApiEngineQueueMove(from: from, to: to);
+/// Moves an upcoming song within its section.
+Future<QueueView> queueMove({
+  required String section,
+  required int from,
+  required int to,
+}) => RustLib.instance.api.crateApiEngineQueueMove(
+  section: section,
+  from: from,
+  to: to,
+);
+
+/// "Play next" for an upcoming song; the others keep their order.
+Future<QueueView> queuePromote({required String section, required int index}) =>
+    RustLib.instance.api.crateApiEngineQueuePromote(
+      section: section,
+      index: index,
+    );
+
+/// Marks where the music plays from (for a single song started by a mood, Smart Shuffle…).
+Future<QueueView> queueSetSource({
+  required String kind,
+  required String id,
+  required String title,
+}) => RustLib.instance.api.crateApiEngineQueueSetSource(
+  kind: kind,
+  id: id,
+  title: title,
+);
 
 Future<QueueView> queueSetRepeat({required String mode}) =>
     RustLib.instance.api.crateApiEngineQueueSetRepeat(mode: mode);
@@ -182,6 +212,8 @@ Future<void> playlistMove({
     RustLib.instance.api.crateApiEnginePlaylistMove(id: id, from: from, to: to);
 
 /// Replaces the up-next queue with a playlist and starts it. `shuffle` mixes it first.
+/// Plays a saved playlist as the context ("Playing from" its name). Songs you
+/// queued yourself stay ahead of it.
 Future<QueueView> queuePlayPlaylist({
   required PlatformInt64 id,
   required bool shuffle,
@@ -272,12 +304,20 @@ Future<CollectionDetail> openCollection({required String id}) =>
     RustLib.instance.api.crateApiEngineOpenCollection(id: id);
 
 /// Plays a list of songs: the first now, the rest queued after what you already added.
+/// Plays a list (album, liked songs, downloads, your files…) as the context.
+/// `source_kind` / `source_id` / `source_title` say where it's from ("" kind: none).
 Future<QueueView> queuePlayList({
   required List<SongView> songs,
   required bool shuffle,
+  required String sourceKind,
+  required String sourceId,
+  required String sourceTitle,
 }) => RustLib.instance.api.crateApiEngineQueuePlayList(
   songs: songs,
   shuffle: shuffle,
+  sourceKind: sourceKind,
+  sourceId: sourceId,
+  sourceTitle: sourceTitle,
 );
 
 /// Lyrics for a song (synced when available): from the saved copy, else LRCLIB.
@@ -923,8 +963,16 @@ class PlaylistView {
 
 class QueueView {
   final SongView? current;
+
+  /// Songs you queued yourself.
   final List<SongView> user;
+
+  /// The rest of the playlist / album / list being played.
+  final List<SongView> context;
   final List<SongView> autoplay;
+
+  /// Where it's playing from (None for a single song).
+  final SourceView? source;
 
   /// "off", "all" or "one"
   final String repeat;
@@ -932,13 +980,20 @@ class QueueView {
   const QueueView({
     this.current,
     required this.user,
+    required this.context,
     required this.autoplay,
+    this.source,
     required this.repeat,
   });
 
   @override
   int get hashCode =>
-      current.hashCode ^ user.hashCode ^ autoplay.hashCode ^ repeat.hashCode;
+      current.hashCode ^
+      user.hashCode ^
+      context.hashCode ^
+      autoplay.hashCode ^
+      source.hashCode ^
+      repeat.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -947,7 +1002,9 @@ class QueueView {
           runtimeType == other.runtimeType &&
           current == other.current &&
           user == other.user &&
+          context == other.context &&
           autoplay == other.autoplay &&
+          source == other.source &&
           repeat == other.repeat;
 }
 
@@ -1039,6 +1096,28 @@ class SongView {
           thumbnail == other.thumbnail &&
           liked == other.liked &&
           downloaded == other.downloaded;
+}
+
+/// "Playing from": kind ("playlist", "liked", "downloads", "album", "artist",
+/// "podcast", "local", "mood", "smart", "search", "radio", "party"), an id, a title.
+class SourceView {
+  final String kind;
+  final String id;
+  final String title;
+
+  const SourceView({required this.kind, required this.id, required this.title});
+
+  @override
+  int get hashCode => kind.hashCode ^ id.hashCode ^ title.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SourceView &&
+          runtimeType == other.runtimeType &&
+          kind == other.kind &&
+          id == other.id &&
+          title == other.title;
 }
 
 class SpotifyPlaylistView {

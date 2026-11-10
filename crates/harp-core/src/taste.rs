@@ -285,6 +285,24 @@ impl Store {
         Ok(rows.collect::<std::result::Result<_, _>>()?)
     }
 
+    /// Songs you skipped early (under 30 % heard) in the last `days` days and
+    /// didn't finish since: they aren't picked for you again until then.
+    pub fn recently_skipped(&self, days: i64) -> Result<Vec<String>> {
+        self.recently_skipped_at(days, now_secs())
+    }
+
+    pub(crate) fn recently_skipped_at(&self, days: i64, now: i64) -> Result<Vec<String>> {
+        let since = now - days * 86400;
+        let mut st = self.conn.prepare(
+            "SELECT song_id FROM plays WHERE played_at >= ?1 GROUP BY song_id
+             HAVING max(CASE WHEN completion < 0.3 THEN played_at END) IS NOT NULL
+                AND coalesce(max(CASE WHEN completion >= 0.8 THEN played_at END), 0)
+                    < max(CASE WHEN completion < 0.3 THEN played_at END)",
+        )?;
+        let rows = st.query_map([since], |r| r.get(0))?;
+        Ok(rows.collect::<std::result::Result<_, _>>()?)
+    }
+
     /// Ids of the last `n` plays (to avoid repeating).
     pub fn recent_ids(&self, n: usize) -> Result<Vec<String>> {
         let mut st = self.conn.prepare("SELECT song_id FROM plays ORDER BY id DESC LIMIT ?")?;
@@ -517,5 +535,26 @@ mod tests {
         let night = st.hour_affinity_at(Some(23)).unwrap();
         assert_eq!(night.get("n"), Some(&1.0), "wraps around midnight");
         assert_eq!(night.get("m"), Some(&0.25));
+    }
+
+    #[test]
+    fn early_skips_are_remembered_for_a_while() {
+        let st = Store::open_memory().unwrap();
+        let day = 86400;
+        let now = 2_000_000_000;
+        let play = |id: &str, c: f64, at: i64| {
+            st.conn.execute(
+                "INSERT INTO plays(song_id,song_json,artist_key,completion,liked,superliked,source,played_at) VALUES(?,'{}','a',?,0,0,'auto',?)",
+                params![id, c, at],
+            ).unwrap();
+        };
+        play("skipped", 0.1, now - 2 * day);
+        play("old_skip", 0.1, now - 40 * day);
+        play("finished", 0.95, now - day);
+        play("changed_mind", 0.1, now - 5 * day);
+        play("changed_mind", 0.9, now - day);
+        let mut v = st.recently_skipped_at(30, now).unwrap();
+        v.sort();
+        assert_eq!(v, ["skipped"], "only recent early skips you didn't take back");
     }
 }

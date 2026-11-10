@@ -25,11 +25,25 @@ pub struct SongView {
     pub downloaded: bool,
 }
 
+/// "Playing from": kind ("playlist", "liked", "downloads", "album", "artist",
+/// "podcast", "local", "mood", "smart", "search", "radio", "party"), an id, a title.
+#[derive(Clone, Debug)]
+pub struct SourceView {
+    pub kind: String,
+    pub id: String,
+    pub title: String,
+}
+
 #[derive(Clone, Debug)]
 pub struct QueueView {
     pub current: Option<SongView>,
+    /// Songs you queued yourself.
     pub user: Vec<SongView>,
+    /// The rest of the playlist / album / list being played.
+    pub context: Vec<SongView>,
     pub autoplay: Vec<SongView>,
+    /// Where it's playing from (None for a single song).
+    pub source: Option<SourceView>,
     /// "off", "all" or "one"
     pub repeat: String,
 }
@@ -100,7 +114,7 @@ fn e<T: std::fmt::Display>(x: T) -> String {
     x.to_string()
 }
 
-fn view(s: &Song, liked: bool, downloaded: bool) -> SongView {
+pub(crate) fn view(s: &Song, liked: bool, downloaded: bool) -> SongView {
     SongView {
         id: s.id.clone(),
         title: s.title.clone(),
@@ -114,7 +128,7 @@ fn view(s: &Song, liked: bool, downloaded: bool) -> SongView {
     }
 }
 
-fn song(v: &SongView) -> Song {
+pub(crate) fn song(v: &SongView) -> Song {
     Song {
         id: v.id.clone(),
         title: v.title.clone(),
@@ -141,7 +155,9 @@ fn queue_view(en: &Engine) -> QueueView {
     let q = en.queue.lock().unwrap();
     let cur: Vec<Song> = q.current().cloned().into_iter().collect();
     let user: Vec<Song> = q.user_queue().cloned().collect();
+    let context: Vec<Song> = q.context().cloned().collect();
     let auto: Vec<Song> = q.autoplay().cloned().collect();
+    let source = q.source.clone().map(|s| SourceView { kind: s.kind, id: s.id, title: s.title });
     let repeat = match q.repeat {
         Repeat::Off => "off",
         Repeat::All => "all",
@@ -158,7 +174,9 @@ fn queue_view(en: &Engine) -> QueueView {
     QueueView {
         current: views(en, cur.into_iter()).into_iter().next(),
         user: views(en, user.into_iter()),
+        context: views(en, context.into_iter()),
         autoplay: views(en, auto.into_iter()),
+        source,
         repeat,
     }
 }
@@ -317,11 +335,11 @@ pub fn queue_jump(section: String, index: u32) -> Result<QueueView, String> {
     let en = eng()?;
     {
         let mut q = en.queue.lock().unwrap();
-        if section == "auto" {
-            q.jump_auto(index as usize);
-        } else {
-            q.jump_user(index as usize);
-        }
+        match section.as_str() {
+            "auto" => q.jump_auto(index as usize),
+            "context" => q.jump_context(index as usize),
+            _ => q.jump_user(index as usize),
+        };
     }
     Ok(queue_view(en))
 }
@@ -333,15 +351,35 @@ pub fn queue_set_autoplay(songs: Vec<SongView>) -> Result<QueueView, String> {
     Ok(queue_view(en))
 }
 
-pub fn queue_remove(index: u32) -> Result<QueueView, String> {
+fn section_of(s: &str) -> Result<harp_core::queue::Section, String> {
+    harp_core::queue::Section::parse(s).ok_or_else(|| format!("no queue section {s}"))
+}
+
+/// Removes an upcoming song (`section`: "user", "context" or "auto").
+pub fn queue_remove(section: String, index: u32) -> Result<QueueView, String> {
     let en = eng()?;
-    en.queue.lock().unwrap().remove_user(index as usize);
+    en.queue.lock().unwrap().remove_in(section_of(&section)?, index as usize);
     Ok(queue_view(en))
 }
 
-pub fn queue_move(from: u32, to: u32) -> Result<QueueView, String> {
+/// Moves an upcoming song within its section.
+pub fn queue_move(section: String, from: u32, to: u32) -> Result<QueueView, String> {
     let en = eng()?;
-    en.queue.lock().unwrap().move_user(from as usize, to as usize);
+    en.queue.lock().unwrap().move_in(section_of(&section)?, from as usize, to as usize);
+    Ok(queue_view(en))
+}
+
+/// "Play next" for an upcoming song; the others keep their order.
+pub fn queue_promote(section: String, index: u32) -> Result<QueueView, String> {
+    let en = eng()?;
+    en.queue.lock().unwrap().promote(section_of(&section)?, index as usize);
+    Ok(queue_view(en))
+}
+
+/// Marks where the music plays from (for a single song started by a mood, Smart Shuffle…).
+pub fn queue_set_source(kind: String, id: String, title: String) -> Result<QueueView, String> {
+    let en = eng()?;
+    en.queue.lock().unwrap().source = Some(harp_core::queue::Source { kind, id, title });
     Ok(queue_view(en))
 }
 
@@ -450,7 +488,7 @@ pub fn fill_autoplay(count: u32, genre: Option<String>) -> Result<QueueView, Str
     let en = eng()?;
     let exclude: Vec<String> = {
         let q = en.queue.lock().unwrap();
-        q.current().into_iter().chain(q.user_queue()).map(|s| s.id.clone()).collect()
+        q.current().into_iter().chain(q.user_queue()).chain(q.context()).map(|s| s.id.clone()).collect()
     };
     let picks = {
         let st = en.rec_store.lock().unwrap();
@@ -564,23 +602,20 @@ pub fn playlist_move(id: i64, from: u32, to: u32) -> Result<(), String> {
 }
 
 /// Replaces the up-next queue with a playlist and starts it. `shuffle` mixes it first.
+/// Plays a saved playlist as the context ("Playing from" its name). Songs you
+/// queued yourself stay ahead of it.
 pub fn queue_play_playlist(id: i64, shuffle: bool) -> Result<QueueView, String> {
     let en = eng()?;
-    let mut songs = en.store.lock().unwrap().playlist_songs(id).map_err(e)?;
+    let (mut songs, name) = {
+        let st = en.store.lock().unwrap();
+        let name = st.playlists().map_err(e)?.into_iter().find(|p| p.id == id).map(|p| p.name).unwrap_or_default();
+        (st.playlist_songs(id).map_err(e)?, name)
+    };
     if shuffle {
         en.rng.lock().unwrap().shuffle(&mut songs);
     }
-    {
-        let mut q = en.queue.lock().unwrap();
-        q.clear_user();
-        let mut it = songs.into_iter();
-        if let Some(first) = it.next() {
-            q.play_now(first);
-            for s in it {
-                q.add_to_queue(s);
-            }
-        }
-    }
+    let source = harp_core::queue::Source { kind: "playlist".into(), id: id.to_string(), title: name };
+    en.queue.lock().unwrap().play_context(songs, Some(source));
     Ok(queue_view(en))
 }
 
@@ -1051,23 +1086,16 @@ pub fn open_collection(id: String) -> Result<CollectionDetail, String> {
 }
 
 /// Plays a list of songs: the first now, the rest queued after what you already added.
-pub fn queue_play_list(songs: Vec<SongView>, shuffle: bool) -> Result<QueueView, String> {
+/// Plays a list (album, liked songs, downloads, your files…) as the context.
+/// `source_kind` / `source_id` / `source_title` say where it's from ("" kind: none).
+pub fn queue_play_list(songs: Vec<SongView>, shuffle: bool, source_kind: String, source_id: String, source_title: String) -> Result<QueueView, String> {
     let en = eng()?;
     let mut list: Vec<Song> = songs.iter().map(song).collect();
     if shuffle {
         en.rng.lock().unwrap().shuffle(&mut list);
     }
-    {
-        let mut q = en.queue.lock().unwrap();
-        q.clear_user();
-        let mut it = list.into_iter();
-        if let Some(first) = it.next() {
-            q.play_now(first);
-            for s in it {
-                q.add_to_queue(s);
-            }
-        }
-    }
+    let source = (!source_kind.is_empty()).then(|| harp_core::queue::Source { kind: source_kind, id: source_id, title: source_title });
+    en.queue.lock().unwrap().play_context(list, source);
     Ok(queue_view(en))
 }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../desktop/mini_window.dart';
 import '../perf.dart';
 import '../player/controller.dart';
 import '../theme/glass.dart';
@@ -60,7 +61,17 @@ class _ShellState extends State<Shell> {
   void _openNowPlaying() => Navigator.of(context).push(MaterialPageRoute(fullscreenDialog: true, builder: (_) => NowPlayingScreen(player: widget.player)));
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ValueListenableBuilder<bool>(
+        valueListenable: MiniWindow.on,
+        // The mini player (computers): the full app stays alive underneath, hidden.
+        builder: (context, mini, full) => Stack(children: [
+          Offstage(offstage: mini, child: full),
+          if (mini) Positioned.fill(child: _CompactPlayer(player: widget.player)),
+        ]),
+        child: _full(context),
+      );
+
+  Widget _full(BuildContext context) {
     final p = widget.player;
     final brightness = Theme.of(context).brightness;
     return ValueListenableBuilder<Color>(
@@ -249,6 +260,47 @@ class _MiniPlayer extends StatelessWidget {
         );
         return floating ? Padding(padding: const EdgeInsets.fromLTRB(8, 0, 8, 6), child: bar) : bar;
       },
+    );
+  }
+}
+
+
+/// The mini player window: cover, title and the three controls.
+class _CompactPlayer extends StatelessWidget {
+  const _CompactPlayer({required this.player});
+  final PlayerController player;
+
+  @override
+  Widget build(BuildContext context) {
+    final tok = context.tok;
+    return Material(
+      color: tok.raised,
+      child: ListenableBuilder(
+        listenable: player,
+        builder: (context, _) {
+          final s = player.current;
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(10, 8, 4, 8),
+            child: Row(children: [
+              if (s != null) Cover(url: s.thumbnail, seed: s.id, size: 72, radius: Radii.cover),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(s?.title ?? 'Nothing playing', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                  Text(s?.artist ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: tok.textDim, fontSize: 13)),
+                  const SizedBox(height: 4),
+                  Row(children: [
+                    IconButton(visualDensity: VisualDensity.compact, icon: const Icon(Icons.skip_previous_rounded), onPressed: player.previous),
+                    IconButton(visualDensity: VisualDensity.compact, iconSize: 32, icon: Icon(player.playing ? Icons.pause_circle_filled_rounded : Icons.play_circle_fill_rounded), onPressed: player.togglePlay),
+                    IconButton(visualDensity: VisualDensity.compact, icon: const Icon(Icons.skip_next_rounded), onPressed: player.next),
+                  ]),
+                ]),
+              ),
+              IconButton(tooltip: 'Back to the full window', icon: const Icon(Icons.open_in_full_rounded), onPressed: MiniWindow.exit),
+            ]),
+          );
+        },
+      ),
     );
   }
 }

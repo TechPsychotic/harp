@@ -140,6 +140,9 @@ Future<void> runSongAction(BuildContext context, PlayerController player, api.So
         await Clipboard.setData(ClipboardData(text: link));
         if (context.mounted) toast(context, 'Link copied');
       }
+    case 'suggest':
+      await player.party.suggest(song);
+      if (context.mounted) toast(context, 'Suggested to the party');
     case 'remove':
       onRemove?.call();
   }
@@ -189,6 +192,7 @@ Future<void> showSongSheet(BuildContext context, PlayerController player, api.So
               if (song.downloaded) item('undownload', Icons.delete_outline_rounded, 'Remove download') else item('download', Icons.download_rounded, 'Download'),
               item('share', Icons.share_rounded, 'Share link'),
             ],
+            if (player.party.role == 'guest' && !song.id.startsWith('local:')) item('suggest', Icons.groups_rounded, 'Suggest to the party'),
             if (onRemove != null) item('remove', Icons.remove_circle_outline_rounded, removeLabel),
             const SizedBox(height: 8),
           ]),

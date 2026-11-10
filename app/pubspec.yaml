@@ -47,6 +47,7 @@ dependencies:
   url_launcher: ^6.3.3
   audio_session: ^0.2.4
   mpv_audio_kit: ^0.6.4
+  window_manager: ^0.6.0
 
 dev_dependencies:
   flutter_test:

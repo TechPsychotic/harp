@@ -8,6 +8,66 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-10: queue that makes sense, "playing from", stronger sound, listening together, Android Auto
+
+A big batch, built once at the end as you asked.
+
+**The queue**
+- **Starting something new replaces what was playing.** The queue now has three parts, like
+  Spotify: **Next in Queue** (songs you added yourself), **Next from: <playlist / album / liked
+  songs…>**, and **Autoplay**. Playing a mood, Smart Shuffle, a song or another playlist replaces
+  the "Next from" part; your own queued songs stay. (Before, a playlist's songs sat in the same list
+  as your own and never went away.) 🧪
+- **Gestures in the queue:** swipe right to play a song next (nothing else moves), swipe left to
+  remove it (the − button is still there), hold and drag to move it. Works in all three parts. 🧪
+
+**Where it's playing from**
+- The player says **PLAYING FROM** at the top ("Playlist · Road trip", "Mood · Chill", "Liked Songs",
+  "Smart Shuffle"…).
+- **Listen Now** shows a "Playing from" card; tap it to open that playlist, album or list.
+- **Library** highlights what's playing: the playlist, Liked Songs, Downloaded or On This Device row
+  turns accent-coloured with a "Playing" tag.
+
+**Sound you can hear** (you said the enhancements didn't do much, and the measurements agreed)
+- Every preset was rebuilt and **measured on the engine with pink noise**:
+  - **Bass** lows **+6.3 dB** (the old one: **+0.4 dB**, practically nothing: it boosted a narrow
+    peak at 60 Hz where little music lives; now it's a proper low shelf).
+  - **Treble** highs +5.4 dB (old +4.2). **Vocal** cuts boom by 10.8 dB and lifts presence 5.3 dB.
+    **Loudness** lifts lows and highs and gently brings quiet passages up.
+  - **Wide** stereo +10.9 dB wider (old +6.3); **Immersive** +11.7 dB with a short room echo;
+    **Headphone** crossfeed brings the sound out of your head (narrower, by design).
+
+**Taste**
+- Already in (since last week): an artist's score halves after 60 days, so what you like now
+  counts most. **New:** a song you skip early isn't picked for you again for 30 days (unless you
+  finish it in between). 🧪
+
+**Listen together (M7)**, built like Warptron's party mode, on iroh
+- Listen Now › 👥 (top right) › **Host a party**, then share the link. Friends paste it in
+  **Join**. Everyone hears the same song at the same moment; anyone can play, pause, skip and seek,
+  and guests can **Suggest to the party** from any song's menu. The host sees who's there.
+- Peer to peer, no accounts and no servers of our own (iroh's public relays only help devices find
+  each other). Each device streams the song itself; only a few hundred bytes of "what's playing,
+  where" cross the connection, corrected for the trip time, repeated every few seconds.
+- ✅ **Checked over the real internet**: a guest joined with only the link (through iroh's
+  Asia-Pacific relay) and was in sync within 436 ms. 🧪 host/guest sync, controls, suggestions,
+  leaving and ending, on a local connection (5 of 5 runs).
+
+**Sorting (M5)**
+- Playlists: Custom order (drag), Title or Artist, remembered per playlist.
+- Artists and Albums & Podcasts: Recently added or Name.
+- A **filter box** in Liked Songs and Downloaded.
+
+**Platform (M6)**
+- **Android Auto:** Harp shows up in the car with Smart Shuffle, Liked Songs, Playlists, Downloaded
+  and Recently Played to browse and play. 📱 needs a car or the Android Auto head unit to try.
+- **Mini player (laptop):** the ⧉ button on the player shrinks Harp to a small strip with the cover
+  and controls; ⤢ brings it back. It asks to stay on top; GNOME on Wayland doesn't let apps do that,
+  so there: right-click its title bar › Always on Top.
+- Not done, and why: a **tray icon** (GNOME doesn't show tray icons without an extension, and its
+  own media controls already show Harp); **Discord status** (needs an app registered on Discord's
+  developer site, i.e. a key: your call).
+
 ## 2026-11-09 (late night): moods and Smart Shuffle play again
 
 - **Fixed: "Couldn't play …: the value of User-Agent must not contain … comma".** It hit songs that

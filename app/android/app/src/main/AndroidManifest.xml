@@ -68,6 +68,10 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- Android Auto: Harp is a media app there (browse the library, play). -->
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
         <!-- The audio engine (mpv_audio_kit) brings its own media service; Harp's
              notification and lock-screen controls come from audio_service, so
              the engine's one is left out (two would confuse Android Auto). -->

@@ -46,36 +46,58 @@ class Visualizer {
 
   // --- effects ---
 
-  /// Spatial modes (virtual effects, not Dolby Atmos), checked on the engine.
+  /// Spatial modes (virtual effects, not Dolby Atmos). Made clearly audible
+  /// (the first versions were too subtle): measured on the engine, see
+  /// test_engine/effects_measure_test.dart.
   static List<mak.AudioEffect> spatialEffects(String mode) => switch (mode) {
-        'wide' => const [mak.StereowidenEffect(delay: 20, feedback: 0.3, crossfeed: 0.3, drymix: 0.8)],
-        'headphone' => const [mak.CrossfeedEffect(strength: 0.35, range: 0.5, levelIn: 0.9, levelOut: 1)],
+        // Wider than the speakers: the side signal raised, plus a short widening delay.
+        'wide' => const [
+            mak.ExtrastereoEffect(m: 1.8),
+            mak.StereowidenEffect(delay: 20, feedback: 0.3, crossfeed: 0.3, drymix: 0.8),
+          ],
+        // Headphones: the sound in front of you instead of inside your head.
+        'headphone' => const [mak.CrossfeedEffect(strength: 0.6, range: 0.6, levelIn: 0.9, levelOut: 1)],
+        // A room around you: wide, plus two short early reflections.
         'immersive' => const [
+            mak.ExtrastereoEffect(m: 1.6),
             mak.StereowidenEffect(delay: 24, feedback: 0.35, crossfeed: 0.35, drymix: 0.75),
-            mak.CrossfeedEffect(strength: 0.2, range: 0.5),
+            mak.AechoEffect(inGain: 0.85, outGain: 0.9, delays: '37|53', decays: '0.28|0.2'),
           ],
         _ => const [],
       };
 
-  /// Equalizer presets.
-  static List<mak.AudioEffect> eqEffects(String preset) {
-    mak.AudioEffect band(double f, double g) => mak.EqualizerEffect(frequency: f, gain: g, width: 1, widthType: mak.EqualizerWidthType.q);
-    return switch (preset) {
-      'bass' => [band(60, 6), band(150, 3.5), band(400, -1)],
-      'vocal' => [band(250, -2), band(1500, 3), band(3500, 3), band(9000, -1)],
-      'treble' => [band(4000, 2), band(8000, 4), band(14000, 5)],
-      'loudness' => [band(60, 5), band(3000, -1), band(10000, 4)],
-      _ => const [],
-    };
-  }
+  /// Equalizer presets: shelves (whole ranges) rather than narrow peaks, so
+  /// the difference is plain to hear.
+  static List<mak.AudioEffect> eqEffects(String preset) => switch (preset) {
+        'bass' => const [
+            mak.BassEffect(gain: 9, frequency: 110, width: 0.6),
+            mak.EqualizerEffect(frequency: 300, gain: -1.5, width: 1, widthType: mak.EqualizerWidthType.q),
+          ],
+        'vocal' => const [
+            mak.HighpassEffect(frequency: 90),
+            mak.EqualizerEffect(frequency: 220, gain: -4, width: 0.9, widthType: mak.EqualizerWidthType.q),
+            mak.EqualizerEffect(frequency: 2800, gain: 5, width: 1, widthType: mak.EqualizerWidthType.q),
+            mak.EqualizerEffect(frequency: 5500, gain: 2.5, width: 1.2, widthType: mak.EqualizerWidthType.q),
+          ],
+        'treble' => const [mak.TrebleEffect(gain: 7, frequency: 4500, width: 0.6)],
+        // For listening quietly: lows and highs up (ears hear them less at low
+        // volume), and quiet passages brought up a little.
+        'loudness' => const [
+            mak.BassEffect(gain: 7, frequency: 100, width: 0.6),
+            mak.TrebleEffect(gain: 5, frequency: 7000, width: 0.6),
+            mak.AcompressorEffect(threshold: 0.1, ratio: 2.5, attack: 15, release: 200, makeup: 1.6),
+          ],
+        _ => const [],
+      };
 
   /// How far a boosting preset turns the volume down (dB) so loud songs don't
   /// clip. Applied with the engine's own volume gain, after the effects (its
   /// FFmpeg has no `volume` filter; checked).
   static double eqHeadroomDb(String preset) => switch (preset) {
-        'bass' => 5,
-        'vocal' => 3,
-        'treble' || 'loudness' => 4,
+        'bass' => 8,
+        'vocal' => 4,
+        'treble' => 6,
+        'loudness' => 6,
         _ => 0,
       };
 

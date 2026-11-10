@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/material.dart' show Color;
 import 'package:flutter/foundation.dart';
@@ -13,6 +14,7 @@ import '../theme/glass.dart';
 import '../src/rust/api/engine.dart' as api;
 import '../widgets/cover.dart';
 import 'media_session.dart';
+import 'party.dart';
 import 'stream_headers.dart';
 import 'visualizer.dart';
 
@@ -29,6 +31,9 @@ import 'visualizer.dart';
 ///
 /// Performance note: the playback position changes ~10x a second, so it lives
 /// in its own notifiers and `notifyListeners` fires only for real changes.
+/// Where a list being played comes from (shown as "Playing from …").
+typedef From = ({String kind, String id, String title});
+
 class PlayerController extends ChangeNotifier {
   PlayerController(this.settings, this.session) {
     viz = Visualizer()
@@ -53,6 +58,7 @@ class PlayerController extends ChangeNotifier {
         Native.wakeLock(p);
         if (p) unawaited(_focus?.setActive(true));
         _syncSession();
+        onTransport?.call();
         notifyListeners();
       }),
       _player.stream.completed.listen((done) {
@@ -92,6 +98,8 @@ class PlayerController extends ChangeNotifier {
     session.onPrevious = previous;
     session.onSeek = seekTo;
     session.onStop = () => _player.pause();
+    session.onBrowse = _browse;
+    session.onPlayFromId = _playFromId;
     unawaited(_watchOutput());
   }
 
@@ -133,6 +141,9 @@ class PlayerController extends ChangeNotifier {
   final AppSettings settings;
   final HarpAudioHandler session;
   final mak.Player _player = mak.Player();
+
+  /// Listening together (host or join a party).
+  late final PartyController party = PartyController(this);
   String? _userAgent;
   late final Visualizer viz;
   final List<StreamSubscription<dynamic>> _subs = [];
@@ -159,7 +170,7 @@ class PlayerController extends ChangeNotifier {
   /// Song ids being downloaded right now.
   final ValueNotifier<Set<String>> downloading = ValueNotifier({});
 
-  api.QueueView queue = const api.QueueView(user: [], autoplay: [], repeat: 'off');
+  api.QueueView queue = const api.QueueView(user: [], context: [], autoplay: [], repeat: 'off');
   bool playing = false;
   bool loading = false;
   String? error;
@@ -334,7 +345,8 @@ class PlayerController extends ChangeNotifier {
   Future<void> playSearchResult(api.SongView s) => playSong(s);
 
   /// Smart shuffle: pick by taste, optionally nudged by a genre, mood or artist.
-  Future<void> smartShuffle({String? genre, String? artist}) async {
+  /// [label] names it in "Playing from" (a mood's name).
+  Future<void> smartShuffle({String? genre, String? artist, String? label}) async {
     if (settings.offline) return playDownloads(shuffle: true);
     loading = true;
     error = null;
@@ -348,6 +360,12 @@ class PlayerController extends ChangeNotifier {
       reasons[pick.song.id] = pick.reason;
       _mood = genre;
       await _start(pick.song, 'recommended');
+      // A new start replaced whatever list was playing; say where this comes from.
+      queue = await api.queueSetSource(
+        kind: genre != null ? 'mood' : (artist != null ? 'radio' : 'smart'),
+        id: genre ?? artist ?? '',
+        title: label ?? (artist != null ? '$artist Radio' : (genre ?? 'Smart Shuffle')),
+      );
     } catch (e) {
       error = '$e';
     } finally {
@@ -363,12 +381,13 @@ class PlayerController extends ChangeNotifier {
     await _afterQueueReplaced();
   }
 
-  /// Plays a list (an album, a podcast, a playlist from a link).
-  Future<void> playList(List<api.SongView> songs, {bool shuffle = false}) async {
+  /// Plays a list (an album, a podcast, liked songs, downloads…) as the
+  /// context; [from] says where it's from ("Playing from …").
+  Future<void> playList(List<api.SongView> songs, {bool shuffle = false, From? from}) async {
     if (songs.isEmpty) return;
     _mood = null;
     await _supersede();
-    queue = await api.queuePlayList(songs: songs, shuffle: shuffle);
+    queue = await api.queuePlayList(songs: songs, shuffle: shuffle, sourceKind: from?.kind ?? '', sourceId: from?.id ?? '', sourceTitle: from?.title ?? '');
     await _afterQueueReplaced();
   }
 
@@ -387,7 +406,7 @@ class PlayerController extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    await playList(d, shuffle: shuffle);
+    await playList(d, shuffle: shuffle, from: (kind: 'downloads', id: '', title: 'Downloaded'));
   }
 
   Future<void> resume() async {
@@ -465,6 +484,7 @@ class PlayerController extends ChangeNotifier {
         return;
       }
       _loadedId = s.id;
+      onTransport?.call();
       _retried = false;
       _errorStreak = 0;
       unawaited(api.saveLastPlayed(s: s));
@@ -511,8 +531,8 @@ class PlayerController extends ChangeNotifier {
     // Don't fetch ahead on mobile data unless allowed in Settings.
     if (!settings.prefetchOnMobile && await Native.isMetered()) return;
     final ids = <String>[
-      ...queue.user.take(2).map((s) => s.id),
-      ...queue.autoplay.take(3).map((s) => s.id),
+      // The next songs that will actually play: your queue, then the list, then autoplay.
+      ...[...queue.user, ...queue.context, ...queue.autoplay].take(3).map((s) => s.id),
       if (current != null) current!.id,
     ];
     if (ids.isNotEmpty) await api.prefetchSongs(ids: ids, quality: settings.streamQuality, limitMb: settings.cacheMb);
@@ -522,7 +542,7 @@ class PlayerController extends ChangeNotifier {
     if (queue.autoplay.length >= 3) return;
     try {
       if (settings.offline) {
-        final inQueue = {queue.current?.id, ...queue.user.map((e) => e.id)};
+        final inQueue = {queue.current?.id, ...queue.user.map((e) => e.id), ...queue.context.map((e) => e.id)};
         final d = (await api.downloads()).map((e) => e.song).where((s) => !inQueue.contains(s.id)).toList()..shuffle();
         queue = await api.queueSetAutoplay(songs: d.take(10).toList());
       } else {
@@ -541,7 +561,103 @@ class PlayerController extends ChangeNotifier {
 
   // --- controls ---
 
+  // --- Android Auto and other media browsers ---
+
+  /// The library as a browsable tree: folders, then songs.
+  Future<List<MediaItem>> _browse(String parent) async {
+    MediaItem folder(String id, String title, {String? sub}) => MediaItem(id: id, title: title, artist: sub, playable: false);
+    MediaItem songItem(String id, api.SongView s) =>
+        MediaItem(id: id, title: s.title, artist: s.artist, album: s.album, artUri: Uri.tryParse(s.thumbnail), playable: true,
+            duration: s.durationSecs == null ? null : Duration(seconds: s.durationSecs!));
+    List<MediaItem> songs(String prefix, List<api.SongView> l) => [for (var i = 0; i < l.length && i < 200; i++) songItem('$prefix:$i', l[i])];
+    try {
+      switch (parent) {
+        case AudioService.browsableRootId:
+          return [
+            MediaItem(id: 'smart', title: 'Smart Shuffle', artist: 'Picked from your taste', playable: true),
+            folder('liked', 'Liked Songs'),
+            folder('playlists', 'Playlists'),
+            folder('downloads', 'Downloaded', sub: 'Plays without a connection'),
+            folder('history', 'Recently Played'),
+          ];
+        case AudioService.recentRootId:
+          final h = await api.history(limit: 1);
+          return songs('hist', h);
+        case 'liked':
+          return songs('liked', await api.likedSongs());
+        case 'downloads':
+          return songs('dl', (await api.downloads()).map((d) => d.song).toList());
+        case 'history':
+          return songs('hist', await api.history(limit: 100));
+        case 'playlists':
+          return [for (final p in await api.playlists()) folder('pl:${p.id}', p.name, sub: '${p.count} songs')];
+      }
+      if (parent.startsWith('pl:')) {
+        final id = int.parse(parent.substring(3));
+        return songs('pl:$id', await api.playlistSongs(id: id));
+      }
+    } catch (_) {}
+    return const [];
+  }
+
+  /// Plays what was picked in the car: the song, then the rest of its list.
+  Future<void> _playFromId(String id) async {
+    if (id == 'smart') return smartShuffle();
+    final i = int.tryParse(id.substring(id.lastIndexOf(':') + 1)) ?? 0;
+    final kind = id.substring(0, id.lastIndexOf(':'));
+    switch (kind) {
+      case 'liked':
+        final l = await api.likedSongs();
+        if (i < l.length) await playList(l.sublist(i), from: (kind: 'liked', id: '', title: 'Liked Songs'));
+      case 'dl':
+        final l = (await api.downloads()).map((d) => d.song).toList();
+        if (i < l.length) await playList(l.sublist(i), from: (kind: 'downloads', id: '', title: 'Downloaded'));
+      case 'hist':
+        final l = await api.history(limit: 100);
+        if (i < l.length) await playList(l.sublist(i), from: (kind: 'history', id: '', title: 'Recently Played'));
+      default:
+        if (kind.startsWith('pl:')) {
+          final pid = int.parse(kind.substring(3));
+          final l = await api.playlistSongs(id: pid);
+          final name = (await api.playlists()).where((p) => p.id == pid).firstOrNull?.name ?? 'Playlist';
+          if (i < l.length) await playList(l.sublist(i), from: (kind: 'playlist', id: '$pid', title: name));
+        }
+    }
+  }
+
+  // --- listening together ---
+
+  /// Set while you're a guest in a party: play, pause, skip and seek go to the
+  /// host (whose player acts and tells everyone) instead of acting here.
+  void Function(String action, int positionMs)? steer;
+
+  /// Set while you host a party: called after the song, play/pause or the
+  /// position changed, so the guests follow.
+  VoidCallback? onTransport;
+
+  /// Guest: do what the host's player is doing (without steering it back).
+  Future<void> followHost({required api.SongView? song, required bool playing, required Duration position, required String host}) async {
+    if (song == null) {
+      if (this.playing) await _player.pause();
+      return;
+    }
+    final received = DateTime.now();
+    if (current?.id != song.id || _loadedId != song.id) {
+      _mood = null;
+      await _start(song, 'party');
+      queue = await api.queueSetSource(kind: 'party', id: '', title: host);
+      notifyListeners();
+      // Loading took a moment: the host has moved on by that much.
+      final at = playing ? position + DateTime.now().difference(received) : position;
+      if (at > const Duration(seconds: 1)) await _player.seek(at);
+    } else if ((position - this.position.value).abs() > const Duration(milliseconds: 1500)) {
+      await _player.seek(position);
+    }
+    if (playing != this.playing) await (playing ? _player.play() : _player.pause());
+  }
+
   Future<void> togglePlay() async {
+    if (steer != null) return steer!(playing ? 'pause' : 'play', position.value.inMilliseconds);
     if (current == null) return;
     // After a restart the queue is back but nothing is loaded yet.
     if (_loadedId != current!.id) {
@@ -554,7 +670,9 @@ class PlayerController extends ChangeNotifier {
 
   Future<void> seekFraction(double f) => seekTo(Duration(milliseconds: (duration.value.inMilliseconds * f).round()));
   Future<void> seekTo(Duration d) async {
+    if (steer != null) return steer!('seek', d.inMilliseconds);
     await _player.seek(d);
+    onTransport?.call();
     // The notification extrapolates from the last position it was told about,
     // so tell it about seeks too or its bar drifts.
     position.value = d;
@@ -562,12 +680,14 @@ class PlayerController extends ChangeNotifier {
   }
 
   /// Skip. Several quick taps are folded into one jump to the last song.
-  Future<void> next() {
+  Future<void> next() async {
+    if (steer != null) return steer!('next', 0);
     _pendingSkips++;
     return _drain();
   }
 
   Future<void> previous() async {
+    if (steer != null) return steer!('previous', 0);
     if (position.value.inSeconds > 4) {
       await _player.seek(Duration.zero);
       return;
@@ -722,9 +842,23 @@ class PlayerController extends ChangeNotifier {
     _prefetch();
   }
 
-  Future<void> removeFromQueue(int i) async {
-    queue = await api.queueRemove(index: i);
+  /// [section]: "user", "context" or "auto".
+  Future<void> removeFromQueue(String section, int i) async {
+    queue = await api.queueRemove(section: section, index: i);
     notifyListeners();
+  }
+
+  /// Plays an upcoming song next; the others keep their order.
+  Future<void> promoteInQueue(String section, int i) async {
+    queue = await api.queuePromote(section: section, index: i);
+    notifyListeners();
+    _prefetch();
+  }
+
+  Future<void> moveInQueue(String section, int from, int to) async {
+    queue = await api.queueMove(section: section, from: from, to: to);
+    notifyListeners();
+    _prefetch();
   }
 
   Future<void> shuffleUpcoming() async {

@@ -12,6 +12,10 @@ import '../widgets/playlist_art.dart';
 import '../widgets/shelf.dart';
 import 'collection.dart';
 import 'import_screen.dart';
+import 'library.dart' show SongListScreen;
+import 'local_screen.dart';
+import 'now_playing.dart' show sourceLabel;
+import 'party_screen.dart';
 import 'playlist.dart';
 
 /// "Listen Now": what to play next, picked on this device.
@@ -144,6 +148,14 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             actions: [
               if (_refreshing) const Padding(padding: EdgeInsets.only(right: 8), child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))),
+              ListenableBuilder(
+                listenable: p.party,
+                builder: (context, _) => IconButton(
+                  tooltip: 'Listen together',
+                  icon: Icon(Icons.groups_rounded, color: p.party.inParty ? Theme.of(context).colorScheme.primary : null),
+                  onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => PartyScreen(player: p))),
+                ),
+              ),
               // Phones pull down to refresh; computers get a button.
               if (_desktop) IconButton(tooltip: 'New picks', icon: const Icon(Icons.refresh_rounded), onPressed: offline ? null : _forceRefresh),
             ],
@@ -162,6 +174,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           Padding(padding: const EdgeInsets.fromLTRB(16, 10, 16, 0), child: _heroRow(context)),
+          ListenableBuilder(listenable: p, builder: (context, _) => _playingFrom(context)),
           if (p.error != null) Padding(padding: const EdgeInsets.fromLTRB(16, 10, 16, 0), child: Text(p.error!, style: const TextStyle(color: Color(0xFFFF6B6B)))),
           if (f == null)
             const Padding(padding: EdgeInsets.all(40), child: Center(child: CircularProgressIndicator()))
@@ -180,7 +193,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   itemCount: _moods.length,
-                  itemBuilder: (_, i) => _MoodTile(keyName: _moods[i].$1, label: _moods[i].$2, onTap: () => p.smartShuffle(genre: _moods[i].$1)),
+                  itemBuilder: (_, i) => _MoodTile(keyName: _moods[i].$1, label: _moods[i].$2, onTap: () => p.smartShuffle(genre: _moods[i].$1, label: _moods[i].$2)),
                 ),
               ),
             ],
@@ -226,6 +239,49 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  /// "Playing from Road trip": where the current music comes from; tap to open it.
+  Widget _playingFrom(BuildContext context) {
+    final src = p.queue.source;
+    final cur = p.current;
+    if (src == null || cur == null) return const SizedBox.shrink();
+    final accent = Theme.of(context).colorScheme.primary;
+    final tok = context.tok;
+    Widget? page;
+    switch (src.kind) {
+      case 'playlist':
+        final pl = _feed?.playlists.where((x) => '${x.id}' == src.id).firstOrNull;
+        if (pl != null) page = PlaylistScreen(player: p, playlist: pl);
+      case 'liked' || 'downloads' || 'history':
+        page = SongListScreen(player: p, kind: src.kind);
+      case 'local':
+        page = LocalScreen(player: p);
+      case 'album' || 'artist' || 'podcast':
+        page = CollectionScreen(player: p, info: api.CollectionView(id: src.id, title: src.title, subtitle: '', thumbnail: '', kind: src.kind));
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+      child: GlassCard(
+        padding: const EdgeInsets.all(10),
+        onTap: page == null ? null : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => page!)),
+        child: Row(children: [
+          Cover(url: cur.thumbnail, seed: cur.id, size: 44),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Icon(Icons.graphic_eq_rounded, size: 14, color: accent),
+                const SizedBox(width: 4),
+                Text('Playing from', style: TextStyle(color: tok.textDim, fontSize: 12.5)),
+              ]),
+              Text(sourceLabel(src), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w700, color: accent)),
+            ]),
+          ),
+          if (page != null) Icon(Icons.chevron_right_rounded, color: tok.textFaint),
+        ]),
       ),
     );
   }

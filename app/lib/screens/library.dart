@@ -80,13 +80,22 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ListenableBuilder(listenable: p, builder: (context, _) => _build(context));
+
+  /// The library row for what's playing now is highlighted ("Playing" + accent).
+  bool _playing(String kind, [String id = '']) {
+    final s = p.queue.source;
+    return p.current != null && s != null && s.kind == kind && (id.isEmpty || s.id == id);
+  }
+
+  Widget _build(BuildContext context) {
     final tok = context.tok;
     final accent = Theme.of(context).colorScheme.primary;
-    Widget row(IconData icon, String label, String? count, VoidCallback onTap) => Column(children: [
+    Widget row(IconData icon, String label, String? count, VoidCallback onTap, {bool on = false}) => Column(children: [
           ListTile(
-            leading: Icon(icon, color: accent),
-            title: Text(label, style: const TextStyle(fontSize: 18)),
+            leading: Icon(on ? Icons.graphic_eq_rounded : icon, color: accent),
+            title: Text(label, style: TextStyle(fontSize: 18, color: on ? accent : null, fontWeight: on ? FontWeight.w700 : null)),
+            subtitle: on ? Text('Playing', style: TextStyle(color: accent, fontSize: 12.5)) : null,
             trailing: Row(mainAxisSize: MainAxisSize.min, children: [
               if (count != null) Text(count, style: TextStyle(color: tok.textDim)),
               Icon(Icons.chevron_right_rounded, color: tok.textFaint),
@@ -97,12 +106,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
         ]);
     return ListView(padding: const EdgeInsets.only(bottom: 24), children: [
       PageTitle('Library', actions: [IconButton(tooltip: 'New playlist', icon: Icon(Icons.add_rounded, color: accent), onPressed: _newPlaylist)]),
-      row(Icons.favorite_rounded, 'Liked Songs', '$_liked', () => _push(SongListScreen(player: p, kind: 'liked'))),
-      row(Icons.arrow_circle_down_rounded, 'Downloaded', '$_downloads', () => _push(SongListScreen(player: p, kind: 'downloads'))),
-      row(Icons.folder_special_rounded, 'On This Device', null, () => _push(LocalScreen(player: p))),
+      row(Icons.favorite_rounded, 'Liked Songs', '$_liked', () => _push(SongListScreen(player: p, kind: 'liked')), on: _playing('liked')),
+      row(Icons.arrow_circle_down_rounded, 'Downloaded', '$_downloads', () => _push(SongListScreen(player: p, kind: 'downloads')), on: _playing('downloads')),
+      row(Icons.folder_special_rounded, 'On This Device', null, () => _push(LocalScreen(player: p)), on: _playing('local')),
       row(Icons.mic_external_on_rounded, 'Artists', '$_artists', () => _push(SavedScreen(player: p, kind: 'artist'))),
       row(Icons.album_rounded, 'Albums & Podcasts', '$_albums', () => _push(SavedScreen(player: p, kind: 'other'))),
-      row(Icons.history_rounded, 'Recently Played', null, () => _push(SongListScreen(player: p, kind: 'history'))),
+      row(Icons.history_rounded, 'Recently Played', null, () => _push(SongListScreen(player: p, kind: 'history')), on: _playing('history')),
       row(Icons.swap_horiz_rounded, 'Bring Your Music Over', null, () => _push(ImportScreen(player: p))),
       SectionHeader(
         'Playlists',
@@ -116,7 +125,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       if (_playlists.isEmpty)
         Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Text('Make a playlist, or bring one over from another app.', style: TextStyle(color: tok.textDim)))
       else
-        for (final pl in _shownPlaylists) _PlaylistRow(pl: pl, onTap: () => _push(PlaylistScreen(player: p, playlist: pl)), onPin: () => _pin(pl)),
+        for (final pl in _shownPlaylists) _PlaylistRow(pl: pl, playing: _playing('playlist', '${pl.id}'), onTap: () => _push(PlaylistScreen(player: p, playlist: pl)), onPin: () => _pin(pl)),
     ]);
   }
 }
@@ -136,6 +145,9 @@ class SavedScreen extends StatefulWidget {
 class _SavedScreenState extends State<SavedScreen> {
   List<api.CollectionView>? _items;
 
+  /// "recent" or "name".
+  String _sort = 'recent';
+
   @override
   void initState() {
     super.initState();
@@ -151,15 +163,37 @@ class _SavedScreenState extends State<SavedScreen> {
 
   Future<void> _load() async {
     final v = await api.savedCollections(kind: widget.kind);
-    if (mounted) setState(() => _items = v);
+    final sort = await api.settingGet(key: 'sort:saved:${widget.kind}');
+    if (mounted) setState(() { _items = v; _sort = sort ?? _sort; });
   }
 
   @override
   Widget build(BuildContext context) {
     final artists = widget.kind == 'artist';
-    final items = _items;
+    final items = _items == null
+        ? null
+        : _sort == 'name'
+            ? ([..._items!]..sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase())))
+            : _items;
     return Scaffold(
-      appBar: AppBar(title: Text(artists ? 'Artists' : 'Albums & Podcasts')),
+      appBar: AppBar(
+        title: Text(artists ? 'Artists' : 'Albums & Podcasts'),
+        actions: [
+          PopupMenuButton<String>(
+            tooltip: 'Sort',
+            icon: const Icon(Icons.sort_rounded),
+            initialValue: _sort,
+            onSelected: (v) {
+              setState(() => _sort = v);
+              api.settingSet(key: 'sort:saved:${widget.kind}', value: v);
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'recent', child: Text('Recently added')),
+              PopupMenuItem(value: 'name', child: Text('Name')),
+            ],
+          ),
+        ],
+      ),
       body: items == null
           ? const Center(child: CircularProgressIndicator())
           : items.isEmpty
@@ -196,8 +230,9 @@ List<api.SongView> sortSongs(List<api.SongView> l, String by) {
 /// One playlist in the library: cover mosaic, name, count. Pinned ones sit on
 /// top; pin from the menu or with a long press.
 class _PlaylistRow extends StatelessWidget {
-  const _PlaylistRow({required this.pl, required this.onTap, required this.onPin});
+  const _PlaylistRow({required this.pl, required this.onTap, required this.onPin, this.playing = false});
   final api.PlaylistView pl;
+  final bool playing;
   final VoidCallback onTap;
   final VoidCallback onPin;
 
@@ -215,9 +250,10 @@ class _PlaylistRow extends StatelessWidget {
           const SizedBox(width: 14),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(pl.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+              Text(pl.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 16, fontWeight: playing ? FontWeight.w700 : FontWeight.w500, color: playing ? accent : null)),
               const SizedBox(height: 2),
               Row(children: [
+                if (playing) ...[Icon(Icons.graphic_eq_rounded, size: 14, color: accent), const SizedBox(width: 4), Text('Playing · ', style: TextStyle(color: accent, fontSize: 13))],
                 if (pl.pinned) ...[Icon(Icons.push_pin_rounded, size: 13, color: accent), const SizedBox(width: 4)],
                 Text('Playlist · ${pl.count} ${pl.count == 1 ? 'song' : 'songs'}', style: TextStyle(color: tok.textDim, fontSize: 13)),
               ]),
@@ -264,6 +300,15 @@ class _SongListScreenState extends State<SongListScreen> {
   /// "recent", "title" or "artist" (remembered per list).
   String _sort = 'recent';
 
+  /// Text typed in the filter box.
+  String _filter = '';
+
+  List<api.SongView> _filtered(List<api.SongView> l) {
+    final q = _filter.toLowerCase();
+    if (q.isEmpty) return l;
+    return l.where((s) => s.title.toLowerCase().contains(q) || s.artist.toLowerCase().contains(q) || (s.album ?? '').toLowerCase().contains(q)).toList();
+  }
+
   List<api.SongView> _sorted(List<api.SongView> l) => sortSongs(l, _sort);
 
   PlayerController get p => widget.player;
@@ -309,9 +354,15 @@ class _SongListScreenState extends State<SongListScreen> {
     if (mounted) setState(() { _songs = s; _notes = notes; });
   }
 
+  From get _from => switch (widget.kind) {
+        'liked' => (kind: 'liked', id: '', title: 'Liked Songs'),
+        'downloads' => (kind: 'downloads', id: '', title: 'Downloaded'),
+        _ => (kind: 'history', id: '', title: 'Recently Played'),
+      };
+
   List<Widget> _tiles(List<api.SongView> songs) => [
         for (var i = 0; i < songs.length; i++) ...[
-          SongTile(song: songs[i], player: p, subtitle: _notes[songs[i].id], onPlay: () => p.playList(songs.sublist(i))),
+          SongTile(song: songs[i], player: p, subtitle: _notes[songs[i].id], onPlay: () => p.playList(songs.sublist(i), from: _from)),
           const Divider(indent: 78),
         ],
       ];
@@ -330,8 +381,8 @@ class _SongListScreenState extends State<SongListScreen> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
             child: Row(children: [
-              TextButton.icon(onPressed: () => p.playList(got), icon: const Icon(Icons.play_arrow_rounded), label: const Text('Play')),
-              TextButton.icon(onPressed: () => p.playList(got, shuffle: true), icon: const Icon(Icons.shuffle_rounded), label: const Text('Shuffle')),
+              TextButton.icon(onPressed: () => p.playList(got, from: (kind: 'downloads', id: '', title: 'Downloaded · ${pl.name}')), icon: const Icon(Icons.play_arrow_rounded), label: const Text('Play')),
+              TextButton.icon(onPressed: () => p.playList(got, shuffle: true, from: (kind: 'downloads', id: '', title: 'Downloaded · ${pl.name}')), icon: const Icon(Icons.shuffle_rounded), label: const Text('Shuffle')),
             ]),
           ),
           ..._tiles(got),
@@ -343,7 +394,7 @@ class _SongListScreenState extends State<SongListScreen> {
   @override
   Widget build(BuildContext context) {
     final title = switch (widget.kind) { 'liked' => 'Liked Songs', 'downloads' => 'Downloaded', _ => 'Recently Played' };
-    final songs = _songs == null ? null : _sorted(_songs!);
+    final songs = _songs == null ? null : _sorted(_filtered(_songs!));
     return Scaffold(
       appBar: AppBar(
         title: Text(title),
@@ -379,7 +430,7 @@ class _SongListScreenState extends State<SongListScreen> {
       ),
       body: songs == null
           ? const Center(child: CircularProgressIndicator())
-          : songs.isEmpty
+          : _songs!.isEmpty
               ? EmptyState(
                   icon: Icons.music_note_rounded,
                   text: switch (widget.kind) {
@@ -389,15 +440,23 @@ class _SongListScreenState extends State<SongListScreen> {
                   },
                 )
               : ListView(padding: const EdgeInsets.only(bottom: 24), children: [
+                  if (widget.kind != 'history')
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      child: TextField(
+                        decoration: InputDecoration(hintText: 'Filter ${_songs!.length} songs', prefixIcon: const Icon(Icons.filter_list_rounded), isDense: true),
+                        onChanged: (v) => setState(() => _filter = v.trim()),
+                      ),
+                    ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                     child: Row(children: [
-                      Expanded(child: FilledButton.icon(onPressed: () => p.playList(songs), icon: const Icon(Icons.play_arrow_rounded), label: const Text('Play'))),
+                      Expanded(child: FilledButton.icon(onPressed: () => p.playList(songs, from: _from), icon: const Icon(Icons.play_arrow_rounded), label: const Text('Play'))),
                       const SizedBox(width: 12),
-                      Expanded(child: OutlinedButton.icon(onPressed: () => p.playList(songs, shuffle: true), icon: const Icon(Icons.shuffle_rounded), label: const Text('Shuffle'))),
+                      Expanded(child: OutlinedButton.icon(onPressed: () => p.playList(songs, shuffle: true, from: _from), icon: const Icon(Icons.shuffle_rounded), label: const Text('Shuffle'))),
                     ]),
                   ),
-                  if (widget.kind == 'downloads' && _groups.isNotEmpty) ...[
+                  if (widget.kind == 'downloads' && _groups.isNotEmpty && _filter.isEmpty) ...[
                     // Downloaded playlists first, then songs downloaded on their own.
                     for (final (pl, got) in _groups) _group(pl, _sorted(got)),
                     if (_loose.isNotEmpty) ...[

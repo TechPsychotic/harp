@@ -58,6 +58,7 @@ if [ "$APK" = 1 ]; then
   unzip -l "$F" | grep -q "lib/arm64-v8a/libmpv_audio_kit.so" && ok "APK: audio engine (mpv_audio_kit) bundled" || fail "APK: audio engine library missing"
   unzip -l "$F" | grep -q "lib/arm64-v8a/libmpv.so" && fail "APK: the old player library (libmpv.so) is still inside" || ok "APK: old player library gone"
   "$AAPT2" dump xmltree --file AndroidManifest.xml "$F" | grep -q "MpvMediaSessionService" && fail "APK: the engine's own media service is still declared" || ok "APK: one media service (audio_service)"
+  "$AAPT2" dump xmltree --file AndroidManifest.xml "$F" | grep -q "com.google.android.gms.car.application" && ok "APK: Android Auto declared" || fail "APK: Android Auto declaration missing"
   if [ "$INSTALL" = 1 ]; then
     mkdir -p "$HOME/Downloads/Harp" && cp "$F" "$HOME/Downloads/Harp/app-release.apk" && ok "APK copied to ~/Downloads/Harp/app-release.apk"
   fi

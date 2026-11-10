@@ -69,7 +69,7 @@ the idea and the code. `UPDATES.md` is the dated log of changes; this file is th
 
 **Problems (23): 5 fixed and checked, 17 fixed but waiting for your confirmation, 1 partly fixed.**
 
-### 1b. Features you asked for (49)
+### 1b. Features you asked for (53)
 
 | # | Feature | Status | Notes |
 |---|---|---|---|
@@ -127,6 +127,11 @@ the idea and the code. `UPDATES.md` is the dated log of changes; this file is th
 | B27 | The player is always dark, even in light mode | 🟡 | It follows the app's theme now (pale cover wash, dark text in light mode). |
 | B28 | A pill bar on the player that did nothing | ✅ | Removed. |
 | B29 | Moods / Smart Shuffle: "User-Agent must not contain comma" | ✅ | The new engine refuses commas in per-song headers; the User-Agent now goes through mpv's `user-agent` option, browser-only headers are dropped. Reproduced and fixed with a real stream. |
+| B30 | Starting a mood after a playlist kept the playlist queued | ✅ | The queue now separates your own queued songs from the list being played; something new replaces the list. 🧪 |
+| F50 | Show where the music is playing from (player, Home, Library) | 🟡 | "Playing from" on the player and Home (tap to open), highlighted row in the Library. |
+| F51 | Queue gestures: swipe right play next, left remove, hold to drag | 🟡 | All three, in every part of the queue; the − button stays. |
+| F52 | Audio enhancements make little difference | ✅ | Rebuilt and measured: Bass +6.3 dB on the lows (was +0.4), Wide +10.9 dB (was +6.3)… |
+| F53 | Listen together with iroh (M7) | 🟡 | Built and checked over the internet; needs two of your devices to try for real. |
 | F33 | The same for Amazon Music | ⛔ | No public API for listeners (Amazon's web API is invite-only), and shared playlist pages are a JavaScript app with no songs in the page (checked). Workarounds: paste the list, or a CSV from a converter such as TuneMyMusic (already imports). |
 
 **Features (48): 29 done and checked, 15 done but waiting for your confirmation, 3 in progress,
@@ -233,9 +238,10 @@ Goal: lyrics as good as Apple Music's: word-by-word where they exist, line-synce
   page) and **save albums, playlists and podcasts** (Library › Artists, Albums & Podcasts);
   **New Releases** on Listen Now from the artists you follow (this year and last, newest first,
   checked live; 🧪 on a saved artist page).
-- ◐ Sort: Liked and Downloaded (recent, title, artist), Library playlists (recent, name; pinned
-  stay on top), remembered. Playlist covers are automatic mosaics. Still to do: filter, folders,
-  custom covers.
+- ◐ Sort everywhere: Liked and Downloaded (recent, title, artist, plus a filter box), Library
+  playlists (recent, name; pinned on top), playlist pages (custom order, title, artist), Artists and
+  Albums & Podcasts (recent, name), On This Device (artist, title, filter). Remembered. Still to
+  do: playlist folders, custom covers.
 - ☑ Backup and restore of the whole library to one file (Settings › Backup; 🧪). Restoring
   **adds** the backup to what's here (likes, playlists by name, history, follows); nothing is lost,
   and restoring twice adds nothing more.
@@ -244,15 +250,18 @@ Goal: lyrics as good as Apple Music's: word-by-word where they exist, line-synce
   asks for the music permission (needs the phone to confirm).
 - ☑ Browse (Search tab): **Charts** for your country (from the device's region) and every
   YouTube Music **mood and genre** as a tile, each opening rows of playlists. Checked live; 🧪.
-- ◐ A smarter taste model: **time decay** (an artist's score halves every 60 days) and
-  **time of day** (artists you play around this hour get a nudge) are in, 🧪. Still to do:
-  song-level signals, wider starter genres, recommendations from downloads when offline.
+- ◐ A smarter taste model: **time decay** (an artist's score halves every 60 days), **time of
+  day** (artists you play around this hour get a nudge) and **song-level skips** (an early skip
+  keeps a song out of your picks for 30 days) are in, 🧪. Still to do: wider starter genres,
+  recommendations from downloads when offline.
 - **Done when:** the Library tab can replace another music app's library for you.
 
 ### M6 · Platform integration
-- ☐ Android: Android Auto browse tree (the media service is there already), home-screen widget,
-  Now Bar / lock-screen check, Wear OS controls.
-- ☐ Desktop: tray icon, global media keys, a mini-player window, Discord rich presence.
+- ◐ Android: **Android Auto browse tree ✅ built** (Smart Shuffle, Liked, Playlists, Downloaded,
+  Recently Played; needs a car to confirm). Still to do: home-screen widget, Now Bar check, Wear OS.
+- ◐ Desktop: **mini-player window ✅** (always-on-top where the desktop allows it; not on GNOME
+  Wayland); media keys and desktop media controls already work through MPRIS. Not done: a tray icon
+  (invisible on GNOME without an extension) and Discord status (needs a Discord app id: a key).
 - ☐ Casting (Chromecast / DLNA).
 - ☐ Windows and macOS: run them for real (built, never run).
 
@@ -260,6 +269,12 @@ Goal: lyrics as good as Apple Music's: word-by-word where they exist, line-synce
 - ☐ Peer-to-peer library sync between your own devices on the same network (no servers).
 - ☐ Share a song or playlist as a link / card / QR code.
 - ☐ Listening rooms with a shared queue.
+
+- ◐ **Listen together ✅ built** (`crates/harp-party`, iroh, like Warptron's party mode): host
+  and share a link, guests join; one player is the truth, the rest follow (position corrected by
+  half the round trip, heartbeat every 4 s); everyone can play, pause, skip, seek and suggest songs.
+  Checked over the internet (in sync within 436 ms) and with local tests. Still to do: library sync
+  between your own devices.
 
 ### M8 · Release
 - ☐ A real signing key for APKs; versioning and an in-app update check.

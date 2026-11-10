@@ -4,6 +4,7 @@
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
 import 'api/engine.dart';
+import 'api/party.dart';
 
 import 'dart:async';
 import 'dart:convert';
@@ -20,6 +21,14 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     required super.generalizedFrbRustBinding,
     required super.portManager,
   });
+
+  @protected
+  AnyhowException dco_decode_AnyhowException(dynamic raw);
+
+  @protected
+  RustStreamSink<PartyEventView> dco_decode_StreamSink_party_event_view_Sse(
+    dynamic raw,
+  );
 
   @protected
   String dco_decode_String(dynamic raw);
@@ -40,10 +49,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   LyricsView dco_decode_box_autoadd_lyrics_view(dynamic raw);
 
   @protected
+  PartyStateView dco_decode_box_autoadd_party_state_view(dynamic raw);
+
+  @protected
   Pick dco_decode_box_autoadd_pick(dynamic raw);
 
   @protected
   SongView dco_decode_box_autoadd_song_view(dynamic raw);
+
+  @protected
+  SourceView dco_decode_box_autoadd_source_view(dynamic raw);
 
   @protected
   int dco_decode_box_autoadd_u_32(dynamic raw);
@@ -157,16 +172,28 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   LyricsView? dco_decode_opt_box_autoadd_lyrics_view(dynamic raw);
 
   @protected
+  PartyStateView? dco_decode_opt_box_autoadd_party_state_view(dynamic raw);
+
+  @protected
   Pick? dco_decode_opt_box_autoadd_pick(dynamic raw);
 
   @protected
   SongView? dco_decode_opt_box_autoadd_song_view(dynamic raw);
 
   @protected
+  SourceView? dco_decode_opt_box_autoadd_source_view(dynamic raw);
+
+  @protected
   int? dco_decode_opt_box_autoadd_u_32(dynamic raw);
 
   @protected
   BigInt? dco_decode_opt_box_autoadd_u_64(dynamic raw);
+
+  @protected
+  PartyEventView dco_decode_party_event_view(dynamic raw);
+
+  @protected
+  PartyStateView dco_decode_party_state_view(dynamic raw);
 
   @protected
   Pick dco_decode_pick(dynamic raw);
@@ -190,6 +217,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   SongView dco_decode_song_view(dynamic raw);
 
   @protected
+  SourceView dco_decode_source_view(dynamic raw);
+
+  @protected
   SpotifyPlaylistView dco_decode_spotify_playlist_view(dynamic raw);
 
   @protected
@@ -209,6 +239,14 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void dco_decode_unit(dynamic raw);
+
+  @protected
+  AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer);
+
+  @protected
+  RustStreamSink<PartyEventView> sse_decode_StreamSink_party_event_view_Sse(
+    SseDeserializer deserializer,
+  );
 
   @protected
   String sse_decode_String(SseDeserializer deserializer);
@@ -235,10 +273,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   LyricsView sse_decode_box_autoadd_lyrics_view(SseDeserializer deserializer);
 
   @protected
+  PartyStateView sse_decode_box_autoadd_party_state_view(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   Pick sse_decode_box_autoadd_pick(SseDeserializer deserializer);
 
   @protected
   SongView sse_decode_box_autoadd_song_view(SseDeserializer deserializer);
+
+  @protected
+  SourceView sse_decode_box_autoadd_source_view(SseDeserializer deserializer);
 
   @protected
   int sse_decode_box_autoadd_u_32(SseDeserializer deserializer);
@@ -380,16 +426,32 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  PartyStateView? sse_decode_opt_box_autoadd_party_state_view(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   Pick? sse_decode_opt_box_autoadd_pick(SseDeserializer deserializer);
 
   @protected
   SongView? sse_decode_opt_box_autoadd_song_view(SseDeserializer deserializer);
 
   @protected
+  SourceView? sse_decode_opt_box_autoadd_source_view(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   int? sse_decode_opt_box_autoadd_u_32(SseDeserializer deserializer);
 
   @protected
   BigInt? sse_decode_opt_box_autoadd_u_64(SseDeserializer deserializer);
+
+  @protected
+  PartyEventView sse_decode_party_event_view(SseDeserializer deserializer);
+
+  @protected
+  PartyStateView sse_decode_party_state_view(SseDeserializer deserializer);
 
   @protected
   Pick sse_decode_pick(SseDeserializer deserializer);
@@ -413,6 +475,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   SongView sse_decode_song_view(SseDeserializer deserializer);
+
+  @protected
+  SourceView sse_decode_source_view(SseDeserializer deserializer);
 
   @protected
   SpotifyPlaylistView sse_decode_spotify_playlist_view(
@@ -439,6 +504,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   int sse_decode_i_32(SseDeserializer deserializer);
+
+  @protected
+  void sse_encode_AnyhowException(
+    AnyhowException self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_StreamSink_party_event_view_Sse(
+    RustStreamSink<PartyEventView> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_String(String self, SseSerializer serializer);
@@ -471,11 +548,23 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_box_autoadd_party_state_view(
+    PartyStateView self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_pick(Pick self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_song_view(
     SongView self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_source_view(
+    SourceView self,
     SseSerializer serializer,
   );
 
@@ -654,6 +743,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_opt_box_autoadd_party_state_view(
+    PartyStateView? self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_box_autoadd_pick(Pick? self, SseSerializer serializer);
 
   @protected
@@ -663,10 +758,28 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_opt_box_autoadd_source_view(
+    SourceView? self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_box_autoadd_u_32(int? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_u_64(BigInt? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_party_event_view(
+    PartyEventView self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_party_state_view(
+    PartyStateView self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_pick(Pick self, SseSerializer serializer);
@@ -691,6 +804,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_song_view(SongView self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_source_view(SourceView self, SseSerializer serializer);
 
   @protected
   void sse_encode_spotify_playlist_view(

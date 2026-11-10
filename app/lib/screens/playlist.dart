@@ -6,6 +6,7 @@ import '../theme/glass.dart';
 import '../widgets/cover.dart';
 import '../widgets/song_actions.dart';
 import '../widgets/song_tile.dart';
+import 'library.dart' show sortSongs;
 
 /// One of your playlists: play, shuffle, reorder, export.
 class PlaylistScreen extends StatefulWidget {
@@ -19,6 +20,9 @@ class PlaylistScreen extends StatefulWidget {
 
 class _PlaylistScreenState extends State<PlaylistScreen> {
   List<api.SongView> _songs = [];
+
+  /// "custom" (your order: drag to change it), "title" or "artist". Remembered per playlist.
+  String _sort = 'custom';
   late String _name = widget.playlist.name;
   late bool _autoDl = widget.playlist.autoDownload;
   bool _loaded = false;
@@ -41,6 +45,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
   Future<void> _load() async {
     final s = await api.playlistSongs(id: id);
+    _sort = await api.settingGet(key: 'sort:pl:$id') ?? _sort;
     ThumbCache.precache(s.map((x) => x.thumbnail));
     final me = (await api.playlists()).where((x) => x.id == id).firstOrNull;
     if (mounted) setState(() { _songs = s; _loaded = true; _autoDl = me?.autoDownload ?? _autoDl; });
@@ -101,6 +106,20 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       appBar: AppBar(
         actions: [
           PopupMenuButton<String>(
+            tooltip: 'Sort',
+            icon: const Icon(Icons.sort_rounded),
+            initialValue: _sort,
+            onSelected: (v) {
+              setState(() => _sort = v);
+              api.settingSet(key: 'sort:pl:$id', value: v);
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'custom', child: Text('Custom order (drag to change)')),
+              PopupMenuItem(value: 'title', child: Text('Title')),
+              PopupMenuItem(value: 'artist', child: Text('Artist')),
+            ],
+          ),
+          PopupMenuButton<String>(
             icon: const Icon(Icons.more_horiz_rounded),
             onSelected: _menu,
             itemBuilder: (_) => [
@@ -140,6 +159,26 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
               if (_songs.isEmpty)
                 const SliverFillRemaining(hasScrollBody: false, child: EmptyState(icon: Icons.playlist_add_rounded, text: 'Empty. Long-press any song › Add to Playlist.'))
               else
+                if (_sort != 'custom')
+                  // Sorted: a plain list (dragging only makes sense in your own order).
+                  SliverList.builder(
+                    itemCount: _songs.length,
+                    itemBuilder: (_, i) {
+                      final shown = sortSongs(_songs, _sort);
+                      final s = shown[i];
+                      return SongTile(
+                        song: s,
+                        player: p,
+                        onPlay: () => p.playList(shown.sublist(i), from: (kind: 'playlist', id: '$id', title: _name)),
+                        onRemoveFromList: () async {
+                          await api.playlistRemove(id: id, index: _songs.indexWhere((x) => x.id == s.id));
+                          p.libraryRev.value++;
+                        },
+                        removeLabel: 'Remove from Playlist',
+                      );
+                    },
+                  )
+                else
                 SliverReorderableList(
                   itemCount: _songs.length,
                   onReorderItem: (from, to) async {
@@ -152,7 +191,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                     child: SongTile(
                       song: _songs[i],
                       player: p,
-                      onPlay: () => p.playList(_songs.sublist(i)),
+                      onPlay: () => p.playList(_songs.sublist(i), from: (kind: 'playlist', id: '$id', title: _name)),
                       onRemoveFromList: () async {
                         await api.playlistRemove(id: id, index: i);
                         p.libraryRev.value++;

@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import '../desktop/mini_window.dart';
 import '../player/controller.dart';
 import '../src/rust/api/engine.dart' as api;
 import '../theme/glass.dart';
@@ -116,9 +117,26 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
           ),
           );
     final controls = _Controls(player: player, song: s, lyricsOn: _lyrics, onLyrics: () => setState(() => _lyrics = !_lyrics), onArtist: () => _openArtist(s));
+    final src = player.queue.source;
     final top = Row(children: [
       IconButton(icon: Icon(Icons.keyboard_arrow_down_rounded, size: 32, color: fg), onPressed: () => Navigator.of(context).pop()),
-      const Spacer(),
+      Expanded(
+        child: src == null
+            ? const SizedBox.shrink()
+            : Column(children: [
+                Text('PLAYING FROM', style: TextStyle(fontSize: 11, letterSpacing: 1.2, fontWeight: FontWeight.w600, color: fg.withValues(alpha: 0.6))),
+                Text(sourceLabel(src), maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: fg)),
+              ]),
+      ),
+      if (MiniWindow.supported)
+        IconButton(
+          tooltip: 'Mini player',
+          icon: Icon(Icons.picture_in_picture_alt_rounded, color: fg),
+          onPressed: () {
+            Navigator.of(context).pop();
+            MiniWindow.enter();
+          },
+        ),
       IconButton(icon: Icon(Icons.more_horiz_rounded, color: fg), onPressed: () => showSongSheet(context, player, s)),
     ]);
     if (wide) {
@@ -329,7 +347,10 @@ class _Controls extends StatelessWidget {
   }
 }
 
-/// The queue, with shuffle and repeat at the top. Tap a song to jump to it.
+/// The queue, with shuffle and repeat at the top, in three sections: songs you
+/// queued yourself, the rest of what's playing ("Next from: Road trip") and
+/// autoplay. Tap a song to jump to it; swipe right to play it next (nothing
+/// else moves), swipe left (or −) to remove it; hold and drag to reorder.
 void showQueueSheet(BuildContext context, PlayerController player) {
   showModalBottomSheet(
     context: context,
@@ -346,12 +367,17 @@ void showQueueSheet(BuildContext context, PlayerController player) {
           final q = player.queue;
           final tok = context.tok;
           final accent = Theme.of(context).colorScheme.primary;
+          final empty = q.user.isEmpty && q.context.isEmpty && q.autoplay.isEmpty;
           return ListView(controller: scroll, padding: const EdgeInsets.only(bottom: 24), children: [
-            Center(child: Container(margin: const EdgeInsets.only(top: 8), width: 36, height: 5, decoration: BoxDecoration(color: tok.textFaint, borderRadius: BorderRadius.circular(3)))),
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
+              padding: const EdgeInsets.fromLTRB(16, 16, 8, 0),
               child: Row(children: [
-                const Expanded(child: Text('Playing Next', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700))),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Text('Playing Next', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+                    if (q.source != null) Text('Playing from ${sourceLabel(q.source!)}', style: TextStyle(color: tok.textDim, fontSize: 13)),
+                  ]),
+                ),
                 IconButton(tooltip: 'Shuffle', icon: Icon(Icons.shuffle_rounded, color: accent), onPressed: player.shuffleUpcoming),
                 IconButton(
                   tooltip: 'Repeat: ${q.repeat}',
@@ -360,24 +386,104 @@ void showQueueSheet(BuildContext context, PlayerController player) {
                 ),
               ]),
             ),
-            if (q.user.isEmpty && q.autoplay.isEmpty) const Padding(padding: EdgeInsets.all(24), child: EmptyState(icon: Icons.queue_music_rounded, text: 'Nothing queued')),
-            for (var i = 0; i < q.user.length; i++)
-              SongTile(
-                song: q.user[i],
-                player: player,
-                onPlay: () => player.jumpTo('user', i),
-                trailing: IconButton(tooltip: 'Remove', icon: Icon(Icons.remove_circle_outline_rounded, color: tok.textDim), onPressed: () => player.removeFromQueue(i)),
+            if (!empty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 2, 16, 4),
+                child: Text('Swipe right: play next · swipe left: remove · hold and drag: move', style: TextStyle(color: tok.textFaint, fontSize: 12)),
               ),
+            if (empty) const Padding(padding: EdgeInsets.all(24), child: EmptyState(icon: Icons.queue_music_rounded, text: 'Nothing queued')),
+            if (q.user.isNotEmpty) ...[
+              const SectionHeader('Next in Queue'),
+              _QueueSection(player: player, section: 'user', songs: q.user),
+            ],
+            if (q.context.isNotEmpty) ...[
+              SectionHeader(q.source != null ? 'Next from: ${q.source!.title}' : 'Up Next'),
+              _QueueSection(player: player, section: 'context', songs: q.context),
+            ],
             if (q.autoplay.isNotEmpty) ...[
               const SectionHeader('Autoplay', subtitle: 'Picked from your taste'),
-              for (var i = 0; i < q.autoplay.length; i++)
-                SongTile(song: q.autoplay[i], player: player, onPlay: () => player.jumpTo('auto', i), trailing: const SizedBox(width: 8)),
+              _QueueSection(player: player, section: 'auto', songs: q.autoplay),
             ],
           ]);
         },
       ),
     ),
   );
+}
+
+/// "Playlist · Road trip", "Mood · Chill", "Liked Songs"…
+String sourceLabel(api.SourceView s) => switch (s.kind) {
+      'playlist' => 'Playlist · ${s.title}',
+      'album' => 'Album · ${s.title}',
+      'artist' => 'Artist · ${s.title}',
+      'podcast' => 'Podcast · ${s.title}',
+      'mood' => 'Mood · ${s.title}',
+      'radio' => s.title,
+      'smart' => 'Smart Shuffle',
+      'party' => 'Listening together · ${s.title}',
+      _ => s.title,
+    };
+
+/// One section of the queue: swipe, remove and drag to reorder.
+class _QueueSection extends StatelessWidget {
+  const _QueueSection({required this.player, required this.section, required this.songs});
+  final PlayerController player;
+  final String section;
+  final List<api.SongView> songs;
+
+  @override
+  Widget build(BuildContext context) {
+    final tok = context.tok;
+    Widget swipeBg(Color c, IconData icon, String label, Alignment a) => Container(
+          color: c,
+          alignment: a,
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, color: Colors.white),
+            const SizedBox(width: 8),
+            Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+          ]),
+        );
+    return ReorderableListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      buildDefaultDragHandles: false,
+      itemCount: songs.length,
+      onReorderItem: (from, to) => player.moveInQueue(section, from, to),
+      itemBuilder: (context, i) {
+        final song = songs[i];
+        return ReorderableDelayedDragStartListener(
+          key: ValueKey('$section-$i-${song.id}'),
+          index: i,
+          child: Dismissible(
+            key: ValueKey('d-$section-$i-${song.id}'),
+            background: swipeBg(const Color(0xFF2E9E5B), Icons.playlist_play_rounded, 'Play next', Alignment.centerLeft),
+            secondaryBackground: swipeBg(const Color(0xFFD9443B), Icons.delete_outline_rounded, 'Remove', Alignment.centerRight),
+            // Act, then let the row spring back: the list itself updates from the queue.
+            confirmDismiss: (dir) async {
+              if (dir == DismissDirection.startToEnd) {
+                if (section == 'user' && i == 0) return false; // already next
+                await player.promoteInQueue(section, i);
+              } else {
+                await player.removeFromQueue(section, i);
+              }
+              return false;
+            },
+            child: SongTile(
+              song: song,
+              player: player,
+              onPlay: () => player.jumpTo(section, i),
+              trailing: IconButton(
+                tooltip: 'Remove',
+                icon: Icon(Icons.remove_circle_outline_rounded, color: tok.textDim),
+                onPressed: () => player.removeFromQueue(section, i),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
 }
 
 /// Sleep timer: pause after a while, or at the end of this song.

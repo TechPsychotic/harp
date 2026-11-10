@@ -16,6 +16,9 @@ use crate::taste::{ArtistScore, Store};
 use std::collections::{HashMap, HashSet};
 
 pub const RECENT_WINDOW: usize = 50;
+
+/// How long an early skip keeps a song out of your picks.
+pub const SKIP_MEMORY_DAYS: i64 = 30;
 pub const COLD_INJECT_RATE: f64 = 0.20;
 const SEARCH_SEED_WINDOW: usize = 10;
 
@@ -253,6 +256,8 @@ fn pick_n(
     rng: &mut Rng,
 ) -> Result<Vec<Recommendation>> {
     let mut avoid: HashSet<String> = store.recent_ids(RECENT_WINDOW)?.into_iter().collect();
+    // Songs you skipped early lately stay out of your picks for a month.
+    avoid.extend(store.recently_skipped(SKIP_MEMORY_DAYS).unwrap_or_default());
     avoid.extend(req.exclude.iter().cloned());
     let fresh: Vec<&Song> = g.candidates.iter().filter(|c| !avoid.contains(&c.id)).collect();
     let pool: Vec<&Song> = if fresh.is_empty() { g.candidates.iter().collect() } else { fresh };

@@ -15,6 +15,17 @@ class HarpAudioHandler extends BaseAudioHandler with SeekHandler {
   Future<void> Function(Duration)? onSeek;
   Future<void> Function()? onStop;
 
+  /// Android Auto / media browsers: the library as folders, and playing from it.
+  Future<List<MediaItem>> Function(String parentId)? onBrowse;
+  Future<void> Function(String mediaId)? onPlayFromId;
+
+  @override
+  Future<List<MediaItem>> getChildren(String parentMediaId, [Map<String, dynamic>? options]) async =>
+      await onBrowse?.call(parentMediaId) ?? const [];
+
+  @override
+  Future<void> playFromMediaId(String mediaId, [Map<String, dynamic>? extras]) async => onPlayFromId?.call(mediaId);
+
   @override
   Future<void> play() async => onPlay?.call();
   @override

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android Auto: Harp offers media (a browsable library and playback). -->
+<automotiveApp>
+    <uses name="media" />
+</automotiveApp>

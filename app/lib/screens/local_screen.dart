@@ -29,6 +29,7 @@ class _LocalScreenState extends State<LocalScreen> {
   String _filter = '';
 
   PlayerController get p => widget.player;
+  static const From _from = (kind: 'local', id: '', title: 'On This Device');
 
   @override
   void initState() {
@@ -129,13 +130,13 @@ class _LocalScreenState extends State<LocalScreen> {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
                   child: Row(children: [
-                    Expanded(child: FilledButton.icon(onPressed: songs.isEmpty ? null : () => p.playList(songs), icon: const Icon(Icons.play_arrow_rounded), label: const Text('Play'))),
+                    Expanded(child: FilledButton.icon(onPressed: songs.isEmpty ? null : () => p.playList(songs, from: _from), icon: const Icon(Icons.play_arrow_rounded), label: const Text('Play'))),
                     const SizedBox(width: 12),
-                    Expanded(child: OutlinedButton.icon(onPressed: songs.isEmpty ? null : () => p.playList(songs, shuffle: true), icon: const Icon(Icons.shuffle_rounded), label: const Text('Shuffle'))),
+                    Expanded(child: OutlinedButton.icon(onPressed: songs.isEmpty ? null : () => p.playList(songs, shuffle: true, from: _from), icon: const Icon(Icons.shuffle_rounded), label: const Text('Shuffle'))),
                   ]),
                 ),
                 for (var i = 0; i < songs.length; i++) ...[
-                  SongTile(song: songs[i], player: p, subtitle: [songs[i].artist, if (songs[i].album != null) songs[i].album!].join(' · '), onPlay: () => p.playList(songs.sublist(i))),
+                  SongTile(song: songs[i], player: p, subtitle: [songs[i].artist, if (songs[i].album != null) songs[i].album!].join(' · '), onPlay: () => p.playList(songs.sublist(i), from: _from)),
                   Divider(indent: 78, color: tok.separator),
                 ],
               ],
