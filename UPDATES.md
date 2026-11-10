@@ -26,6 +26,10 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
   travelling between them (together), a planet with a ring passing behind it (rhythm), and a small ball
   beside "Everything else". Each is measured and centred in its area. ✅ checked in Chrome, desktop and
   narrow, with real wheel scrolling.
+- **Website, headings over the spheres:** the Discover, Offline and Rhythm headings run larger and
+  wider so they cross their shapes (like the hero's), with the shapes pulled in beneath them; a soft
+  dark halo behind all headings keeps every letter readable over bright spheres. On tablets and phones
+  the headings wrap normally. ✅ checked in Chrome.
 - **HRTF (true 3D):** checked the engine's FFmpeg: it has no `sofalizer`, `headphone` or `afir`, so
   it needs our own engine build with libmysofa. Planned as the milestone after v0.9.0.
 

@@ -123,6 +123,14 @@ h2 { font-size: clamp(44px, 6.2vw, 96px); }
 .copy.center { grid-column: 1 / -1; text-align: center; justify-self: center; max-width: 900px; }
 .copy.center .lead { margin-inline: auto; }
 .copy.wide { grid-column: 1 / -1; }
+/* Headings that run over the spheres. A soft dark halo keeps every letter
+   readable against them (a bright sphere can't wash out a stroke). */
+h1, h2 { text-shadow: 0 0 2px rgba(8, 8, 12, .55), 0 4px 34px rgba(8, 8, 12, .7); }
+h1 em, h2 em { text-shadow: 0 0 2px rgba(8, 8, 12, .7), 0 0 26px rgba(8, 8, 12, .85), 0 0 60px color-mix(in srgb, var(--accent) 25%, transparent); }
+.copy.over { position: relative; z-index: 2; }
+.copy.over h2 { width: 155%; font-size: clamp(48px, 7.6vw, 124px); white-space: nowrap; }
+/* Pull the shape in under the heading. */
+#discover .stage, #rhythm .stage { margin-left: -16%; margin-right: 4%; }
 
 .cards { display: grid; gap: 12px; }
 .card {
@@ -193,6 +201,8 @@ h2 { font-size: clamp(44px, 6.2vw, 96px); }
   .hero-side { max-width: 520px; }
   .sec { grid-template-columns: 1fr 1fr; }
   .sec .copy { grid-column: 1 / -1; }
+  .copy.over h2 { width: auto; white-space: normal; font-size: clamp(44px, 9vw, 96px); }
+  #discover .stage, #rhythm .stage { margin: 0; }
   .stage { height: 46vh; }
   .grid { grid-template-columns: repeat(2, 1fr); }
   .sec .more-stage { position: relative; right: auto; top: auto; width: auto; height: 34vh; min-height: 220px; order: -1; }
