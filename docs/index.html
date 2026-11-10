@@ -5,294 +5,201 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Harp: music that learns you, on your device</title>
 <meta name="description" content="Harp is a free, open-source music app for Android, Linux, Windows and macOS. No account, no ads, no servers: your taste stays on your device.">
-<meta name="theme-color" content="#0b0a10">
+<meta name="theme-color" content="#fff4f1">
 <meta property="og:title" content="Harp: music that learns you, on your device">
 <meta property="og:description" content="Free and open source. No account, no ads, no servers. Android, Linux, Windows and macOS.">
 <meta property="og:image" content="assets/icon.png">
 <link rel="icon" href="assets/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Raleway:wght@300;400;500;600&family=Inter:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
+<div class="sky" aria-hidden="true"></div>
+<canvas id="field" aria-hidden="true"></canvas>
+
 <header class="nav" id="nav">
-  <a class="brand" href="#top"><img src="assets/icon.png" alt="" width="32" height="32"><span>Harp</span></a>
-  <nav class="links">
-    <a href="#listen">Listen</a>
+  <a class="brand" href="#top"><img src="assets/icon.png" alt="" width="30" height="30"><span>HARP</span></a>
+  <nav class="links" aria-label="Sections">
+    <a href="#discover">Discover</a>
     <a href="#sound">Sound</a>
     <a href="#together">Together</a>
     <a href="#rhythm">Rhythm</a>
     <a href="#privacy">Privacy</a>
   </nav>
-  <a class="btn btn-small" href="#download">Download</a>
+  <a class="pill" href="#download"><span>Download</span><i class="arrow" aria-hidden="true"></i></a>
 </header>
 
 <main id="top">
 
-<!-- HERO -->
-<section class="hero" data-scene>
-  <div class="layer aurora" data-speed="0.25" aria-hidden="true">
-    <span class="blob b1"></span><span class="blob b2"></span><span class="blob b3"></span>
+<!-- 01 HERO -->
+<section class="hero" data-mode="cluster" data-palette="coral">
+  <div class="stage hero-stage"></div>
+  <div class="hero-text">
+    <p class="tag">[ Music, on your device ]</p>
+    <h1>Music that<br>learns you.</h1>
   </div>
-  <svg class="layer strings" data-speed="0.45" viewBox="0 0 1200 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-    <g fill="none" stroke-linecap="round">
-      <path class="string s1" d="M120 -20 Q 160 450 120 920"/>
-      <path class="string s2" d="M300 -20 Q 340 450 300 920"/>
-      <path class="string s3" d="M480 -20 Q 520 450 480 920"/>
-      <path class="string s4" d="M720 -20 Q 680 450 720 920"/>
-      <path class="string s5" d="M900 -20 Q 860 450 900 920"/>
-      <path class="string s6" d="M1080 -20 Q 1040 450 1080 920"/>
-    </g>
-  </svg>
-  <div class="layer floaters" aria-hidden="true">
-    <span class="tile t1" data-speed="-0.35"></span>
-    <span class="tile t2" data-speed="0.6"></span>
-    <span class="tile t3" data-speed="-0.15"></span>
-    <span class="tile t4" data-speed="0.3"></span>
-    <span class="tile t5" data-speed="-0.5"></span>
-    <span class="note n1" data-speed="0.8">♪</span>
-    <span class="note n2" data-speed="-0.6">♫</span>
-  </div>
-
-  <div class="hero-inner">
-    <div class="hero-copy" data-speed="0.12">
-      <p class="eyebrow">Free · Open source · No account</p>
-      <h1>Music that learns&nbsp;<em>you</em>.<br><span class="grad">Not the other way round.</span></h1>
-      <p class="lede">Harp is a music app that builds its picks from what you play, right on your device. No sign‑in, no ads, no servers of ours: your taste never leaves your phone or computer.</p>
-      <div class="cta">
-        <a class="btn" href="#download">Get Harp</a>
-        <a class="btn btn-ghost" href="https://github.com/TechPsychotic/harp">View on GitHub</a>
-      </div>
-      <p class="platforms-line">Android · Linux · Windows · macOS</p>
+  <aside class="hero-side">
+    <p>A free music app that builds its picks from what you play, right on your phone or computer. No sign-in, no ads, no servers of ours.</p>
+    <div class="cta">
+      <a class="pill dark" href="#download"><span>Get Harp</span><i class="arrow" aria-hidden="true"></i></a>
+      <a class="pill plain" href="https://github.com/TechPsychotic/harp"><span>Source</span></a>
     </div>
-
-    <div class="hero-phone" data-speed="-0.08">
-      <div class="phone">
-        <div class="screen np">
-          <div class="np-art"><span class="np-disc"></span></div>
-          <div class="np-meta">
-            <strong>Golden Hour Drive</strong>
-            <span>The Lanterns</span>
-          </div>
-          <div class="np-bar"><span></span></div>
-          <div class="np-ctl"><i class="ic prev"></i><i class="ic play"></i><i class="ic next"></i></div>
-          <div class="np-why">Up next · because you like The Lanterns</div>
-        </div>
-      </div>
-    </div>
-  </div>
-  <a class="scroll-cue" href="#listen" aria-label="Scroll down"><span></span></a>
+    <p class="mono">© 2026 — Free &amp; open source · GPL-3.0</p>
+    <a class="mono scroll" href="#discover">↓ Scroll</a>
+  </aside>
 </section>
 
-<!-- MARQUEE -->
-<div class="marquee" aria-hidden="true">
-  <div class="track">
-    <span>Smart Shuffle</span><span>Offline downloads</span><span>Synced lyrics</span><span>Headphone correction</span><span>Gapless &amp; crossfade</span><span>Listen together</span><span>Device sync</span><span>Your Rhythm</span><span>Harp Encore</span><span>Android Auto</span>
-    <span>Smart Shuffle</span><span>Offline downloads</span><span>Synced lyrics</span><span>Headphone correction</span><span>Gapless &amp; crossfade</span><span>Listen together</span><span>Device sync</span><span>Your Rhythm</span><span>Harp Encore</span><span>Android Auto</span>
+<!-- 02 DISCOVER -->
+<section class="sec" id="discover" data-mode="cluster" data-palette="violet">
+  <div class="copy">
+    <p class="tag">[ 02 — Discover ]</p>
+    <h2>Picks that<br>know you.</h2>
+    <p class="lead">Harp keeps a small taste model on your device: what you finish, like, skip, and when. Smart Shuffle and the moods lean on the artists you love, and old habits fade so your picks move with you.</p>
   </div>
-</div>
-
-<!-- LISTEN -->
-<section class="feature" id="listen" data-scene>
-  <div class="bigword" data-speed="0.3" aria-hidden="true">LISTEN</div>
-  <div class="feature-inner">
-    <div class="copy reveal">
-      <p class="eyebrow">Discover</p>
-      <h2>Picks that get better every time you press play.</h2>
-      <p>Harp keeps a small taste model on your device: what you finish, what you like, what you skip, even what you play in the evening. Smart Shuffle and the moods lean on the artists you love, and old habits fade so your picks move with you.</p>
-      <ul class="ticks">
-        <li>Smart Shuffle, moods and charts from around the world</li>
-        <li>Search songs, albums, artists and podcasts</li>
-        <li>Skipping a song once doesn't count against it</li>
-        <li>Your own music files play right alongside</li>
-      </ul>
-    </div>
-    <div class="visual reveal">
-      <div class="phone tilt-l" data-speed="-0.12">
-        <div class="screen home">
-          <div class="home-head"><img src="assets/icon.png" alt="" width="28" height="28"><b>Harp</b></div>
-          <div class="hero-card"><b>Smart Shuffle</b><small>Learned from 1,284 plays</small><i class="ic play dark"></i></div>
-          <p class="mini-h">Moods</p>
-          <div class="moods"><span class="m m1">Chill</span><span class="m m2">Focus</span><span class="m m3">Party</span></div>
-          <p class="mini-h">Top Picks</p>
-          <div class="picks"><span class="c c1"></span><span class="c c2"></span><span class="c c3"></span></div>
-        </div>
-      </div>
-      <div class="chip chip-a" data-speed="0.35">✨ Because you played <b>Midnight Static</b></div>
-      <div class="chip chip-b" data-speed="-0.25">🌙 Evenings: more chill</div>
-    </div>
-  </div>
-</section>
-
-<!-- OFFLINE -->
-<section class="feature alt" id="offline" data-scene>
-  <div class="bigword" data-speed="0.3" aria-hidden="true">OFFLINE</div>
-  <div class="feature-inner rev">
-    <div class="copy reveal">
-      <p class="eyebrow">Anywhere</p>
-      <h2>Plays through tunnels, flights and bad Wi‑Fi.</h2>
-      <p>Download songs or whole playlists. While you listen, the next few songs are fetched onto your device in the background, so skips start instantly and music keeps going when the signal doesn't. Downloaded songs never use data again.</p>
-      <ul class="ticks">
-        <li>Download playlists, albums and liked songs</li>
-        <li>The next songs ready before you get to them</li>
-        <li>Offline mode with picks from your own downloads</li>
-        <li>Your choice: fetch ahead on Wi‑Fi only, or on mobile data too</li>
-      </ul>
-    </div>
-    <div class="visual reveal">
-      <div class="stack" data-speed="-0.1">
-        <div class="row-card"><span class="c c4"></span><div><b>Paper Planes at Dawn</b><small>Saltwater Youth</small></div><i class="dl done"></i></div>
-        <div class="row-card"><span class="c c5"></span><div><b>Neon Monsoon</b><small>Kavya &amp; the Tides</small></div><i class="dl done"></i></div>
-        <div class="row-card"><span class="c c6"></span><div><b>Slow Orbit</b><small>Northbound</small></div><i class="dl going"></i></div>
-        <div class="row-card"><span class="c c1"></span><div><b>Velvet Static</b><small>Lumen Park</small></div><i class="dl"></i></div>
-      </div>
-      <div class="chip chip-c" data-speed="0.3">📶 No signal · still playing</div>
-    </div>
-  </div>
-</section>
-
-<!-- SOUND -->
-<section class="feature sound" id="sound" data-scene>
-  <div class="bigword" data-speed="0.3" aria-hidden="true">SOUND</div>
-  <div class="feature-inner">
-    <div class="copy reveal">
-      <p class="eyebrow">Sound</p>
-      <h2>Tuned for <em>your</em> headphones.</h2>
-      <p>Pick your headphones from about 9,000 measured models and Harp corrects them to a neutral sound, using AutoEq's measurements. Then shape it your way with a 10‑band equalizer, keep the volume even between songs, and let tracks flow gaplessly or crossfade.</p>
-      <ul class="ticks">
-        <li>Headphone correction (AutoEq)</li>
-        <li>10‑band equalizer and presets</li>
-        <li>Even volume (EBU R128), gapless or crossfade</li>
-        <li>Wide stage, crossfeed and immersive modes; speed and sleep timer</li>
-      </ul>
-    </div>
-    <div class="visual reveal">
-      <div class="eq-card" data-speed="-0.1">
-        <div class="eq-head"><b>Sony WH‑1000XM4</b><small>Correction on · −6 dB headroom</small></div>
-        <div class="eq" aria-hidden="true">
-          <span style="--h:.55"></span><span style="--h:.7"></span><span style="--h:.62"></span><span style="--h:.45"></span><span style="--h:.4"></span>
-          <span style="--h:.48"></span><span style="--h:.58"></span><span style="--h:.66"></span><span style="--h:.52"></span><span style="--h:.6"></span>
-        </div>
-        <div class="eq-axis"><span>32</span><span>125</span><span>500</span><span>2k</span><span>8k</span><span>16k</span></div>
-      </div>
-      <div class="chip chip-a" data-speed="0.4">🎧 Crossfade · 6 s</div>
-    </div>
-  </div>
-</section>
-
-<!-- LYRICS -->
-<section class="feature alt" id="lyrics" data-scene>
-  <div class="bigword" data-speed="0.3" aria-hidden="true">LYRICS</div>
-  <div class="feature-inner rev">
-    <div class="copy reveal">
-      <p class="eyebrow">Sing along</p>
-      <h2>Synced lyrics, in letters you can read.</h2>
-      <p>Lyrics come from several free sources and follow the song line by line. Hindi, Urdu, Punjabi and other Indian scripts can be shown in English letters, so you can sing along to anything.</p>
-    </div>
-    <div class="visual reveal">
-      <div class="lyrics" data-speed="-0.1">
-        <p>we were chasing every streetlight</p>
-        <p class="on">singing louder than the rain</p>
-        <p>tum ho toh lagta hai</p>
-        <p>har raasta apna hai</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- TOGETHER -->
-<section class="feature together" id="together" data-scene>
-  <div class="bigword" data-speed="0.3" aria-hidden="true">TOGETHER</div>
-  <div class="feature-inner">
-    <div class="copy reveal">
-      <p class="eyebrow">Peer to peer</p>
-      <h2>Listen together. Sync everything. No account.</h2>
-      <p>Start a party and send the link: friends hear the same song at the same moment, and anyone can play, pause or suggest the next track. Pair your phone and computer once and your likes, playlists and history stay in step. Share a playlist with a link and it stays up to date for everyone who saves it.</p>
-      <ul class="ticks">
-        <li>Listen together, kept in sync to the beat</li>
-        <li>Device sync that never overwrites anything</li>
-        <li>Shared playlists that follow your changes</li>
-        <li>Direct device‑to‑device, over iroh</li>
-      </ul>
-    </div>
-    <div class="visual reveal duo">
-      <div class="phone small tilt-l" data-speed="-0.15"><div class="screen party"><b>Party</b><small>3 listening</small><span class="pulse"></span></div></div>
-      <svg class="link-line" viewBox="0 0 200 60" aria-hidden="true"><path d="M5 30 C 60 0, 140 60, 195 30"/></svg>
-      <div class="phone small tilt-r" data-speed="0.15"><div class="screen party b"><b>Joined</b><small>in sync · 12 ms</small><span class="pulse"></span></div></div>
-    </div>
-  </div>
-</section>
-
-<!-- RHYTHM / ENCORE -->
-<section class="feature rhythm" id="rhythm" data-scene>
-  <div class="bigword" data-speed="0.3" aria-hidden="true">RHYTHM</div>
-  <div class="feature-inner rev">
-    <div class="copy reveal">
-      <p class="eyebrow">Your stats</p>
-      <h2>Your Rhythm all year. Harp Encore in December.</h2>
-      <p>See your minutes, top artists and songs, longest streak and the hours you listen most, for any week, month or year. From the second week of December, Harp Encore tells the story of your year, and saves your top 50 as a playlist. Worked out on your device, seen by no one else.</p>
-    </div>
-    <div class="visual reveal">
-      <div class="stories" data-speed="-0.1">
-        <div class="story s-a"><small>HARP ENCORE</small><b>21,480</b><span>minutes this year</span></div>
-        <div class="story s-b"><small>YOU ARE A</small><b>Night Owl Explorer</b><span>most listening around 11 pm</span></div>
-        <div class="story s-c"><small>SONG OF THE YEAR</small><b>Golden Hour Drive</b><span>played 142 times</span></div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- EVERYWHERE -->
-<section class="grid-sec" id="more">
-  <div class="sec-head reveal">
-    <p class="eyebrow">And more</p>
-    <h2>Everything you'd expect, nothing you wouldn't.</h2>
-  </div>
+  <div class="stage"></div>
   <div class="cards">
-    <article class="card reveal"><i>📚</i><h3>Your library, organised</h3><p>Playlists with folders, pins, covers and sorting; liked songs, saved albums and podcasts, followed artists.</p></article>
-    <article class="card reveal"><i>⇄</i><h3>Bring your music over</h3><p>Import from Spotify, Apple Music links, YouTube and playlist files. Export as CSV, M3U or JSON any time.</p></article>
-    <article class="card reveal"><i>🚗</i><h3>Car, lock screen, widget</h3><p>Android Auto, notification and lock‑screen controls, a home‑screen widget, desktop media keys and a mini player.</p></article>
-    <article class="card reveal"><i>⟳</i><h3>Updates itself</h3><p>New versions arrive from GitHub Releases, checked against their checksums before they install.</p></article>
-    <article class="card reveal"><i>💾</i><h3>Back up, merge, restore</h3><p>Restoring a backup adds to what you have; it never wipes your library.</p></article>
-    <article class="card reveal"><i>🔓</i><h3>Free software</h3><p>GPL‑3.0. Read the code, build it yourself, make it yours.</p></article>
+    <article class="card"><p class="num">01 <span>Smart Shuffle</span></p><h3>Endless, and yours</h3><p>Starts broad, then learns from every play.</p></article>
+    <article class="card"><p class="num">02 <span>Moods &amp; charts</span></p><h3>Chill, Focus, Party…</h3><p>Moods tuned to the artists you like, charts from around the world.</p></article>
+    <article class="card"><p class="num">03 <span>Fair to songs</span></p><h3>One skip isn't a verdict</h3><p>A song only drops out after you skip it again and again.</p></article>
+    <article class="card"><p class="num">04 <span>Your files</span></p><h3>Your own music, too</h3><p>Files on your device play right alongside.</p></article>
   </div>
 </section>
 
-<!-- PRIVACY -->
-<section class="privacy" id="privacy" data-scene>
-  <div class="layer aurora soft" data-speed="0.2" aria-hidden="true"><span class="blob b2"></span><span class="blob b3"></span></div>
-  <div class="privacy-inner reveal">
-    <p class="eyebrow">Privacy</p>
-    <h2>No account. No ads. No analytics.<br><span class="grad">No servers of ours.</span></h2>
-    <p>Your history, taste and library live on your devices. Harp only talks to YouTube Music for search and streams, to free lyrics sources, to GitHub for updates, and, when you use them, to iroh's relays to reach your own devices or friends.</p>
+<!-- 03 OFFLINE -->
+<section class="sec" id="offline" data-mode="floor" data-palette="mint">
+  <div class="copy">
+    <p class="tag">[ 03 — Offline ]</p>
+    <h2>When the signal<br>lets go.</h2>
+    <p class="lead">Download songs and whole playlists. While you listen, the next five songs are fetched onto your device, so skips start instantly and the music keeps going through tunnels and flights.</p>
+  </div>
+  <div class="stage"></div>
+  <div class="cards">
+    <article class="card"><p class="num">01 <span>Downloads</span></p><h3>Playlists, albums, likes</h3><p>Downloaded songs never use data again.</p></article>
+    <article class="card"><p class="num">02 <span>Fetch ahead</span></p><h3>Five songs ready</h3><p>Fetched quietly, cleaned up after they've played.</p></article>
+    <article class="card"><p class="num">03 <span>Offline mode</span></p><h3>Picks from what's here</h3><p>Smart Shuffle works from your downloads alone.</p></article>
   </div>
 </section>
 
-<!-- DOWNLOAD -->
-<section class="download" id="download">
-  <div class="sec-head reveal">
-    <p class="eyebrow">Download</p>
-    <h2>Get Harp for your devices.</h2>
-    <p class="sub">Free, from GitHub Releases. Each release lists its SHA‑256 checksums.</p>
+<!-- 04 SOUND -->
+<section class="sec" id="sound" data-mode="eq" data-palette="sky">
+  <div class="copy">
+    <p class="tag">[ 04 — Sound ]</p>
+    <h2>Tuned to<br>your ears.</h2>
+    <p class="lead">Pick your headphones from about 9,000 measured models and Harp corrects them to a neutral sound. Then shape it your way, keep volume even between songs, and let tracks flow gaplessly or crossfade.</p>
   </div>
-  <div class="dl-grid">
-    <a class="dl-card reveal" href="https://github.com/TechPsychotic/harp/releases/latest"><b>Android</b><small>Android 9+, 64‑bit · signed APK</small><span class="arrow">→</span></a>
-    <a class="dl-card reveal" href="https://github.com/TechPsychotic/harp/releases/latest"><b>Linux</b><small>x64 · tar.gz</small><span class="arrow">→</span></a>
-    <a class="dl-card reveal" href="https://github.com/TechPsychotic/harp/releases/latest"><b>Windows</b><small>x64 · zip</small><span class="arrow">→</span></a>
-    <a class="dl-card reveal" href="https://github.com/TechPsychotic/harp/releases/latest"><b>macOS</b><small>zip · right‑click › Open the first time</small><span class="arrow">→</span></a>
+  <div class="stage"></div>
+  <div class="cards">
+    <article class="card"><p class="num">01 <span>AutoEq</span></p><h3>Headphone correction</h3><p>Measured profiles, applied with headroom so nothing clips.</p></article>
+    <article class="card"><p class="num">02 <span>Equalizer</span></p><h3>10 bands and presets</h3><p>Plus even volume (EBU R128) and playback speed.</p></article>
+    <article class="card"><p class="num">03 <span>Transitions</span></p><h3>Gapless or crossfade</h3><p>Albums flow; playlists blend, up to 12 seconds.</p></article>
   </div>
-  <p class="fine reveal">Harp streams through yt-dlp, which may go against YouTube's terms of service. Harp isn't affiliated with YouTube, Google, Spotify or Apple, and isn't on Google Play or the App Store.</p>
+</section>
+
+<!-- 05 LYRICS -->
+<section class="sec" id="lyrics" data-mode="wave" data-palette="amber">
+  <div class="copy">
+    <p class="tag">[ 05 — Lyrics ]</p>
+    <h2>Every line,<br>on time.</h2>
+    <p class="lead">Synced lyrics from several free sources follow the song line by line. Hindi, Urdu, Punjabi and other Indian scripts can be shown in English letters, so you can sing along to anything.</p>
+  </div>
+  <div class="stage"></div>
+  <div class="lyrics" aria-hidden="true">
+    <p>we were chasing every streetlight</p>
+    <p>singing louder than the rain</p>
+    <p>tum ho toh lagta hai</p>
+    <p>har raasta apna hai</p>
+  </div>
+</section>
+
+<!-- 06 TOGETHER -->
+<section class="sec" id="together" data-mode="duo" data-palette="lime">
+  <div class="copy">
+    <p class="tag">[ 06 — Together ]</p>
+    <h2>Two devices,<br>one beat.</h2>
+    <p class="lead">Start a party and send the link: friends hear the same moment and can play, pause or suggest the next song. Pair your phone and computer once and they stay in step. Direct, device to device.</p>
+  </div>
+  <div class="stage"></div>
+  <div class="cards">
+    <article class="card"><p class="num">01 <span>Listen together</span></p><h3>In sync to the beat</h3><p>Kept within milliseconds, with an offset for Bluetooth.</p></article>
+    <article class="card"><p class="num">02 <span>Device sync</span></p><h3>Pair once, done</h3><p>Likes, playlists and history merge; nothing is overwritten.</p></article>
+    <article class="card"><p class="num">03 <span>Shared playlists</span></p><h3>A link that stays fresh</h3><p>Friends who save it get your changes.</p></article>
+  </div>
+</section>
+
+<!-- 07 RHYTHM -->
+<section class="sec" id="rhythm" data-mode="orbit" data-palette="pink">
+  <div class="copy">
+    <p class="tag">[ 07 — Rhythm ]</p>
+    <h2>Your year,<br>in orbit.</h2>
+    <p class="lead">Your Rhythm shows your minutes, top artists and songs, streaks and favourite hours for any week, month or year. From the second week of December, Harp Encore tells the story of your year.</p>
+  </div>
+  <div class="stage"></div>
+  <div class="cards">
+    <article class="card"><p class="num">01 <span>Your Rhythm</span></p><h3>Week, month, year</h3><p>And what kind of listener you are.</p></article>
+    <article class="card"><p class="num">02 <span>Harp Encore</span></p><h3>Your year as a story</h3><p>Save your top 50 as a playlist at the end.</p></article>
+    <article class="card"><p class="num">03 <span>Private</span></p><h3>Seen by no one else</h3><p>Worked out on your device.</p></article>
+  </div>
+</section>
+
+<!-- 08 MORE -->
+<section class="sec more" id="more" data-mode="frame" data-palette="lilac">
+  <div class="copy wide">
+    <p class="tag">[ 08 — Everything else ]</p>
+    <h2>Everything you'd expect.<br>Nothing you wouldn't.</h2>
+  </div>
+  <div class="grid">
+    <article class="card"><p class="num">01 <span>Library</span></p><h3>Organised your way</h3><p>Folders, pins, covers, sorting; saved albums, podcasts and artists.</p></article>
+    <article class="card"><p class="num">02 <span>Import</span></p><h3>Bring your music over</h3><p>From Spotify, Apple Music links, YouTube and playlist files.</p></article>
+    <article class="card"><p class="num">03 <span>Everywhere</span></p><h3>Car, lock screen, widget</h3><p>Android Auto, media keys, a home-screen widget and a mini player.</p></article>
+    <article class="card"><p class="num">04 <span>Updates</span></p><h3>Keeps itself current</h3><p>From GitHub Releases, checksum-checked before installing.</p></article>
+    <article class="card"><p class="num">05 <span>Backup</span></p><h3>Restore adds, never wipes</h3><p>Merge a backup into what you have.</p></article>
+    <article class="card"><p class="num">06 <span>Open</span></p><h3>Free software</h3><p>GPL-3.0. Read it, build it, make it yours.</p></article>
+  </div>
+</section>
+
+<!-- 09 PRIVACY -->
+<section class="sec privacy" id="privacy" data-mode="scatter" data-palette="blue">
+  <div class="stage hidden-stage"></div>
+  <div class="copy center">
+    <p class="tag">[ 09 — Privacy ]</p>
+    <h2>No account. No ads.<br>Weightless.</h2>
+    <p class="lead">Your history, taste and library live on your devices. Harp only talks to YouTube Music for songs, free lyrics sources, GitHub for updates, and, when you use them, iroh's relays to reach your own devices or friends. No analytics. No servers of ours.</p>
+  </div>
+</section>
+
+<!-- DARK BAND -->
+<section class="band" id="download" data-mode="scatter" data-palette="blue">
+  <div class="marquee" aria-hidden="true">
+    <div class="track">
+      <span>Music that learns you</span><span>No account</span><span>Your taste stays yours</span><span>Free &amp; open source</span>
+      <span>Music that learns you</span><span>No account</span><span>Your taste stays yours</span><span>Free &amp; open source</span>
+    </div>
+  </div>
+  <div class="dl">
+    <div class="dl-head">
+      <p class="tag light">[ Download ]</p>
+      <h2>Get Harp.</h2>
+      <p>Free, from GitHub Releases. Each release lists its SHA-256 checksums.</p>
+    </div>
+    <div class="dl-grid">
+      <a class="dl-card" href="https://github.com/TechPsychotic/harp/releases/latest"><span class="mono">01</span><b>Android</b><small>Android 9+, 64-bit · signed APK</small><i class="arrow" aria-hidden="true"></i></a>
+      <a class="dl-card" href="https://github.com/TechPsychotic/harp/releases/latest"><span class="mono">02</span><b>Linux</b><small>x64 · tar.gz</small><i class="arrow" aria-hidden="true"></i></a>
+      <a class="dl-card" href="https://github.com/TechPsychotic/harp/releases/latest"><span class="mono">03</span><b>Windows</b><small>x64 · zip</small><i class="arrow" aria-hidden="true"></i></a>
+      <a class="dl-card" href="https://github.com/TechPsychotic/harp/releases/latest"><span class="mono">04</span><b>macOS</b><small>zip · right-click › Open the first time</small><i class="arrow" aria-hidden="true"></i></a>
+    </div>
+    <p class="fine">Harp streams through yt-dlp, which may go against YouTube's terms of service. Harp isn't affiliated with YouTube, Google, Spotify or Apple, and isn't on Google Play or the App Store.</p>
+  </div>
+  <footer class="foot">
+    <div class="brand"><img src="assets/icon.png" alt="" width="26" height="26"><span>HARP</span></div>
+    <p class="mono">GNU GPL v3.0 or later</p>
+    <nav><a href="https://github.com/TechPsychotic/harp">GitHub</a><a href="https://github.com/TechPsychotic/harp/releases">Releases</a><a href="https://github.com/TechPsychotic/harp/blob/main/ROADMAP.md">Roadmap</a></nav>
+  </footer>
 </section>
 
 </main>
-
-<footer class="foot">
-  <div class="brand"><img src="assets/icon.png" alt="" width="28" height="28"><span>Harp</span></div>
-  <p>Free software under the GNU GPL v3.0 or later.</p>
-  <nav><a href="https://github.com/TechPsychotic/harp">GitHub</a><a href="https://github.com/TechPsychotic/harp/releases">Releases</a><a href="https://github.com/TechPsychotic/harp/blob/main/ROADMAP.md">Roadmap</a></nav>
-</footer>
 
 <script src="main.js" defer></script>
 </body>
