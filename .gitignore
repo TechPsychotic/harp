@@ -11,3 +11,11 @@ local.properties
 app/assets/python.zip
 app/android/build-tools/
 app/assets/yt-dlp.pyz
+
+# Never commit signing keys or credentials.
+*.jks
+*.keystore
+*.p12
+key.properties
+.env
+.env.*

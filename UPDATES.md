@@ -8,6 +8,18 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-10 (night, later): ready for a public repository
+
+- Checked every tracked file and the whole git history for secrets: no keys, passwords or tokens; the
+  release signing key stays outside the repository. `.gitignore` now also refuses keystores,
+  `key.properties` and `.env` files.
+- GitHub Actions only runs on version tags or by hand, so pull requests from forks can't reach the
+  signing secrets.
+- README links the website and the latest release; new `CONTRIBUTING.md` and `SECURITY.md`;
+  `ROADMAP.md` worded for any reader.
+
+---
+
 ## 2026-11-10 (evening, later): website; HRTF plan
 
 - **Website** in `docs/` (live at techpsychotic.github.io/harp): dark theme whose accent changes with each
@@ -786,8 +798,7 @@ marked 📱 needs your phone; output-change pausing is Android-only for now (Lin
 
 ## 2026-11-07: the start
 
-- Read the roadmap; wrote `IMPLEMENTATION_PLAN.md`. Name decided: **Harp**. Private GitHub
-  repo created (`TechPsychotic/harp`).
+- Planned the work in `ROADMAP.md`. Name decided: **Harp**. GitHub repo created (`TechPsychotic/harp`).
 - **Rust core** (queue, on-device taste model and recommender, yt-dlp runner and
   installer with SHA-256 check, Android loopback proxy and CA bundle). 🧪
 - **Android yt-dlp** done the way `../zevro` does it: a static Python and QuickJS shipped

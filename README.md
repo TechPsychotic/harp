@@ -6,6 +6,8 @@ no servers of ours. For Android, Linux, Windows and macOS.
 Harp streams from YouTube Music (through [yt-dlp](https://github.com/yt-dlp/yt-dlp)), plays your
 own files, and builds its recommendations from what you listen to, right on the device.
 
+**Website:** https://techpsychotic.github.io/harp/ · **Download:** [latest release](../../releases/latest)
+
 ## What it does
 
 - **Listen:** search songs, albums, artists and podcasts; Smart Shuffle and moods; charts and genres;
@@ -60,6 +62,12 @@ scripts/android-tools.sh && flutter build apk --release --target-platform androi
 - `app/`: the Flutter app; audio through [mpv_audio_kit](https://pub.dev/packages/mpv_audio_kit) (libmpv + FFmpeg).
 
 `ROADMAP.md` tracks what's done and what's next (including an iOS plan); `UPDATES.md` is the changelog.
+The website lives in `docs/` (GitHub Pages).
+
+## Contributing
+
+Bug reports, ideas and pull requests are welcome: see [`CONTRIBUTING.md`](CONTRIBUTING.md). Security
+issues: see [`SECURITY.md`](SECURITY.md).
 
 ## Privacy
 

@@ -19,7 +19,7 @@ the idea and the code. `UPDATES.md` is the dated log of changes; this file is th
 | Mark | Meaning |
 |---|---|
 | ✅ | Done and checked (by tests, on the laptop, or against the live service) |
-| 🟡 | Done in code, **not yet confirmed on your phone / laptop** |
+| 🟡 | Done in code, **not yet confirmed on a real phone / computer** |
 | 🔧 | In progress (part of it is built) |
 | ⬜ | Not started |
 
@@ -36,9 +36,9 @@ the idea and the code. `UPDATES.md` is the dated log of changes; this file is th
 
 ---
 
-## 1. Tracker: everything you reported or asked for
+## 1. Tracker: reported problems and requested features
 
-### 1a. Problems you reported (23)
+### 1a. Reported problems (23)
 
 | # | Problem | Status | What was done / what is left |
 |---|---|---|---|
@@ -80,7 +80,7 @@ the idea and the code. `UPDATES.md` is the dated log of changes; this file is th
 
 | # | Feature | Status | Notes |
 |---|---|---|---|
-| F1 | An implementation roadmap | ✅ | `IMPLEMENTATION_PLAN.md`, and this file. |
+| F1 | An implementation roadmap | ✅ | This file. |
 | F2 | Name "Harp", private GitHub repo | ✅ | `TechPsychotic/harp`. |
 | F3 | yt-dlp on Android the way zevro does it | 🟡 | Static Python + QuickJS as native libraries, yt-dlp zipapp, loopback proxy, CA bundle. Bundled in the APK (checked); streaming on the phone has failed before (B11). |
 | F4 | Glassmorphic look | ✅ | Frosted surfaces, aurora background, accent from the song. |
@@ -161,7 +161,7 @@ the idea and the code. `UPDATES.md` is the dated log of changes; this file is th
 
 Status as of 2026-11-10. ☑ done · ◐ partly done · ☐ to do. 📱 = built, waiting for a check on a phone.
 
-### M1 · Rock-solid on your phone
+### M1 · Rock-solid on phones
 - ☑ Crash reports, frame-time readout, fallback yt-dlp inside the APK, queue and position survive restarts.
 - ☐ A week of daily use on the phone without a crash, a stall or a missing control (needs you).
 
@@ -282,7 +282,7 @@ fixed copy within weeks.
 
 **Testing gaps**
 - No widget tests of whole screens with a fake backend; no Android emulator test in CI.
-- Nothing has been run on your phone by me; every 🟡 above depends on your report.
+- Every 🟡 above still needs confirming on a real device.
 - Performance has never been measured on either device.
 
 **Security and privacy**
