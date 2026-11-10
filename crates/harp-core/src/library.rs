@@ -17,6 +17,8 @@ pub struct PlaylistInfo {
     pub cover: String,
     /// The folder it's in ("" for none).
     pub folder: String,
+    /// The link it follows (a friend's shared playlist), or "".
+    pub remote: String,
     /// Artwork of the first (up to) four songs, for a cover mosaic.
     pub covers: Vec<String>,
 }
@@ -66,11 +68,11 @@ impl Store {
 
     pub fn playlists(&self) -> Result<Vec<PlaylistInfo>> {
         let mut st = self.conn.prepare(
-            "SELECT p.id, p.name, (SELECT COUNT(*) FROM playlist_items i WHERE i.playlist_id=p.id), p.pinned, p.autodl, p.cover, p.folder
+            "SELECT p.id, p.name, (SELECT COUNT(*) FROM playlist_items i WHERE i.playlist_id=p.id), p.pinned, p.autodl, p.cover, p.folder, p.remote
              FROM playlists p ORDER BY p.pinned DESC, p.created DESC, p.id DESC",
         )?;
         let rows = st.query_map([], |r| {
-            Ok(PlaylistInfo { id: r.get(0)?, name: r.get(1)?, count: r.get(2)?, pinned: r.get::<_, i64>(3)? != 0, auto_download: r.get::<_, i64>(4)? != 0, cover: r.get(5)?, folder: r.get(6)?, covers: vec![] })
+            Ok(PlaylistInfo { id: r.get(0)?, name: r.get(1)?, count: r.get(2)?, pinned: r.get::<_, i64>(3)? != 0, auto_download: r.get::<_, i64>(4)? != 0, cover: r.get(5)?, folder: r.get(6)?, remote: r.get(7)?, covers: vec![] })
         })?;
         let mut out: Vec<PlaylistInfo> = rows.collect::<std::result::Result<_, _>>()?;
         let mut cov = self.conn.prepare("SELECT song_json FROM playlist_items WHERE playlist_id=? ORDER BY pos LIMIT 4")?;
@@ -140,6 +142,31 @@ impl Store {
     pub fn set_playlist_cover(&self, id: i64, path: &str) -> Result<()> {
         self.conn.execute("UPDATE playlists SET cover=? WHERE id=?", params![path, id])?;
         Ok(())
+    }
+
+    /// Marks a playlist as following a shared link.
+    pub fn set_playlist_remote(&self, id: i64, link: &str) -> Result<()> {
+        self.conn.execute("UPDATE playlists SET remote=? WHERE id=?", params![link, id])?;
+        Ok(())
+    }
+
+    /// Replaces a playlist's songs (a followed playlist updating). Returns
+    /// whether anything changed.
+    pub fn replace_playlist_songs(&self, id: i64, songs: &[Song]) -> Result<bool> {
+        let now: Vec<String> = self.playlist_songs(id)?.into_iter().map(|s| s.id).collect();
+        if now == songs.iter().map(|s| s.id.clone()).collect::<Vec<_>>() {
+            return Ok(false);
+        }
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute("DELETE FROM playlist_items WHERE playlist_id=?", [id])?;
+        for (i, s) in songs.iter().enumerate() {
+            tx.execute(
+                "INSERT INTO playlist_items(playlist_id,pos,song_id,song_json) VALUES(?,?,?,?)",
+                params![id, i as i64, s.id, crate::model::to_json(s)],
+            )?;
+        }
+        tx.commit()?;
+        Ok(true)
     }
 
     /// Puts a playlist in a folder ("" takes it out).
@@ -345,6 +372,18 @@ mod tests {
 
     fn ids(v: &[Song]) -> Vec<&str> {
         v.iter().map(|s| s.id.as_str()).collect()
+    }
+
+    #[test]
+    fn followed_playlists_update() {
+        let st = Store::open_memory().unwrap();
+        let a = st.create_playlist("From Ana").unwrap();
+        st.set_playlist_remote(a, "harp://playlist/x?p=1").unwrap();
+        assert!(st.replace_playlist_songs(a, &[song("1", "1", "A"), song("2", "2", "B")]).unwrap());
+        assert!(!st.replace_playlist_songs(a, &[song("1", "1", "A"), song("2", "2", "B")]).unwrap(), "same: no change");
+        assert!(st.replace_playlist_songs(a, &[song("3", "3", "C"), song("1", "1", "A")]).unwrap());
+        assert_eq!(ids_of(&st.playlist_songs(a).unwrap()), ["3", "1"]);
+        assert_eq!(st.playlists().unwrap()[0].remote, "harp://playlist/x?p=1");
     }
 
     #[test]

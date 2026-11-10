@@ -122,81 +122,173 @@ pub fn party_role() -> String {
     }
 }
 
-// --- syncing your library between your own devices ---
+// --- your devices and shared playlists (a lasting node; see harp_party::node) ---
 
-/// Offers this device's library for syncing; returns the link to paste on the
-/// other device. Then call `sync_wait`.
-pub fn sync_offer(name: String) -> Result<String, String> {
-    let ours = super::engine::library_backup()?;
-    let offer = rt().block_on(harp_party::sync::Offer::start(ours, &name, false)).map_err(|e| e.to_string())?;
-    let link = offer.link.clone();
-    *crate::party_state::OFFER.lock().unwrap() = Some(std::sync::Arc::new(offer));
-    Ok(link)
-}
-
-/// Waits (up to 10 minutes) for the other device, then adds its library to this one.
-pub fn sync_wait() -> Result<super::engine::MergeInfoView, String> {
-    let offer = crate::party_state::OFFER.lock().unwrap().clone().ok_or("no sync offer")?;
-    let theirs = rt().block_on(offer.wait(std::time::Duration::from_secs(600))).map_err(|e| e.to_string());
-    crate::party_state::OFFER.lock().unwrap().take();
-    if let Ok(o) = std::sync::Arc::try_unwrap(offer) {
-        rt().spawn(o.close());
-    }
-    super::engine::library_restore(theirs?)
-}
-
-/// Joins a sync offer: both devices end up with both libraries.
-pub fn sync_join(link: String) -> Result<super::engine::MergeInfoView, String> {
-    let ours = super::engine::library_backup()?;
-    let theirs = rt().block_on(harp_party::sync::join(&link, &ours)).map_err(|e| format!("{e:#}"))?;
-    super::engine::library_restore(theirs)
-}
-
-/// Stops offering (a `sync_wait` in progress returns "cancelled" and closes it).
-pub fn sync_cancel() {
-    if let Some(o) = crate::party_state::OFFER.lock().unwrap().as_ref() {
-        o.cancel();
-    }
-}
-
-// --- sharing playlists ---
+use crate::party_state::{node, paired, set_paired, set_shares, shares, token, LAST_MERGE, PAIRING};
 
 #[derive(serde::Serialize, serde::Deserialize)]
-struct SharedPlaylist {
-    name: String,
-    songs: Vec<harp_core::Song>,
+pub(crate) struct SharedPlaylist {
+    pub(crate) name: String,
+    pub(crate) songs: Vec<harp_core::Song>,
 }
 
-/// Starts sharing a playlist (or returns the link if it already is). Friends
-/// open the link to get a copy. Sharing lasts while Harp is open, until stopped.
-pub fn playlist_share(id: i64) -> Result<String, String> {
-    if let Some(s) = crate::party_state::SHARES.lock().unwrap().as_ref().and_then(|m| m.get(&id).cloned()) {
-        return Ok(s.link.clone());
+/// One of your paired devices.
+#[derive(Clone, Debug)]
+pub struct DeviceView {
+    pub id: String,
+    pub name: String,
+}
+
+/// Starts the network side at app start when it's needed (you have paired
+/// devices or shared playlists), so your other devices and friends can reach this one.
+pub fn net_start_if_needed() -> Result<bool, String> {
+    if paired().is_empty() && shares().is_empty() {
+        return Ok(false);
     }
-    let (name, songs) = super::engine::playlist_contents(id)?;
-    let data = serde_json::to_vec(&SharedPlaylist { name: name.clone(), songs }).map_err(|e| e.to_string())?;
-    let share = rt().block_on(harp_party::share::Share::start(data, &name, false)).map_err(|e| e.to_string())?;
-    let link = share.link.clone();
-    crate::party_state::SHARES.lock().unwrap().get_or_insert_with(Default::default).insert(id, std::sync::Arc::new(share));
+    node().map_err(|e| e.to_string())?;
+    Ok(true)
+}
+
+/// Pairing: shows a link with a one-time code; then call `sync_wait`.
+pub fn sync_offer(name: String) -> Result<String, String> {
+    crate::party_state::kv_set("party_name", &name);
+    let n = node().map_err(|e| e.to_string())?;
+    let (link, rx) = rt().block_on(n.offer_pairing(&token()));
+    *rt().block_on(PAIRING.lock()) = Some(rx);
     Ok(link)
 }
 
-/// The link while a playlist is being shared.
-#[flutter_rust_bridge::frb(sync)]
-pub fn playlist_share_link(id: i64) -> Option<String> {
-    crate::party_state::SHARES.lock().unwrap().as_ref().and_then(|m| m.get(&id).map(|s| s.link.clone()))
+/// Waits (up to 10 minutes) for the other device to use the link. Both libraries
+/// are then combined, and the two devices sync by themselves from now on.
+pub fn sync_wait() -> Result<super::engine::MergeInfoView, String> {
+    let r = rt().block_on(async {
+        let mut g = PAIRING.lock().await;
+        let rx = g.as_mut().ok_or_else(|| "no pairing offer".to_string())?;
+        tokio::time::timeout(std::time::Duration::from_secs(600), rx.recv())
+            .await
+            .map_err(|_| "no device joined in time".to_string())?
+            .ok_or_else(|| "cancelled".to_string())?
+            .map_err(|e| e.to_string())
+    });
+    *rt().block_on(PAIRING.lock()) = None;
+    r?;
+    Ok(LAST_MERGE.lock().unwrap().take().unwrap_or(super::engine::MergeInfoView { liked: 0, playlists_new: 0, playlists_grown: 0, plays: 0 }))
 }
 
-pub fn playlist_share_stop(id: i64) {
-    let s = crate::party_state::SHARES.lock().unwrap().as_mut().and_then(|m| m.remove(&id));
-    if let Some(s) = s.and_then(|s| std::sync::Arc::try_unwrap(s).ok()) {
-        rt().spawn(s.close());
+/// Uses another device's pairing link: combines both libraries and pairs them.
+pub fn sync_join(link: String, name: String) -> Result<super::engine::MergeInfoView, String> {
+    crate::party_state::kv_set("party_name", &name);
+    let l = harp_party::node::Link::parse(&link).map_err(|e| e.to_string())?;
+    if l.kind != "sync" {
+        return Err(if l.kind == "party" { "that's a party link; this needs a sync link".into() } else { "not a sync link".into() });
     }
+    let n = node().map_err(|e| e.to_string())?;
+    rt().block_on(n.sync_with(l.addr(), l.params.get("code").cloned())).map_err(|e| format!("{e:#}"))?;
+    Ok(LAST_MERGE.lock().unwrap().take().unwrap_or(super::engine::MergeInfoView { liked: 0, playlists_new: 0, playlists_grown: 0, plays: 0 }))
+}
+
+/// Stops a pairing offer.
+pub fn sync_cancel() {
+    if let Some(n) = crate::party_state::NODE.lock().unwrap().as_ref() {
+        n.cancel_pairing();
+    }
+}
+
+/// Your paired devices.
+pub fn sync_devices() -> Vec<DeviceView> {
+    paired().into_iter().map(|p| DeviceView { id: p.id, name: p.name }).collect()
+}
+
+/// Forgets a paired device (it can't sync with this one any more).
+pub fn sync_unpair(id: String) {
+    let mut v = paired();
+    v.retain(|p| p.id != id);
+    set_paired(&v);
+    if let (Some(n), Ok(eid)) = (crate::party_state::NODE.lock().unwrap().as_ref(), id.parse()) {
+        n.unpair(eid);
+    }
+}
+
+/// Syncs with every paired device that's online now. Returns one line each.
+pub fn sync_now() -> Result<Vec<String>, String> {
+    let devices = paired();
+    if devices.is_empty() {
+        return Ok(vec![]);
+    }
+    let n = node().map_err(|e| e.to_string())?;
+    let mut out = vec![];
+    for d in devices {
+        let Ok(id) = d.id.parse::<iroh::EndpointId>() else { continue };
+        match rt().block_on(n.sync_with(iroh::EndpointAddr::new(id), None)) {
+            Ok(_) => out.push(format!("{}: synced", d.name)),
+            Err(e) => out.push(format!("{}: {}", d.name, e.to_string().lines().next().unwrap_or("not reachable"))),
+        }
+    }
+    LAST_MERGE.lock().unwrap().take();
+    Ok(out)
+}
+
+/// Shares a playlist with a lasting link: friends who save it get your changes.
+pub fn playlist_share(id: i64) -> Result<String, String> {
+    let mut sh = shares();
+    if let Some((_, (_, link))) = sh.iter().find(|(_, (pid, _))| *pid == id) {
+        return Ok(link.clone());
+    }
+    let (name, _) = super::engine::playlist_contents(id)?;
+    let n = node().map_err(|e| e.to_string())?;
+    let t = token();
+    let link = rt().block_on(n.playlist_link(&t, &name));
+    sh.insert(t, (id, link.clone()));
+    set_shares(&sh);
+    Ok(link)
+}
+
+/// The link while a playlist is shared.
+#[flutter_rust_bridge::frb(sync)]
+pub fn playlist_share_link(id: i64) -> Option<String> {
+    shares().into_values().find(|(pid, _)| *pid == id).map(|(_, l)| l)
+}
+
+/// Stops sharing: the link stops working, friends' copies stop updating.
+pub fn playlist_share_stop(id: i64) {
+    let mut sh = shares();
+    sh.retain(|_, (pid, _)| *pid != id);
+    set_shares(&sh);
+}
+
+fn fetch_shared(link: &str) -> Result<SharedPlaylist, String> {
+    let l = harp_party::node::Link::parse(link).map_err(|e| e.to_string())?;
+    if l.kind != "playlist" {
+        return Err("not a playlist link".into());
+    }
+    let n = node().map_err(|e| e.to_string())?;
+    let data = rt().block_on(n.fetch_playlist(&l)).map_err(|e| format!("{e:#}"))?;
+    serde_json::from_slice(&data).map_err(|_| "that playlist couldn't be read".to_string())
 }
 
 /// What a shared playlist link holds (name and songs), without saving it.
 pub fn playlist_peek(link: String) -> Result<(String, Vec<SongView>), String> {
-    let data = rt().block_on(harp_party::share::fetch(&link)).map_err(|e| format!("{e:#}"))?;
-    let p: SharedPlaylist = serde_json::from_slice(&data).map_err(|_| "that playlist couldn't be read".to_string())?;
+    let p = fetch_shared(&link)?;
     Ok((p.name, p.songs.iter().map(|s| view(s, false, false)).collect()))
+}
+
+/// Saves a friend's shared playlist; it follows their changes. Returns its id.
+pub fn playlist_follow(link: String) -> Result<i64, String> {
+    let p = fetch_shared(&link)?;
+    let id = super::engine::playlist_create(p.name)?;
+    super::engine::playlist_follow_set(id, &link, &p.songs)?;
+    Ok(id)
+}
+
+/// Brings followed playlists up to date. Returns how many changed.
+pub fn playlists_refresh() -> Result<u32, String> {
+    let mut changed = 0;
+    for (id, link) in super::engine::followed_playlists()? {
+        if let Ok(p) = fetch_shared(&link) {
+            if super::engine::playlist_follow_set(id, &link, &p.songs)? {
+                changed += 1;
+            }
+        }
+    }
+    Ok(changed)
 }

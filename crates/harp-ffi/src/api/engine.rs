@@ -544,6 +544,12 @@ pub struct PlaylistView {
     pub count: u32,
     /// Songs added later get downloaded ("Download All" was chosen).
     pub auto_download: bool,
+    /// Your own cover picture (a file), or "".
+    pub cover: String,
+    /// The folder it's in, or "".
+    pub folder: String,
+    /// The shared link it follows (a friend's playlist), or "".
+    pub remote: String,
     pub pinned: bool,
     /// Artwork of the first songs, for a cover mosaic.
     pub covers: Vec<String>,
@@ -551,7 +557,7 @@ pub struct PlaylistView {
 
 pub fn playlists() -> Result<Vec<PlaylistView>, String> {
     let v = eng()?.store.lock().unwrap().playlists().map_err(e)?;
-    Ok(v.into_iter().map(|p| PlaylistView { id: p.id, name: p.name, count: p.count, auto_download: p.auto_download, pinned: p.pinned, covers: p.covers }).collect())
+    Ok(v.into_iter().map(|p| PlaylistView { id: p.id, name: p.name, count: p.count, auto_download: p.auto_download, cover: p.cover, folder: p.folder, remote: p.remote, pinned: p.pinned, covers: p.covers }).collect())
 }
 
 /// Pins a playlist to the top of the list (or unpins it).
@@ -1709,4 +1715,45 @@ pub fn autoeq_load(name: String, source: String, path: String) -> Result<AutoEqV
             })
             .collect(),
     })
+}
+
+
+/// Sets a playlist's own cover: copies the picture into Harp's data, so it stays
+/// even if the original moves ("" goes back to the mosaic).
+pub fn playlist_set_cover(id: i64, image_path: String) -> Result<String, String> {
+    let en = eng()?;
+    let stored = if image_path.is_empty() {
+        String::new()
+    } else {
+        let dir = en.thumbs_dir.join("playlists");
+        std::fs::create_dir_all(&dir).map_err(e)?;
+        let ext = std::path::Path::new(&image_path).extension().and_then(|x| x.to_str()).unwrap_or("jpg").to_lowercase();
+        let dest = dir.join(format!("pl{id}-{}.{ext}", now_secs()));
+        std::fs::copy(&image_path, &dest).map_err(e)?;
+        dest.to_string_lossy().into_owned()
+    };
+    en.store.lock().unwrap().set_playlist_cover(id, &stored).map_err(e)?;
+    Ok(stored)
+}
+
+/// Puts a playlist in a folder ("" takes it out).
+pub fn playlist_set_folder(id: i64, folder: String) -> Result<(), String> {
+    eng()?.store.lock().unwrap().set_playlist_folder(id, &folder).map_err(e)
+}
+
+pub fn folder_rename(old: String, new: String) -> Result<(), String> {
+    eng()?.store.lock().unwrap().rename_folder(&old, &new).map_err(e)
+}
+
+
+/// A followed playlist's songs and link (true when its songs changed).
+pub(crate) fn playlist_follow_set(id: i64, link: &str, songs: &[Song]) -> Result<bool, String> {
+    let st = eng()?.store.lock().unwrap();
+    st.set_playlist_remote(id, link).map_err(e)?;
+    st.replace_playlist_songs(id, songs).map_err(e)
+}
+
+/// Playlists that follow a friend's shared link: (id, link).
+pub(crate) fn followed_playlists() -> Result<Vec<(i64, String)>, String> {
+    Ok(eng()?.store.lock().unwrap().playlists().map_err(e)?.into_iter().filter(|p| !p.remote.is_empty()).map(|p| (p.id, p.remote)).collect())
 }

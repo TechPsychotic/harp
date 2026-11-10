@@ -338,6 +338,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => SyncScreen(player: widget.player))),
                 ),
+                SwitchListTile(
+                  title: const Text('Keep my devices in sync'),
+                  subtitle: Text('Paired devices sync by themselves (at start and every 10 minutes).', style: TextStyle(color: tok.textDim)),
+                  value: s.autoSync,
+                  onChanged: s.setAutoSync,
+                ),
+                SwitchListTile(
+                  title: const Text('Keep saved playlists up to date'),
+                  subtitle: Text('Playlists saved from a friend’s link follow their changes.', style: TextStyle(color: tok.textDim)),
+                  value: s.autoPlaylists,
+                  onChanged: s.setAutoPlaylists,
+                ),
                 ListTile(
                   leading: const Icon(Icons.save_alt_rounded),
                   title: const Text('Back up your library'),

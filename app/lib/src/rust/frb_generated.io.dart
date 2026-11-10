@@ -85,6 +85,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   CollectionView dco_decode_collection_view(dynamic raw);
 
   @protected
+  DeviceView dco_decode_device_view(dynamic raw);
+
+  @protected
   DownloadView dco_decode_download_view(dynamic raw);
 
   @protected
@@ -125,6 +128,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<CollectionView> dco_decode_list_collection_view(dynamic raw);
+
+  @protected
+  List<DeviceView> dco_decode_list_device_view(dynamic raw);
 
   @protected
   List<DownloadView> dco_decode_list_download_view(dynamic raw);
@@ -334,6 +340,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   CollectionView sse_decode_collection_view(SseDeserializer deserializer);
 
   @protected
+  DeviceView sse_decode_device_view(SseDeserializer deserializer);
+
+  @protected
   DownloadView sse_decode_download_view(SseDeserializer deserializer);
 
   @protected
@@ -384,6 +393,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<CollectionView> sse_decode_list_collection_view(
     SseDeserializer deserializer,
   );
+
+  @protected
+  List<DeviceView> sse_decode_list_device_view(SseDeserializer deserializer);
 
   @protected
   List<DownloadView> sse_decode_list_download_view(
@@ -658,6 +670,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_device_view(DeviceView self, SseSerializer serializer);
+
+  @protected
   void sse_encode_download_view(DownloadView self, SseSerializer serializer);
 
   @protected
@@ -714,6 +729,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_collection_view(
     List<CollectionView> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_device_view(
+    List<DeviceView> self,
     SseSerializer serializer,
   );
 

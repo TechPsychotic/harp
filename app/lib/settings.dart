@@ -52,6 +52,12 @@ class AppSettings extends ChangeNotifier {
   double hpPreamp = 0;
   List<(String, double, double, double)> hpFilters = const [];
 
+  /// Paired devices sync by themselves (at start and every 10 minutes).
+  bool autoSync = true;
+
+  /// Playlists saved from a friend's link follow their changes by themselves.
+  bool autoPlaylists = true;
+
   /// Crossfade between songs, seconds (0 = off: songs follow gaplessly).
   int crossfade = 0;
 
@@ -121,6 +127,8 @@ class AppSettings extends ChangeNotifier {
     if (ce.length == 10 && ce.every((v) => v != null)) customEq = [for (final v in ce) v!.clamp(-12.0, 12.0)];
     normalize = await get('normalize') == '1';
     crossfade = int.tryParse(await get('crossfade') ?? '') ?? 0;
+    autoSync = await get('auto_sync') != '0';
+    autoPlaylists = await get('auto_playlists') != '0';
     _readHp(await get('headphone_eq'));
     speed = double.tryParse(await get('speed') ?? '') ?? 1;
     notifyListeners();
@@ -217,6 +225,18 @@ class AppSettings extends ChangeNotifier {
     _readHp(v);
     notifyListeners();
     await _save('headphone_eq', v);
+  }
+
+  Future<void> setAutoSync(bool v) async {
+    autoSync = v;
+    notifyListeners();
+    await _save('auto_sync', v ? '1' : '0');
+  }
+
+  Future<void> setAutoPlaylists(bool v) async {
+    autoPlaylists = v;
+    notifyListeners();
+    await _save('auto_playlists', v ? '1' : '0');
   }
 
   Future<void> setCrossfade(int v) async {

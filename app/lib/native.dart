@@ -52,6 +52,14 @@ class Native {
     }
   }
 
+  /// Android: tells the home-screen widget what's playing.
+  static Future<void> updateWidget({required String title, required String artist, required String art, required bool playing}) async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _c.invokeMethod('widget', {'title': title, 'artist': artist, 'art': art, 'playing': playing});
+    } catch (_) {}
+  }
+
   /// Android: asks to read your music files (true elsewhere).
   static Future<bool> requestAudioAccess() async {
     if (!Platform.isAndroid) return true;

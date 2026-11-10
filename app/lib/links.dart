@@ -90,7 +90,7 @@ class Links {
       context: nav.context,
       builder: (c) => AlertDialog(
         title: Text('Save “$name”?'),
-        content: Text('A shared playlist with ${songs.length} songs. A copy goes into your library.'),
+        content: Text('A shared playlist with ${songs.length} songs. It goes into your library and follows their changes.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Not now')),
           FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Save')),
@@ -98,9 +98,8 @@ class Links {
       ),
     );
     if (ok != true) return;
-    final id = await api.playlistCreate(name: name);
-    // Added at the top in one batch, so they keep the sharer's order.
-    await api.playlistAdd(id: id, songs: songs);
+    // Saved as a copy that follows the friend's changes (Settings › Backup › Sync).
+    final id = await net.playlistFollow(link: link);
     p.libraryRev.value++;
     final pl = (await api.playlists()).where((x) => x.id == id).firstOrNull;
     if (pl != null && nav.mounted) nav.push(MaterialPageRoute(builder: (_) => PlaylistScreen(player: p, playlist: pl)));

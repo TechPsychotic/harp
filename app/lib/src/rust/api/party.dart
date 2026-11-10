@@ -8,9 +8,9 @@ import 'engine.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `event_view`, `song_view`, `track`
+// These functions are ignored because they are not marked as `pub`: `event_view`, `fetch_shared`, `song_view`, `track`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `SharedPlaylist`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`
 
 /// The app listens here for everything that happens in a party.
 Stream<PartyEventView> partyEvents() =>
@@ -47,37 +47,80 @@ Future<void> partyRequest({required SongView s}) =>
 /// "none", "host" or "guest".
 String partyRole() => RustLib.instance.api.crateApiPartyPartyRole();
 
-/// Offers this device's library for syncing; returns the link to paste on the
-/// other device. Then call `sync_wait`.
+/// Starts the network side at app start when it's needed (you have paired
+/// devices or shared playlists), so your other devices and friends can reach this one.
+Future<bool> netStartIfNeeded() =>
+    RustLib.instance.api.crateApiPartyNetStartIfNeeded();
+
+/// Pairing: shows a link with a one-time code; then call `sync_wait`.
 Future<String> syncOffer({required String name}) =>
     RustLib.instance.api.crateApiPartySyncOffer(name: name);
 
-/// Waits (up to 10 minutes) for the other device, then adds its library to this one.
+/// Waits (up to 10 minutes) for the other device to use the link. Both libraries
+/// are then combined, and the two devices sync by themselves from now on.
 Future<MergeInfoView> syncWait() =>
     RustLib.instance.api.crateApiPartySyncWait();
 
-/// Joins a sync offer: both devices end up with both libraries.
-Future<MergeInfoView> syncJoin({required String link}) =>
-    RustLib.instance.api.crateApiPartySyncJoin(link: link);
+/// Uses another device's pairing link: combines both libraries and pairs them.
+Future<MergeInfoView> syncJoin({required String link, required String name}) =>
+    RustLib.instance.api.crateApiPartySyncJoin(link: link, name: name);
 
-/// Stops offering (a `sync_wait` in progress returns "cancelled" and closes it).
+/// Stops a pairing offer.
 Future<void> syncCancel() => RustLib.instance.api.crateApiPartySyncCancel();
 
-/// Starts sharing a playlist (or returns the link if it already is). Friends
-/// open the link to get a copy. Sharing lasts while Harp is open, until stopped.
+/// Your paired devices.
+Future<List<DeviceView>> syncDevices() =>
+    RustLib.instance.api.crateApiPartySyncDevices();
+
+/// Forgets a paired device (it can't sync with this one any more).
+Future<void> syncUnpair({required String id}) =>
+    RustLib.instance.api.crateApiPartySyncUnpair(id: id);
+
+/// Syncs with every paired device that's online now. Returns one line each.
+Future<List<String>> syncNow() => RustLib.instance.api.crateApiPartySyncNow();
+
+/// Shares a playlist with a lasting link: friends who save it get your changes.
 Future<String> playlistShare({required PlatformInt64 id}) =>
     RustLib.instance.api.crateApiPartyPlaylistShare(id: id);
 
-/// The link while a playlist is being shared.
+/// The link while a playlist is shared.
 String? playlistShareLink({required PlatformInt64 id}) =>
     RustLib.instance.api.crateApiPartyPlaylistShareLink(id: id);
 
+/// Stops sharing: the link stops working, friends' copies stop updating.
 Future<void> playlistShareStop({required PlatformInt64 id}) =>
     RustLib.instance.api.crateApiPartyPlaylistShareStop(id: id);
 
 /// What a shared playlist link holds (name and songs), without saving it.
 Future<(String, List<SongView>)> playlistPeek({required String link}) =>
     RustLib.instance.api.crateApiPartyPlaylistPeek(link: link);
+
+/// Saves a friend's shared playlist; it follows their changes. Returns its id.
+Future<PlatformInt64> playlistFollow({required String link}) =>
+    RustLib.instance.api.crateApiPartyPlaylistFollow(link: link);
+
+/// Brings followed playlists up to date. Returns how many changed.
+Future<int> playlistsRefresh() =>
+    RustLib.instance.api.crateApiPartyPlaylistsRefresh();
+
+/// One of your paired devices.
+class DeviceView {
+  final String id;
+  final String name;
+
+  const DeviceView({required this.id, required this.name});
+
+  @override
+  int get hashCode => id.hashCode ^ name.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DeviceView &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          name == other.name;
+}
 
 /// Something that happened in the party. `kind`: "guest_joined", "guest_left",
 /// "control", "request", "connected", "state", "members", "ended".

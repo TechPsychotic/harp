@@ -117,18 +117,18 @@ impl Store {
                 tx.execute("INSERT OR IGNORE INTO downloads(song_id,song_json,path,bytes,quality,at) VALUES(?,?,?,?,?,?)", rusqlite::params![d.0, d.1, d.2, d.3, d.4, d.5])?;
             }
             // Playlists, matched by name.
-            let pls: Vec<(i64, String, i64, i64, i64)> = {
-                let mut st = tx.prepare("SELECT id,name,created,pinned,autodl FROM b.playlists ORDER BY id")?;
-                let v = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)))?.flatten().collect();
+            let pls: Vec<(i64, String, i64, i64, i64, String)> = {
+                let mut st = tx.prepare("SELECT id,name,created,pinned,autodl,folder FROM b.playlists ORDER BY id")?;
+                let v = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)))?.flatten().collect();
                 v
             };
-            for (bid, name, created, pinned, autodl) in pls {
+            for (bid, name, created, pinned, autodl, folder) in pls {
                 use rusqlite::OptionalExtension;
                 let here: Option<i64> = tx.query_row("SELECT id FROM main.playlists WHERE name=?1 ORDER BY id LIMIT 1", [&name], |r| r.get(0)).optional()?;
                 let id = match here {
                     Some(id) => id,
                     None => {
-                        tx.execute("INSERT INTO main.playlists(name,created,pinned,autodl) VALUES(?,?,?,?)", rusqlite::params![name, created, pinned, autodl])?;
+                        tx.execute("INSERT INTO main.playlists(name,created,pinned,autodl,folder) VALUES(?,?,?,?,?)", rusqlite::params![name, created, pinned, autodl, folder])?;
                         info.playlists_new += 1;
                         tx.last_insert_rowid()
                     }

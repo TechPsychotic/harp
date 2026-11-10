@@ -138,6 +138,17 @@ class MainActivity : AudioServiceActivity() {
                         startActivity(android.content.Intent.createChooser(send, null))
                         result.success(true)
                     }
+                    // The home-screen widget shows what's playing.
+                    "widget" -> {
+                        HarpWidget.update(
+                            applicationContext,
+                            call.argument<String>("title") ?: "",
+                            call.argument<String>("artist") ?: "",
+                            call.argument<String>("art") ?: "",
+                            call.argument<Boolean>("playing") ?: false,
+                        )
+                        result.success(null)
+                    }
                     "isMetered" -> {
                         val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
                         result.success(cm.isActiveNetworkMetered)

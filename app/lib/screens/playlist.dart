@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -30,6 +32,9 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   String _sort = 'custom';
   late String _name = widget.playlist.name;
   late bool _autoDl = widget.playlist.autoDownload;
+  late String _cover = widget.playlist.cover;
+  late String _folder = widget.playlist.folder;
+  late String _remote = widget.playlist.remote;
   bool _loaded = false;
 
   /// Play order toggles, remembered per playlist (like Spotify).
@@ -63,7 +68,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     _smart = await api.settingGet(key: 'pl_smart:$id') == '1';
     ThumbCache.precache(s.map((x) => x.thumbnail));
     final me = (await api.playlists()).where((x) => x.id == id).firstOrNull;
-    if (mounted) setState(() { _songs = s; _loaded = true; _autoDl = me?.autoDownload ?? _autoDl; });
+    if (mounted) setState(() { _songs = s; _loaded = true; _autoDl = me?.autoDownload ?? _autoDl; _cover = me?.cover ?? _cover; _folder = me?.folder ?? _folder; _remote = me?.remote ?? _remote; });
   }
 
   bool get _isThis {
@@ -113,7 +118,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       builder: (ctx) => AlertDialog(
         title: Text('Share “$_name”'),
         content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Friends open this link in Harp to get a copy of the playlist. It works while sharing is on and Harp is open here.'),
+          const Text('Friends open this link in Harp to save the playlist; their copy follows your changes. It keeps working until you stop sharing (Harp needs to be open here for them to fetch updates).'),
           const SizedBox(height: 10),
           SelectableText(link, style: TextStyle(fontSize: 12, color: ctx.tok.textDim)),
         ]),
@@ -170,6 +175,39 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           setState(() => _name = n.trim());
           p.libraryRev.value++;
         }
+      case 'cover':
+        final files = await FilePicker.pickFiles(dialogTitle: 'Choose a cover picture', type: FileType.image);
+        if (files.isEmpty || files.first.path == null) return;
+        final stored = await api.playlistSetCover(id: id, imagePath: files.first.path!);
+        setState(() => _cover = stored);
+        p.libraryRev.value++;
+      case 'nocover':
+        await api.playlistSetCover(id: id, imagePath: '');
+        setState(() => _cover = '');
+        p.libraryRev.value++;
+      case 'folder':
+        final folders = {for (final x in await api.playlists()) if (x.folder.isNotEmpty) x.folder}.toList()..sort();
+        if (!mounted) return;
+        final pick = await showDialog<String>(
+          context: context,
+          builder: (ctx) => SimpleDialog(title: const Text('Move to folder'), children: [
+            for (final f in folders)
+              SimpleDialogOption(onPressed: () => Navigator.pop(ctx, f), child: ListTile(leading: const Icon(Icons.folder_rounded), title: Text(f), trailing: f == _folder ? const Icon(Icons.check_rounded) : null)),
+            SimpleDialogOption(onPressed: () => Navigator.pop(ctx, '\u0000new'), child: const ListTile(leading: Icon(Icons.create_new_folder_rounded), title: Text('New folder…'))),
+            if (_folder.isNotEmpty) SimpleDialogOption(onPressed: () => Navigator.pop(ctx, ''), child: const ListTile(leading: Icon(Icons.folder_off_rounded), title: Text('Out of the folder'))),
+          ]),
+        );
+        if (pick == null || !mounted) return;
+        var folder = pick;
+        if (pick == '\u0000new') {
+          final n = await promptText(context, title: 'New folder', hint: 'Name');
+          if (n == null || n.trim().isEmpty) return;
+          folder = n.trim();
+        }
+        await api.playlistSetFolder(id: id, folder: folder);
+        setState(() => _folder = folder);
+        p.libraryRev.value++;
+        if (mounted) toast(context, folder.isEmpty ? 'Out of the folder' : 'Moved to “$folder”');
       case 'export':
         final f = await pickExportFormat(context);
         if (f == null || !mounted) return;
@@ -243,6 +281,10 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
               if (_autoDl)
                 const PopupMenuItem(value: 'nodl', child: ListTile(leading: Icon(Icons.file_download_off_rounded), title: Text('Stop downloading new songs'), dense: true)),
               const PopupMenuItem(value: 'rename', child: ListTile(leading: Icon(Icons.edit_rounded), title: Text('Rename'), dense: true)),
+              const PopupMenuItem(value: 'cover', child: ListTile(leading: Icon(Icons.image_rounded), title: Text('Change cover…'), dense: true)),
+              if (_cover.isNotEmpty)
+                const PopupMenuItem(value: 'nocover', child: ListTile(leading: Icon(Icons.grid_view_rounded), title: Text('Use the song mosaic'), dense: true)),
+              const PopupMenuItem(value: 'folder', child: ListTile(leading: Icon(Icons.folder_rounded), title: Text('Move to folder…'), dense: true)),
               const PopupMenuItem(value: 'delete', child: ListTile(leading: Icon(Icons.delete_outline_rounded, color: Colors.redAccent), title: Text('Delete Playlist'), dense: true)),
             ],
           ),
@@ -254,7 +296,31 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
               SliverToBoxAdapter(
                 child: Column(children: [
                   const SizedBox(height: 4),
-                  _Mosaic(songs: _songs, size: 230),
+                  _cover.isNotEmpty && File(_cover).existsSync()
+                      ? Center(
+                          child: Container(
+                            width: 230,
+                            height: 230,
+                            decoration: BoxDecoration(borderRadius: BorderRadius.circular(Radii.tile), boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 30, offset: Offset(0, 12))]),
+                            clipBehavior: Clip.antiAlias,
+                            child: Image.file(File(_cover), fit: BoxFit.cover),
+                          ),
+                        )
+                      : _Mosaic(songs: _songs, size: 230),
+                  if (_remote.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(Icons.cloud_sync_rounded, size: 14, color: tok.textDim),
+                        const SizedBox(width: 4),
+                        Text(p.settings.autoPlaylists ? 'Shared with you · updates automatically' : 'Shared with you', style: TextStyle(color: tok.textDim, fontSize: 13)),
+                      ]),
+                    ),
+                  if (_folder.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.folder_rounded, size: 14, color: tok.textDim), const SizedBox(width: 4), Text(_folder, style: TextStyle(color: tok.textDim, fontSize: 13))]),
+                    ),
                   const SizedBox(height: 16),
                   Text(_name, textAlign: TextAlign.center, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: -0.4)),
                   Text('${_songs.length} songs${_autoDl ? ' · new songs download automatically' : ''}', style: TextStyle(color: tok.textDim, fontSize: 14)),

@@ -142,6 +142,8 @@ const MIGRATIONS: &[&str] = &[
     "ALTER TABLE artist_scores ADD COLUMN updated INTEGER NOT NULL DEFAULT 0;",
     // 5: a playlist's own cover picture, and the folder it sits in.
     "ALTER TABLE playlists ADD COLUMN cover TEXT NOT NULL DEFAULT ''; ALTER TABLE playlists ADD COLUMN folder TEXT NOT NULL DEFAULT '';",
+    // 6: a playlist saved from a friend's link remembers it, to stay up to date.
+    "ALTER TABLE playlists ADD COLUMN remote TEXT NOT NULL DEFAULT '';",
 ];
 
 /// Taste fades: an artist's score halves every 60 days without new plays,

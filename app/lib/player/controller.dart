@@ -12,6 +12,7 @@ import '../settings.dart';
 import '../theme/art_color.dart';
 import '../theme/glass.dart';
 import '../src/rust/api/engine.dart' as api;
+import '../src/rust/api/party.dart' as net;
 import '../widgets/cover.dart';
 import 'media_session.dart';
 import 'party.dart';
@@ -179,6 +180,34 @@ class PlayerController extends ChangeNotifier {
   /// Bumped when likes, playlists or downloads change, so screens reload.
   final ValueNotifier<int> libraryRev = ValueNotifier(0);
 
+  Timer? _syncTimer;
+  bool _syncing = false;
+
+  /// Keeps paired devices and followed playlists up to date (each only if
+  /// its switch is on in Settings › Backup).
+  Future<void> syncInBackground() async {
+    if (_syncing || settings.offline) return;
+    _syncing = true;
+    try {
+      final hasNet = await net.netStartIfNeeded();
+      if (!hasNet && !settings.autoPlaylists) return;
+      var changed = false;
+      if (settings.autoPlaylists && (await net.playlistsRefresh()) > 0) changed = true;
+      if (settings.autoSync && hasNet) {
+        final r = await net.syncNow();
+        if (r.any((l) => l.endsWith(': synced'))) changed = true;
+      }
+      if (changed) {
+        libraryRev.value++;
+        savedRev.value++;
+      }
+    } catch (_) {
+      // Offline, or the other device is off: next time.
+    } finally {
+      _syncing = false;
+    }
+  }
+
   /// Bumped when you follow an artist or save an album (pages showing those reload).
   final ValueNotifier<int> savedRev = ValueNotifier(0);
 
@@ -281,6 +310,9 @@ class PlayerController extends ChangeNotifier {
     }
     unawaited(refreshPlaylisted());
     libraryRev.addListener(refreshPlaylisted);
+    // Your devices and friends' playlists: at start, then every 10 minutes.
+    unawaited(Future<void>.delayed(const Duration(seconds: 5), syncInBackground));
+    _syncTimer = Timer.periodic(const Duration(minutes: 10), (_) => syncInBackground());
     _spotTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       if (playing) _saveSpot();
     });
@@ -344,7 +376,24 @@ class PlayerController extends ChangeNotifier {
 
   void _bump() => libraryRev.value++;
 
+  String _widgetKey = '';
+
+  /// The home-screen widget follows the song and play state (Android).
+  void _syncWidget() {
+    final s = current;
+    final key = '${s?.id}|$playing';
+    if (key == _widgetKey) return;
+    _widgetKey = key;
+    unawaited(Native.updateWidget(
+      title: s?.title ?? 'Harp',
+      artist: s?.artist ?? 'Tap to open',
+      art: s == null ? '' : (ThumbCache.peek(s.thumbnail) ?? ''),
+      playing: playing,
+    ));
+  }
+
   void _syncSession() {
+    _syncWidget();
     final s = current;
     if (s == null) {
       session.setIdle();
@@ -1046,6 +1095,7 @@ class PlayerController extends ChangeNotifier {
     if (skipped && completion < 0.5 && completion > 0) {
       skippedRecently = s;
       _skipChipTimer?.cancel();
+    _syncTimer?.cancel();
       _skipChipTimer = Timer(const Duration(seconds: 12), () {
         skippedRecently = null;
         notifyListeners();

@@ -137,8 +137,115 @@ class _LibraryScreenState extends State<LibraryScreen> {
       if (_playlists.isEmpty)
         Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Text('Make a playlist, or bring one over from another app.', style: TextStyle(color: tok.textDim)))
       else
-        for (final pl in _shownPlaylists) _PlaylistRow(pl: pl, playing: _playing('playlist', '${pl.id}'), paused: !p.playing, onToggle: p.togglePlay, onTap: () => _push(PlaylistScreen(player: p, playlist: pl)), onPin: () => _pin(pl)),
+        ...() {
+          // Folders first (each opens its playlists), then playlists in no folder.
+          final shown = _shownPlaylists;
+          final folders = <String, List<api.PlaylistView>>{};
+          for (final pl in shown) {
+            if (pl.folder.isNotEmpty) folders.putIfAbsent(pl.folder, () => []).add(pl);
+          }
+          final names = folders.keys.toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+          return [
+            for (final f in names)
+              ListTile(
+                contentPadding: const EdgeInsets.fromLTRB(16, 2, 12, 2),
+                leading: Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(color: tok.surface, borderRadius: BorderRadius.circular(Radii.cover)),
+                  child: Icon(folders[f]!.any((pl) => _playing('playlist', '${pl.id}')) ? Icons.graphic_eq_rounded : Icons.folder_rounded, color: accent, size: 28),
+                ),
+                title: Text(f, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+                subtitle: Text('Folder · ${folders[f]!.length} ${folders[f]!.length == 1 ? 'playlist' : 'playlists'}', style: TextStyle(color: tok.textDim, fontSize: 13)),
+                trailing: Icon(Icons.chevron_right_rounded, color: tok.textFaint),
+                onTap: () => _push(FolderScreen(player: p, folder: f)),
+              ),
+            for (final pl in shown.where((x) => x.folder.isEmpty))
+              _PlaylistRow(pl: pl, playing: _playing('playlist', '${pl.id}'), paused: !p.playing, onToggle: p.togglePlay, onTap: () => _push(PlaylistScreen(player: p, playlist: pl)), onPin: () => _pin(pl)),
+          ];
+        }(),
     ]);
+  }
+}
+
+/// A folder of playlists.
+class FolderScreen extends StatefulWidget {
+  const FolderScreen({super.key, required this.player, required this.folder});
+  final PlayerController player;
+  final String folder;
+
+  @override
+  State<FolderScreen> createState() => _FolderScreenState();
+}
+
+class _FolderScreenState extends State<FolderScreen> {
+  late String _name = widget.folder;
+  List<api.PlaylistView> _lists = [];
+
+  PlayerController get p => widget.player;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+    p.libraryRev.addListener(_load);
+  }
+
+  @override
+  void dispose() {
+    p.libraryRev.removeListener(_load);
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final all = await api.playlists();
+    if (mounted) setState(() => _lists = all.where((x) => x.folder == _name).toList());
+  }
+
+  bool _playing(api.PlaylistView pl) {
+    final s = p.queue.source;
+    return p.current != null && s != null && s.kind == 'playlist' && s.id == '${pl.id}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(_name),
+        actions: [
+          IconButton(
+            tooltip: 'Rename folder',
+            icon: const Icon(Icons.edit_rounded),
+            onPressed: () async {
+              final n = await promptText(context, title: 'Rename folder', initial: _name);
+              if (n == null || n.trim().isEmpty) return;
+              await api.folderRename(old: _name, new_: n.trim());
+              setState(() => _name = n.trim());
+              p.libraryRev.value++;
+            },
+          ),
+        ],
+      ),
+      body: ListenableBuilder(
+        listenable: p,
+        builder: (context, _) => _lists.isEmpty
+            ? const EmptyState(icon: Icons.folder_open_rounded, text: 'Empty. Move playlists here from their … menu.')
+            : ListView(children: [
+                for (final pl in _lists)
+                  _PlaylistRow(
+                    pl: pl,
+                    playing: _playing(pl),
+                    paused: !p.playing,
+                    onToggle: p.togglePlay,
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => PlaylistScreen(player: p, playlist: pl))),
+                    onPin: () async {
+                      await api.playlistPin(id: pl.id, pinned: !pl.pinned);
+                      p.libraryRev.value++;
+                    },
+                  ),
+              ]),
+      ),
+    );
   }
 }
 
@@ -260,7 +367,7 @@ class _PlaylistRow extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 6, 4, 6),
         child: Row(children: [
-          PlaylistArt(covers: pl.covers, seed: 'pl${pl.id}', size: 56, radius: Radii.cover),
+          PlaylistArt(covers: pl.covers, custom: pl.cover, seed: 'pl${pl.id}', size: 56, radius: Radii.cover),
           const SizedBox(width: 14),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -394,7 +501,7 @@ class _SongListScreenState extends State<SongListScreen> {
       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
       child: ExpansionTile(
         tilePadding: const EdgeInsets.fromLTRB(16, 0, 12, 0),
-        leading: PlaylistArt(covers: pl.covers, seed: 'pl${pl.id}', size: 48, radius: Radii.cover),
+        leading: PlaylistArt(covers: pl.covers, custom: pl.cover, seed: 'pl${pl.id}', size: 48, radius: Radii.cover),
         title: Text(pl.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
         subtitle: Text(all ? 'All ${pl.count} songs downloaded' : '${got.length} of ${pl.count} songs downloaded', style: TextStyle(color: tok.textDim, fontSize: 13)),
         children: [

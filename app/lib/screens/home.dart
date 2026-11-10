@@ -431,7 +431,7 @@ class PlaylistCard extends StatelessWidget {
         child: SizedBox(
           width: 150,
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            PlaylistArt(covers: pl.covers, seed: 'pl${pl.id}', size: 150),
+            PlaylistArt(covers: pl.covers, custom: pl.cover, seed: 'pl${pl.id}', size: 150),
             const SizedBox(height: 7),
             Text(pl.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14)),
             Text('${pl.count} songs', style: TextStyle(color: context.tok.textDim, fontSize: 13)),

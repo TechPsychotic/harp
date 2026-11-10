@@ -1126,6 +1126,7 @@ dependencies = [
  "harp-core",
  "harp-party",
  "harp-ytdlp",
+ "iroh",
  "serde",
  "serde_json",
  "tokio",

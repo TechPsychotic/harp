@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `cached_view`, `collection_view`, `e`, `eng`, `export_songs`, `home_artists`, `import_view`, `lyrics_view`, `playlist_contents`, `queue_view`, `request`, `section_of`, `sections`, `serde_json_string`, `song_from_json`, `song`, `spotify_embed_url`, `spotify_token`, `this_year`, `view`, `views`, `youtube_list_id`
+// These functions are ignored because they are not marked as `pub`: `cached_view`, `collection_view`, `e`, `eng`, `export_songs`, `followed_playlists`, `home_artists`, `import_view`, `lyrics_view`, `playlist_contents`, `playlist_follow_set`, `queue_view`, `request`, `section_of`, `sections`, `serde_json_string`, `song_from_json`, `song`, `spotify_embed_url`, `spotify_token`, `this_year`, `view`, `views`, `youtube_list_id`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Engine`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
@@ -521,6 +521,28 @@ Future<AutoEqView> autoeqLoad({
   source: source,
   path: path,
 );
+
+/// Sets a playlist's own cover: copies the picture into Harp's data, so it stays
+/// even if the original moves ("" goes back to the mosaic).
+Future<String> playlistSetCover({
+  required PlatformInt64 id,
+  required String imagePath,
+}) => RustLib.instance.api.crateApiEnginePlaylistSetCover(
+  id: id,
+  imagePath: imagePath,
+);
+
+/// Puts a playlist in a folder ("" takes it out).
+Future<void> playlistSetFolder({
+  required PlatformInt64 id,
+  required String folder,
+}) => RustLib.instance.api.crateApiEnginePlaylistSetFolder(
+  id: id,
+  folder: folder,
+);
+
+Future<void> folderRename({required String old, required String new_}) =>
+    RustLib.instance.api.crateApiEngineFolderRename(old: old, new_: new_);
 
 class AutoEqProfileView {
   final String name;
@@ -1058,6 +1080,15 @@ class PlaylistView {
 
   /// Songs added later get downloaded ("Download All" was chosen).
   final bool autoDownload;
+
+  /// Your own cover picture (a file), or "".
+  final String cover;
+
+  /// The folder it's in, or "".
+  final String folder;
+
+  /// The shared link it follows (a friend's playlist), or "".
+  final String remote;
   final bool pinned;
 
   /// Artwork of the first songs, for a cover mosaic.
@@ -1068,6 +1099,9 @@ class PlaylistView {
     required this.name,
     required this.count,
     required this.autoDownload,
+    required this.cover,
+    required this.folder,
+    required this.remote,
     required this.pinned,
     required this.covers,
   });
@@ -1078,6 +1112,9 @@ class PlaylistView {
       name.hashCode ^
       count.hashCode ^
       autoDownload.hashCode ^
+      cover.hashCode ^
+      folder.hashCode ^
+      remote.hashCode ^
       pinned.hashCode ^
       covers.hashCode;
 
@@ -1090,6 +1127,9 @@ class PlaylistView {
           name == other.name &&
           count == other.count &&
           autoDownload == other.autoDownload &&
+          cover == other.cover &&
+          folder == other.folder &&
+          remote == other.remote &&
           pinned == other.pinned &&
           covers == other.covers;
 }

@@ -300,7 +300,7 @@ Future<void> showSavedInSheet(BuildContext context, PlayerController player, api
                     CheckboxListTile(
                       value: inside.contains(pl.id),
                       onChanged: (v) => toggle(pl, v ?? false),
-                      secondary: PlaylistArt(covers: pl.covers, seed: 'pl${pl.id}', size: 40, radius: Radii.cover),
+                      secondary: PlaylistArt(covers: pl.covers, custom: pl.cover, seed: 'pl${pl.id}', size: 40, radius: Radii.cover),
                       title: Text(pl.name, maxLines: 1, overflow: TextOverflow.ellipsis),
                       subtitle: Text('${pl.count} songs', style: TextStyle(color: tok.textDim, fontSize: 12.5)),
                     ),
