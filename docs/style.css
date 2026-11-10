@@ -17,6 +17,9 @@
 
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; background: var(--ink); }
+/* Smooth scrolling is done in script (Lenis) when it's available. */
+html.lenis-on { scroll-behavior: auto; }
+html.lenis-on.lenis-stopped { overflow: hidden; }
 body {
   margin: 0;
   /* No background here: the page root has it, so the sky and spheres (behind
@@ -102,7 +105,7 @@ em { font-style: normal; color: var(--accent); transition: color .3s; }
   display: grid; grid-template-columns: 1fr 340px; align-items: end; gap: 40px;
   padding: 120px var(--gutter) clamp(40px, 7vh, 80px);
 }
-.hero .hero-stage { position: absolute; height: auto; left: 22%; right: 18%; top: 11%; bottom: 30%; }
+.hero .hero-stage { position: absolute; height: auto; left: 27%; right: 27%; top: 12%; bottom: 31%; }
 .hero-text { position: relative; }
 h1 { font-size: clamp(56px, 10.5vw, 168px); }
 .hero-side { position: relative; display: grid; gap: 22px; align-content: end; padding-bottom: 10px; }

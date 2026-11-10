@@ -17,6 +17,12 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
   groups in step, orbit, edges, flying away); the nav underlines the section you're in. Fixed: the live
   site showed the new page with the old cached stylesheet (unstyled); the CSS and JS links now carry a
   version so updates always load together. ✅ checked in Chrome on desktop and narrow widths.
+- **Website, smoother:** the spheres now follow the scroll exactly: each shape holds while its section is
+  in view and turns into the next over the stretch between sections (time-based easing, the same at any
+  frame rate), and gentle smooth scrolling on desktop (Lenis; touch stays native). Every shape is
+  measured and centred in its area; denser (84 spheres on desktop, 46 on phones). "Two devices, one
+  beat" is now a phone and a laptop drawn in spheres, their speakers hitting on the same beat with
+  matching ripples while small spheres carry the music between them. Cards arrive one after another.
 - **HRTF (true 3D):** checked the engine's FFmpeg: it has no `sofalizer`, `headphone` or `afir`, so
   it needs our own engine build with libmysofa. Planned as the milestone after v0.9.0.
 
