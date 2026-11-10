@@ -132,7 +132,7 @@
   let W = 0, H = 0, dpr = 1, small = false;
   let balls = [];
   function build() {
-    const n = small ? 46 : 84;
+    const n = small ? 36 : 62;
     balls = [];
     for (let i = 0; i < n; i++) {
       const roll = (i * 7919) % 100;
@@ -186,7 +186,7 @@
   const GOLD = 2.399963;
   const BPM = 104;
   const beat = (time) => Math.exp(-(((time * BPM) / 60) % 1) * 5); // a sharp hit that fades
-  const perDevice = () => (small ? 13 : 22);
+  let s_g = 0; // where the second cluster starts
 
   function shape(mode, time) {
     const n = balls.length;
@@ -196,19 +196,19 @@
       case "cluster": {
         for (let i = 0; i < n; i++) {
           const b = balls[i];
-          const d = Math.sqrt(i + 0.5) * 25;
+          const d = Math.sqrt(i + 0.5) * 31;
           const a = i * GOLD + time * 0.06 * wob;
           out[i] = {
             x: Math.cos(a) * d + Math.sin(time * 0.8 + b.seed * 9) * 5 * wob,
             y: Math.sin(a) * d * 0.86 + Math.cos(time * 0.7 + b.seed * 9) * 5 * wob,
-            r: 11 + 38 * b.base, z: b.base,
+            r: 13 + 42 * b.base, z: b.base,
           };
         }
         return { pts: out, fit: true, still: true };
       }
       case "floor": {
         // A mound: rows from the floor up, each a little shorter.
-        const M = Math.ceil((Math.sqrt(8 * n + 1) - 1) / 2) + 2, R = 24;
+        const M = Math.ceil((Math.sqrt(8 * n + 1) - 1) / 2) + 1, R = 24;
         let i = 0, k = 0;
         while (i < n) {
           const left = Math.min(Math.max(1, M - k), n - i);
@@ -221,7 +221,7 @@
         return { pts: out, fit: true, anchor: "bottom", still: true };
       }
       case "eq": {
-        const cols = small ? 6 : 9, rows = Math.ceil(n / cols), R = 20;
+        const cols = small ? 6 : 8, rows = Math.ceil(n / cols), R = 20;
         for (let i = 0; i < n; i++) {
           const col = i % cols, k = Math.floor(i / cols);
           const level = reduce ? 0.7 : 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(time * 2.4 + col * 1.3) * Math.cos(time * 0.9 + col * 0.4));
@@ -238,42 +238,28 @@
         return { pts: out, fit: true, still: true };
       }
       case "duo": {
-        // A phone and a laptop drawn in spheres, each with a speaker that hits
-        // on the same beat; small spheres carry the music between them.
-        const per = perDevice();
+        // Two clusters (two devices) whose centres hit on the same beat, and
+        // the whole of each swells with it; small spheres carry the music
+        // across between them.
         const hit = reduce ? 0.4 : beat(time);
-        const devices = [
-          { cx: -175, w: 112, h: 200, count: per }, // phone
-          { cx: 150, w: 230, h: 140, count: per + 8 }, // laptop screen
-        ];
-        const outline = (dev, k) => {
-          const { w, h } = dev;
-          let d = (k / dev.count) * 2 * (w + h), x, y;
-          if (d < w) { x = -w / 2 + d; y = -h / 2; }
-          else if ((d -= w) < h) { x = w / 2; y = -h / 2 + d; }
-          else if ((d -= h) < w) { x = w / 2 - d; y = h / 2; }
-          else { d -= w; x = -w / 2; y = h / 2 - d; }
-          return [dev.cx + x, y];
-        };
+        const runners = small ? 6 : 10, g = Math.floor((n - runners) / 2);
         let i = 0;
-        for (const dev of devices) {
-          for (let k = 0; k < dev.count; k++, i++) {
-            const [x, y] = outline(dev, k);
-            out[i] = { x, y, r: 9.5, z: 0.4 };
+        for (const cx of [-210, 210]) {
+          for (let k = 0; k < g; k++, i++) {
+            const b = balls[i];
+            if (k === 0) { out[i] = { x: cx, y: 0, r: 46 * (1 + 0.22 * hit), z: 0.95 }; continue; }
+            const d = Math.sqrt(k + 0.5) * 30 * (1 + 0.05 * hit);
+            const a = k * GOLD + time * 0.05 * wob * (cx < 0 ? 1 : -1);
+            out[i] = { x: cx + Math.cos(a) * d, y: Math.sin(a) * d * 0.9, r: 10 + 26 * b.base, z: 0.2 + 0.6 * b.base };
           }
-          out[i] = { x: dev.cx, y: 0, r: 40 * (1 + 0.24 * hit), z: 0.9 };
-          i++;
         }
-        // The laptop's base.
-        const baseN = small ? 5 : 8;
-        for (let k = 0; k < baseN; k++, i++) out[i] = { x: 150 + (k - (baseN - 1) / 2) * (300 / (baseN - 1)), y: 70 + 24, r: 9, z: 0.4 };
-        const runners = n - i;
         for (let j = 0; i < n; i++, j++) {
           const dir = j % 2 ? 1 : -1;
-          const p = (time * 0.42 * wob + j / runners) % 1;
+          const p = (time * 0.42 * wob + j / Math.max(1, n - 2 * g)) % 1;
           const u = dir > 0 ? p : 1 - p;
-          out[i] = { x: -175 + 325 * u, y: -Math.sin(u * Math.PI) * (dir > 0 ? 120 : 75) - 30, r: 6 + 5 * Math.sin(u * Math.PI), z: 0.6 };
+          out[i] = { x: -210 + 420 * u, y: -Math.sin(u * Math.PI) * (dir > 0 ? 150 : 95) - 30, r: 6 + 5 * Math.sin(u * Math.PI), z: 0.6 };
         }
+        s_g = g;
         return { pts: out, fit: true, still: true, duo: true };
       }
       case "orbit": {
@@ -293,7 +279,7 @@
           const b = balls[i], side = i % 2;
           const fx = 0.3 + 0.55 * ((i * 0.618034) % 1), phase = (i * 0.381966) % 1;
           const y = (((phase * span - time * (14 + 10 * b.base) * wob) % span) + span) % span - 60;
-          out[i] = { x: side ? W - band * fx : band * fx, y, r: i < (small ? 24 : 40) ? (6 + 14 * b.base) * (small ? 0.6 : 1) : 0, z: b.base };
+          out[i] = { x: side ? W - band * fx : band * fx, y, r: i < (small ? 22 : 36) ? (6 + 14 * b.base) * (small ? 0.6 : 1) : 0, z: b.base };
         }
         return { pts: out, fit: false };
       }
@@ -342,7 +328,7 @@
       p.y = ay + (p.y - cy) * k;
       p.r *= k;
     }
-    if (s.duo) s.marks = { a: s.pts[perDevice()], b: s.pts[perDevice() * 2 + 9], k };
+    if (s.duo) s.marks = { a: s.pts[0], b: s.pts[s_g], k };
     return s;
   }
 
@@ -434,7 +420,7 @@
         ctx.strokeStyle = hexA(accentNow, (1 - ph) * 0.45 * weight);
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.arc(c.x, c.y, 40 * k * (1.15 + ph * 1.5), 0, Math.PI * 2);
+        ctx.arc(c.x, c.y, 46 * k * (1.6 + ph * 1.8), 0, Math.PI * 2);
         ctx.stroke();
       }
     }

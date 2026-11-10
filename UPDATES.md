@@ -20,9 +20,9 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 - **Website, smoother:** the spheres now follow the scroll exactly: each shape holds while its section is
   in view and turns into the next over the stretch between sections (time-based easing, the same at any
   frame rate), and gentle smooth scrolling on desktop (Lenis; touch stays native). Every shape is
-  measured and centred in its area; denser (84 spheres on desktop, 46 on phones). "Two devices, one
-  beat" is now a phone and a laptop drawn in spheres, their speakers hitting on the same beat with
-  matching ripples while small spheres carry the music between them. Cards arrive one after another.
+  measured and centred in its area (62 spheres on desktop, 36 on phones). "Two devices, one beat" is
+  two clusters whose centres hit on the same beat, with matching ripples, while small spheres carry the
+  music between them. Cards arrive one after another.
 - **HRTF (true 3D):** checked the engine's FFmpeg: it has no `sofalizer`, `headphone` or `afir`, so
   it needs our own engine build with libmysofa. Planned as the milestone after v0.9.0.
 
