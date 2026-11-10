@@ -35,6 +35,8 @@ use tokio::{
     sync::mpsc,
 };
 
+pub mod sync;
+
 pub const ALPN: &[u8] = b"harp/party/1";
 
 /// While playing, the host repeats its state this often (corrects drift and

@@ -466,6 +466,16 @@ Future<int> localRescan() => RustLib.instance.api.crateApiEngineLocalRescan();
 Future<List<SongView>> localSongs() =>
     RustLib.instance.api.crateApiEngineLocalSongs();
 
+/// Smart Shuffle without a connection: your downloads and your own files,
+/// ranked by your taste. `exclude`: ids already queued.
+Future<List<SongView>> recommendOffline({
+  required int count,
+  required List<String> exclude,
+}) => RustLib.instance.api.crateApiEngineRecommendOffline(
+  count: count,
+  exclude: exclude,
+);
+
 class BrowseGroupView {
   final String title;
   final List<BrowseTileView> tiles;

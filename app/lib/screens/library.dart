@@ -6,6 +6,7 @@ import '../theme/glass.dart';
 import '../widgets/playlist_art.dart';
 import '../widgets/shelf.dart';
 import '../widgets/song_actions.dart';
+import '../widgets/play_button.dart';
 import '../widgets/song_tile.dart';
 import 'collection.dart';
 import 'import_screen.dart';
@@ -125,7 +126,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       if (_playlists.isEmpty)
         Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Text('Make a playlist, or bring one over from another app.', style: TextStyle(color: tok.textDim)))
       else
-        for (final pl in _shownPlaylists) _PlaylistRow(pl: pl, playing: _playing('playlist', '${pl.id}'), onTap: () => _push(PlaylistScreen(player: p, playlist: pl)), onPin: () => _pin(pl)),
+        for (final pl in _shownPlaylists) _PlaylistRow(pl: pl, playing: _playing('playlist', '${pl.id}'), paused: !p.playing, onToggle: p.togglePlay, onTap: () => _push(PlaylistScreen(player: p, playlist: pl)), onPin: () => _pin(pl)),
     ]);
   }
 }
@@ -230,9 +231,11 @@ List<api.SongView> sortSongs(List<api.SongView> l, String by) {
 /// One playlist in the library: cover mosaic, name, count. Pinned ones sit on
 /// top; pin from the menu or with a long press.
 class _PlaylistRow extends StatelessWidget {
-  const _PlaylistRow({required this.pl, required this.onTap, required this.onPin, this.playing = false});
+  const _PlaylistRow({required this.pl, required this.onTap, required this.onPin, this.playing = false, this.paused = false, this.onToggle});
   final api.PlaylistView pl;
   final bool playing;
+  final bool paused;
+  final VoidCallback? onToggle;
   final VoidCallback onTap;
   final VoidCallback onPin;
 
@@ -259,6 +262,12 @@ class _PlaylistRow extends StatelessWidget {
               ]),
             ]),
           ),
+          if (playing)
+            IconButton(
+              tooltip: paused ? 'Resume' : 'Pause',
+              icon: Icon(paused ? Icons.play_circle_fill_rounded : Icons.pause_circle_filled_rounded, color: accent, size: 32),
+              onPressed: onToggle,
+            ),
           PopupMenuButton<String>(
             icon: Icon(Icons.more_horiz_rounded, color: tok.textDim),
             onSelected: (_) => onPin(),
@@ -451,7 +460,7 @@ class _SongListScreenState extends State<SongListScreen> {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                     child: Row(children: [
-                      Expanded(child: FilledButton.icon(onPressed: () => p.playList(songs, from: _from), icon: const Icon(Icons.play_arrow_rounded), label: const Text('Play'))),
+                      Expanded(child: ListPlayButton(player: p, kind: _from.kind, id: _from.id, onPlay: () => p.playList(songs, from: _from))),
                       const SizedBox(width: 12),
                       Expanded(child: OutlinedButton.icon(onPressed: () => p.playList(songs, shuffle: true, from: _from), icon: const Icon(Icons.shuffle_rounded), label: const Text('Shuffle'))),
                     ]),

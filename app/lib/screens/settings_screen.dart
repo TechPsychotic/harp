@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import '../native.dart';
 import '../player/engine_probe.dart';
 import 'spotify_screen.dart';
+import 'sync_screen.dart';
 import '../player/controller.dart';
 import '../settings.dart';
 import '../src/rust/api/engine.dart' as api;
@@ -204,8 +205,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   trailing: !PlayerController.fxSupported ? null : PopupMenuButton<String>(
                     icon: const Icon(Icons.expand_more_rounded),
                     initialValue: s.eq,
-                    onSelected: s.setEq,
-                    itemBuilder: (_) => [for (final m in ['flat', 'bass', 'vocal', 'treble', 'loudness']) PopupMenuItem(value: m, child: Text(eqLabel(m)))],
+                    onSelected: (v) {
+                      if (v == 'custom') {
+                        s.setEq('custom');
+                        showCustomEq(context, s);
+                      } else {
+                        s.setEq(v);
+                      }
+                    },
+                    itemBuilder: (_) => [
+                      for (final m in ['flat', 'bass', 'vocal', 'treble', 'loudness']) PopupMenuItem(value: m, child: Text(eqLabel(m))),
+                      const PopupMenuItem(value: 'custom', child: Text('Custom…')),
+                    ],
                   ),
                 ),
                 SwitchListTile(
@@ -302,6 +313,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ]),
               _Section('Backup', [
+                ListTile(
+                  leading: const Icon(Icons.devices_rounded),
+                  title: const Text('Sync with another device'),
+                  subtitle: Text('Your phone and computer share likes, playlists, history and follows. Nothing is lost.', style: TextStyle(color: tok.textDim)),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => SyncScreen(player: widget.player))),
+                ),
                 ListTile(
                   leading: const Icon(Icons.save_alt_rounded),
                   title: const Text('Back up your library'),
@@ -452,4 +470,52 @@ class _ThemeChoice extends StatelessWidget {
       ),
     );
   }
+}
+
+
+/// The custom equalizer: ten bands, ±12 dB, applied live as you drag.
+void showCustomEq(BuildContext context, AppSettings s) {
+  showModalBottomSheet<void>(
+    context: context,
+    useRootNavigator: true,
+    isScrollControlled: true,
+    builder: (ctx) => SafeArea(
+      child: ListenableBuilder(
+        listenable: s,
+        builder: (context, _) {
+          final tok = context.tok;
+          String hz(int f) => f >= 1000 ? '${f ~/ 1000}k' : '$f';
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(12, 16, 12, 12),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Row(children: [
+                const Expanded(child: Text('Custom Equalizer', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700))),
+                TextButton(onPressed: s.resetCustomEq, child: const Text('Reset')),
+              ]),
+              Text('Drag a band up or down. Changes apply as you go.', style: TextStyle(color: tok.textDim, fontSize: 13)),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 230,
+                child: Row(children: [
+                  for (var i = 0; i < AppSettings.eqBands.length; i++)
+                    Expanded(
+                      child: Column(children: [
+                        Text('${s.customEq[i] > 0 ? '+' : ''}${s.customEq[i].toStringAsFixed(0)}', style: TextStyle(fontSize: 11, color: tok.textDim)),
+                        Expanded(
+                          child: RotatedBox(
+                            quarterTurns: 3,
+                            child: Slider(value: s.customEq[i], min: -12, max: 12, divisions: 48, onChanged: (v) => s.setCustomBand(i, v)),
+                          ),
+                        ),
+                        Text(hz(AppSettings.eqBands[i]), style: const TextStyle(fontSize: 11)),
+                      ]),
+                    ),
+                ]),
+              ),
+            ]),
+          );
+        },
+      ),
+    ),
+  );
 }

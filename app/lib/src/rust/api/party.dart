@@ -46,6 +46,22 @@ Future<void> partyRequest({required SongView s}) =>
 /// "none", "host" or "guest".
 String partyRole() => RustLib.instance.api.crateApiPartyPartyRole();
 
+/// Offers this device's library for syncing; returns the link to paste on the
+/// other device. Then call `sync_wait`.
+Future<String> syncOffer({required String name}) =>
+    RustLib.instance.api.crateApiPartySyncOffer(name: name);
+
+/// Waits (up to 10 minutes) for the other device, then adds its library to this one.
+Future<MergeInfoView> syncWait() =>
+    RustLib.instance.api.crateApiPartySyncWait();
+
+/// Joins a sync offer: both devices end up with both libraries.
+Future<MergeInfoView> syncJoin({required String link}) =>
+    RustLib.instance.api.crateApiPartySyncJoin(link: link);
+
+/// Stops offering (a `sync_wait` in progress returns "cancelled" and closes it).
+Future<void> syncCancel() => RustLib.instance.api.crateApiPartySyncCancel();
+
 /// Something that happened in the party. `kind`: "guest_joined", "guest_left",
 /// "control", "request", "connected", "state", "members", "ended".
 class PartyEventView {

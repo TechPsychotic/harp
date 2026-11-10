@@ -36,3 +36,6 @@ pub fn party(name: &str) -> anyhow::Result<std::sync::Arc<Party>> {
     });
     Ok(p)
 }
+
+/// A library-sync offer waiting for the other device.
+pub static OFFER: Mutex<Option<std::sync::Arc<harp_party::sync::Offer>>> = Mutex::new(None);

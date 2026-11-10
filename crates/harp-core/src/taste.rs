@@ -16,6 +16,15 @@ pub const SEARCH_SKIP_DISCOUNT: f64 = 0.3;
 /// A superlike boosts the artist this much.
 pub const SUPERLIKE_WEIGHT: f64 = 4.0;
 
+/// A skip only counts against a song (and its artist) once you've skipped that
+/// song early more than this many times within [`SKIP_WINDOW_DAYS`]. A skip
+/// now and then just means "not now".
+pub const REPEAT_SKIPS: i64 = 5;
+pub const SKIP_WINDOW_DAYS: i64 = 30;
+
+/// Under this much heard, a play counts as an early skip.
+pub const EARLY_SKIP: f64 = 0.3;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PlaySource {
     Recommended,
@@ -197,13 +206,17 @@ impl Store {
                 r.source.as_str()
             ],
         )?;
-        let (like_w, skip_w) = if r.superliked {
+        let (like_w, mut skip_w) = if r.superliked {
             (SUPERLIKE_WEIGHT, 0.0)
         } else if r.source == PlaySource::Searched {
             (c.max(SEARCH_LIKE_FLOOR), (1.0 - c) * SEARCH_SKIP_DISCOUNT)
         } else {
             (c, 1.0 - c)
         };
+        // Skipping isn't held against anything until it keeps happening to this song.
+        if skip_w > 0.0 && self.early_skips(&r.song.id, SKIP_WINDOW_DAYS, now_secs())? <= REPEAT_SKIPS {
+            skip_w = 0.0;
+        }
         self.bump_artist(&key, &r.song.artist, like_w, skip_w)
     }
 
@@ -285,21 +298,30 @@ impl Store {
         Ok(rows.collect::<std::result::Result<_, _>>()?)
     }
 
-    /// Songs you skipped early (under 30 % heard) in the last `days` days and
-    /// didn't finish since: they aren't picked for you again until then.
-    pub fn recently_skipped(&self, days: i64) -> Result<Vec<String>> {
-        self.recently_skipped_at(days, now_secs())
+    /// How often a song was skipped early in the last `days` days.
+    pub(crate) fn early_skips(&self, song_id: &str, days: i64, now: i64) -> Result<i64> {
+        Ok(self.conn.query_row(
+            "SELECT count(*) FROM plays WHERE song_id=?1 AND completion < ?2 AND played_at >= ?3",
+            params![song_id, EARLY_SKIP, now - days * 86400],
+            |r| r.get(0),
+        )?)
     }
 
-    pub(crate) fn recently_skipped_at(&self, days: i64, now: i64) -> Result<Vec<String>> {
+    /// Songs you keep skipping: early more than [`REPEAT_SKIPS`] times in the
+    /// last `days` days (and not finished since). Only these are set aside.
+    pub fn repeatedly_skipped(&self, days: i64) -> Result<Vec<String>> {
+        self.repeatedly_skipped_at(days, now_secs())
+    }
+
+    pub(crate) fn repeatedly_skipped_at(&self, days: i64, now: i64) -> Result<Vec<String>> {
         let since = now - days * 86400;
         let mut st = self.conn.prepare(
             "SELECT song_id FROM plays WHERE played_at >= ?1 GROUP BY song_id
-             HAVING max(CASE WHEN completion < 0.3 THEN played_at END) IS NOT NULL
+             HAVING sum(CASE WHEN completion < ?2 THEN 1 ELSE 0 END) > ?3
                 AND coalesce(max(CASE WHEN completion >= 0.8 THEN played_at END), 0)
-                    < max(CASE WHEN completion < 0.3 THEN played_at END)",
+                    < max(CASE WHEN completion < ?2 THEN played_at END)",
         )?;
-        let rows = st.query_map([since], |r| r.get(0))?;
+        let rows = st.query_map(params![since, EARLY_SKIP, REPEAT_SKIPS], |r| r.get(0))?;
         Ok(rows.collect::<std::result::Result<_, _>>()?)
     }
 
@@ -409,7 +431,24 @@ mod tests {
         st.record_play(&rec(&s, 1.0, PlaySource::Recommended, false)).unwrap();
         let sc = st.artist_scores().unwrap()[&s.artist_key()];
         assert!((sc.likes - 1.05).abs() < 1e-9);
-        assert!((sc.skips - 0.95).abs() < 1e-9);
+        assert_eq!(sc.skips, 0.0, "one skip isn't held against anyone");
+    }
+
+    #[test]
+    fn only_repeated_skips_count() {
+        let st = Store::open_memory().unwrap();
+        let s = song("1", "t", "A");
+        for _ in 0..REPEAT_SKIPS {
+            st.record_play(&rec(&s, 0.05, PlaySource::Recommended, false)).unwrap();
+        }
+        assert_eq!(st.artist_scores().unwrap()[&s.artist_key()].skips, 0.0, "{REPEAT_SKIPS} skips: still nothing");
+        assert!(st.repeatedly_skipped(SKIP_WINDOW_DAYS).unwrap().is_empty());
+        st.record_play(&rec(&s, 0.05, PlaySource::Recommended, false)).unwrap();
+        assert!(st.artist_scores().unwrap()[&s.artist_key()].skips > 0.9, "the 6th one counts");
+        assert_eq!(st.repeatedly_skipped(SKIP_WINDOW_DAYS).unwrap(), ["1"]);
+        // Finishing it after all takes it back.
+        st.record_play(&rec(&s, 1.0, PlaySource::Recommended, false)).unwrap();
+        assert!(st.repeatedly_skipped(SKIP_WINDOW_DAYS).unwrap().is_empty());
     }
 
     #[test]
@@ -429,7 +468,7 @@ mod tests {
         st.record_play(&rec(&s, 0.0, PlaySource::Searched, false)).unwrap();
         let sc = st.artist_scores().unwrap()[&s.artist_key()];
         assert_eq!(sc.likes, 0.5);
-        assert!((sc.skips - 0.3).abs() < 1e-9);
+        assert_eq!(sc.skips, 0.0, "a single skip of a searched song doesn't count either");
     }
 
     #[test]
@@ -538,7 +577,7 @@ mod tests {
     }
 
     #[test]
-    fn early_skips_are_remembered_for_a_while() {
+    fn repeated_skips_inside_the_window_only() {
         let st = Store::open_memory().unwrap();
         let day = 86400;
         let now = 2_000_000_000;
@@ -548,13 +587,14 @@ mod tests {
                 params![id, c, at],
             ).unwrap();
         };
-        play("skipped", 0.1, now - 2 * day);
-        play("old_skip", 0.1, now - 40 * day);
-        play("finished", 0.95, now - day);
-        play("changed_mind", 0.1, now - 5 * day);
-        play("changed_mind", 0.9, now - day);
-        let mut v = st.recently_skipped_at(30, now).unwrap();
-        v.sort();
-        assert_eq!(v, ["skipped"], "only recent early skips you didn't take back");
+        for i in 0..6 {
+            play("often", 0.1, now - i * day);
+            play("long_ago", 0.1, now - (40 + i) * day);
+        }
+        for i in 0..3 {
+            play("sometimes", 0.1, now - i * day);
+        }
+        let v = st.repeatedly_skipped_at(SKIP_WINDOW_DAYS, now).unwrap();
+        assert_eq!(v, ["often"], "6 skips in 30 days counts; 3, or old ones, don't");
     }
 }

@@ -66,6 +66,12 @@ class Visualizer {
         _ => const [],
       };
 
+  /// The custom equalizer: one band per slider, an octave wide each.
+  static List<mak.AudioEffect> customEqEffects(List<double> gains, List<int> freqs) => [
+        for (var i = 0; i < gains.length && i < freqs.length; i++)
+          if (gains[i].abs() >= 0.1) mak.EqualizerEffect(frequency: freqs[i].toDouble(), gain: gains[i], width: 1.41, widthType: mak.EqualizerWidthType.q),
+      ];
+
   /// Equalizer presets: shelves (whole ranges) rather than narrow peaks, so
   /// the difference is plain to hear.
   static List<mak.AudioEffect> eqEffects(String preset) => switch (preset) {
@@ -107,9 +113,9 @@ class Visualizer {
   static const normalizeEffect = mak.LoudnormEffect(i: -16, tp: -1.5, lra: 11);
 
   /// The whole chain, in order: levelling, then tone, then space.
-  static List<mak.AudioEffect> chain({required String spatial, String eq = 'flat', bool normalize = false}) => [
+  static List<mak.AudioEffect> chain({required String spatial, String eq = 'flat', bool normalize = false, List<double>? custom, List<int>? freqs}) => [
         if (normalize) normalizeEffect,
-        ...eqEffects(eq),
+        ...(eq == 'custom' && custom != null && freqs != null ? customEqEffects(custom, freqs) : eqEffects(eq)),
         ...spatialEffects(spatial),
       ];
 
@@ -120,10 +126,12 @@ class Visualizer {
   }
 
   /// Applies the effects. Never throws: a refused chain leaves the sound as it was.
-  Future<void> applyEffects({required String spatial, String eq = 'flat', bool normalize = false}) async {
+  Future<void> applyEffects({required String spatial, String eq = 'flat', bool normalize = false, List<double>? custom, List<int>? freqs}) async {
     try {
-      await _player?.setAudioEffects(chain(spatial: spatial, eq: eq, normalize: normalize));
-      await _player?.setVolumeGain(-eqHeadroomDb(eq));
+      await _player?.setAudioEffects(chain(spatial: spatial, eq: eq, normalize: normalize, custom: custom, freqs: freqs));
+      // Custom: leave room for the biggest boost.
+      final head = eq == 'custom' && custom != null ? custom.fold<double>(0, (a, b) => b > a ? b : a) : eqHeadroomDb(eq);
+      await _player?.setVolumeGain(-head);
     } catch (_) {}
   }
 

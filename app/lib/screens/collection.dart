@@ -6,6 +6,7 @@ import '../theme/glass.dart';
 import '../widgets/cover.dart';
 import '../widgets/shelf.dart';
 import '../widgets/song_actions.dart';
+import '../widgets/play_button.dart';
 import '../widgets/song_tile.dart';
 
 /// An album, a public playlist, a podcast show or an artist.
@@ -154,7 +155,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Row(children: [
-                      Expanded(child: FilledButton.icon(onPressed: () => p.playList(songs, from: _from(name)), icon: const Icon(Icons.play_arrow_rounded), label: const Text('Play'))),
+                      Expanded(child: ListPlayButton(player: p, kind: widget.info.kind, id: widget.info.id, onPlay: () => p.playList(songs, from: _from(name)))),
                       const SizedBox(width: 12),
                       Expanded(child: OutlinedButton.icon(onPressed: () => p.playList(songs, shuffle: true, from: _from(name)), icon: const Icon(Icons.shuffle_rounded), label: const Text('Shuffle'))),
                     ]),

@@ -64,11 +64,28 @@ pub struct Queue {
     pub repeat: Repeat,
     #[serde(default)]
     pub source: Option<Source>,
+    /// Saved-queue layout: 0 = before the context section existed.
+    #[serde(default)]
+    layout: u32,
 }
+
+/// The current saved-queue layout.
+const LAYOUT: u32 = 1;
 
 impl Queue {
     pub fn new() -> Self {
-        Self::default()
+        Self { layout: LAYOUT, ..Self::default() }
+    }
+
+    /// A queue saved by an older Harp kept a playlist's songs in the same list
+    /// as songs you queued yourself, so they never went away. On loading one,
+    /// that list becomes the context (replaced by the next thing you start).
+    pub fn upgrade(&mut self) {
+        if self.layout < 1 {
+            let old: Vec<Song> = self.user.drain(..).collect();
+            self.context = old.into_iter().chain(self.context.drain(..)).collect();
+            self.layout = LAYOUT;
+        }
     }
 
     pub fn current(&self) -> Option<&Song> {
@@ -454,5 +471,25 @@ mod tests {
         let q: Queue = serde_json::from_str(old).unwrap();
         assert_eq!(q.context_len(), 0);
         assert!(q.source.is_none());
+    }
+
+    #[test]
+    fn an_old_queue_full_of_playlist_songs_clears_on_the_next_start() {
+        // Saved by the old Harp: a playlist's songs sitting in `user`.
+        let mut old = Queue { layout: 0, ..Default::default() };
+        old.current = Some(s("cur"));
+        old.user = vec![s("p1"), s("p2")].into();
+        let mut q: Queue = serde_json::from_str(&serde_json::to_string(&old).unwrap().replace(",\"layout\":0", "")).unwrap();
+        q.upgrade();
+        assert_eq!(q.user_len(), 0);
+        assert_eq!(q.context().map(|x| x.id.as_str()).collect::<Vec<_>>(), ["p1", "p2"]);
+        q.play_context(vec![s("l1"), s("l2")], None);
+        assert_eq!(q.context().map(|x| x.id.as_str()).collect::<Vec<_>>(), ["l2"], "starting something new clears them");
+        // A queue saved by this Harp is left alone.
+        let mut new = Queue::new();
+        new.add_to_queue(s("mine"));
+        let mut back: Queue = serde_json::from_str(&serde_json::to_string(&new).unwrap()).unwrap();
+        back.upgrade();
+        assert_eq!(back.user_len(), 1, "your own queued songs stay");
     }
 }

@@ -5,6 +5,7 @@ import '../src/rust/api/engine.dart' as api;
 import '../theme/glass.dart';
 import '../widgets/cover.dart';
 import '../widgets/song_actions.dart';
+import '../widgets/play_button.dart';
 import '../widgets/song_tile.dart';
 import 'library.dart' show sortSongs;
 
@@ -148,7 +149,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Row(children: [
-                        Expanded(child: FilledButton.icon(onPressed: () => p.playPlaylist(id), icon: const Icon(Icons.play_arrow_rounded), label: const Text('Play'))),
+                        Expanded(child: ListPlayButton(player: p, kind: 'playlist', id: '$id', onPlay: () => p.playPlaylist(id))),
                         const SizedBox(width: 12),
                         Expanded(child: OutlinedButton.icon(onPressed: () => p.playPlaylist(id, shuffle: true), icon: const Icon(Icons.shuffle_rounded), label: const Text('Shuffle'))),
                       ]),

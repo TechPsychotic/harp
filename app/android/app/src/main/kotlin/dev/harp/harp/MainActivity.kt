@@ -42,6 +42,24 @@ class MainActivity : AudioServiceActivity() {
     }
 
     private var pendingAudio: MethodChannel.Result? = null
+    private var links: MethodChannel? = null
+
+    /** A harp:// party or sync link in an intent: opened directly, or inside shared text. */
+    private fun linkOf(i: android.content.Intent?): String? {
+        if (i == null) return null
+        i.dataString?.let { if (it.startsWith("harp://")) return it }
+        if (i.action == android.content.Intent.ACTION_SEND) {
+            val text = i.getStringExtra(android.content.Intent.EXTRA_TEXT) ?: return null
+            return Regex("harp://(party|sync)/\\S+").find(text)?.value
+        }
+        return null
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        linkOf(intent)?.let { links?.invokeMethod("link", it) }
+    }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
@@ -85,6 +103,17 @@ class MainActivity : AudioServiceActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        links = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.harp/links").apply {
+            setMethodCallHandler { call, result ->
+                if (call.method == "initial") {
+                    result.success(linkOf(intent))
+                    // Only once: don't reopen the same link after a restart of the screen.
+                    intent = android.content.Intent(intent).apply { data = null; removeExtra(android.content.Intent.EXTRA_TEXT) }
+                } else {
+                    result.notImplemented()
+                }
+            }
+        }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.harp/native")
             .setMethodCallHandler { call, result ->
                 when (call.method) {

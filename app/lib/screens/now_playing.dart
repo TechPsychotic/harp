@@ -1,4 +1,4 @@
-import 'dart:ui';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 
@@ -170,12 +170,19 @@ class _Backdrop extends StatelessWidget {
     return RepaintBoundary(
       child: Stack(fit: StackFit.expand, children: [
         DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [topC, bottom]))),
-        if (blurArt)
+        // The cover as a soft wash: decoded at 24 px and stretched with smooth
+        // filtering. Looks like a heavy blur, but costs nothing per frame (a real
+        // full-window blur made opening the player slow on big desktop windows).
+        if (blurArt && ThumbCache.peek(song.thumbnail) != null)
           Opacity(
             opacity: dark ? 0.45 : 0.30,
-            child: ImageFiltered(
-              imageFilter: ImageFilter.blur(sigmaX: 60, sigmaY: 60, tileMode: TileMode.decal),
-              child: FittedBox(fit: BoxFit.cover, child: Cover(url: song.thumbnail, seed: song.id, size: 200, radius: 0)),
+            child: Image.file(
+              File(ThumbCache.peek(song.thumbnail)!),
+              cacheWidth: 24,
+              fit: BoxFit.cover,
+              filterQuality: FilterQuality.medium,
+              gaplessPlayback: true,
+              errorBuilder: (_, _, _) => const SizedBox.shrink(),
             ),
           ),
         DecoratedBox(

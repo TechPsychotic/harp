@@ -36,8 +36,12 @@ class AppSettings extends ChangeNotifier {
   /// or "original".
   String lyricsScript = 'both';
 
-  /// Equalizer preset: "flat", "bass", "vocal", "treble" or "loudness".
+  /// Equalizer preset: "flat", "bass", "vocal", "treble", "loudness" or "custom".
   String eq = 'flat';
+
+  /// The custom equalizer: gain in dB (−12…+12) for each of [eqBands].
+  List<double> customEq = List.filled(10, 0);
+  static const eqBands = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
 
   /// Even out the volume between songs (desktop for now).
   bool normalize = false;
@@ -104,6 +108,8 @@ class AppSettings extends ChangeNotifier {
     prefetchOnMobile = await get('prefetch_mobile') == '1';
     lyricsScript = await get('lyrics_script') ?? 'both';
     eq = await get('eq') ?? 'flat';
+    final ce = (await get('eq_custom') ?? '').split(',').map(double.tryParse).toList();
+    if (ce.length == 10 && ce.every((v) => v != null)) customEq = [for (final v in ce) v!.clamp(-12.0, 12.0)];
     normalize = await get('normalize') == '1';
     speed = double.tryParse(await get('speed') ?? '') ?? 1;
     notifyListeners();
@@ -159,6 +165,21 @@ class AppSettings extends ChangeNotifier {
     normalize = v;
     notifyListeners();
     await _save('normalize', v ? '1' : '0');
+  }
+
+  /// One band of the custom equalizer (and switches to it).
+  Future<void> setCustomBand(int i, double db) async {
+    customEq = [...customEq]..[i] = db.clamp(-12.0, 12.0);
+    eq = 'custom';
+    notifyListeners();
+    await _save('eq', 'custom');
+    await _save('eq_custom', customEq.map((v) => v.toStringAsFixed(1)).join(','));
+  }
+
+  Future<void> resetCustomEq() async {
+    customEq = List.filled(10, 0);
+    notifyListeners();
+    await _save('eq_custom', customEq.join(','));
   }
 
   Future<void> setSpeed(double v) async {
@@ -223,5 +244,6 @@ String eqLabel(String s) => switch (s) {
       'vocal' => 'Vocal',
       'treble' => 'Treble boost',
       'loudness' => 'Loudness (low volume)',
+      'custom' => 'Custom',
       _ => 'Flat',
     };

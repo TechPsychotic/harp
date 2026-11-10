@@ -75,6 +75,7 @@ class PlayerController extends ChangeNotifier {
         }
       }),
       _player.stream.error.listen(_onPlayerError),
+      _player.stream.playlist.listen(_onEnginePlaylist),
     ]);
     String lastFx = _fxKey();
     var lastSpeed = settings.speed;
@@ -101,6 +102,9 @@ class PlayerController extends ChangeNotifier {
     session.onBrowse = _browse;
     session.onPlayFromId = _playFromId;
     unawaited(_watchOutput());
+    // Gapless: the next song waits in the engine and starts the moment this one ends.
+    unawaited(_player.setGapless(mak.Gapless.weak).catchError((_) {}));
+    unawaited(_player.setPrefetchPlaylist(true).catchError((_) {}));
   }
 
   AudioSession? _focus;
@@ -218,11 +222,11 @@ class PlayerController extends ChangeNotifier {
   bool get currentSuperliked => _currentSuperliked;
   String? get currentReason => current == null ? null : reasons[current!.id];
 
-  String _fxKey() => '${settings.spatial}|${settings.eq}|${settings.normalize}';
+  String _fxKey() => '${settings.spatial}|${settings.eq}|${settings.normalize}|${settings.eq == 'custom' ? settings.customEq.join(',') : ''}';
 
   /// The effects chain. The engine updates it live, mid-song, without a gap.
   Future<void> _applyAudioFx() =>
-      viz.applyEffects(spatial: settings.spatial, eq: settings.eq, normalize: settings.normalize);
+      viz.applyEffects(spatial: settings.spatial, eq: settings.eq, normalize: settings.normalize, custom: settings.customEq, freqs: AppSettings.eqBands);
 
   Future<void> init() async {
     // The queue comes back as it was; the song waits, paused, where it stopped.
@@ -347,7 +351,12 @@ class PlayerController extends ChangeNotifier {
   /// Smart shuffle: pick by taste, optionally nudged by a genre, mood or artist.
   /// [label] names it in "Playing from" (a mood's name).
   Future<void> smartShuffle({String? genre, String? artist, String? label}) async {
-    if (settings.offline) return playDownloads(shuffle: true);
+    if (settings.offline) {
+      // No connection: your downloads and own files, ranked by your taste.
+      final picks = await api.recommendOffline(count: 40, exclude: const []);
+      if (picks.isEmpty) return playDownloads(shuffle: true);
+      return playList(picks, from: (kind: 'smart', id: '', title: 'Smart Shuffle (offline)'));
+    }
     loading = true;
     error = null;
     notifyListeners();
@@ -478,7 +487,8 @@ class PlayerController extends ChangeNotifier {
         await _player.setRawProperty('user-agent', h.userAgent!);
         _userAgent = h.userAgent;
       }
-      await _player.open(mak.Media(st.url, start: resume, httpHeaders: h.headers), play: true);
+      await _player.open(mak.Media(st.url, start: resume, httpHeaders: h.headers, extras: {'harpId': s.id}), play: true);
+      _armedId = null; // open() replaced the engine's list
       if (gen != _loadGen) {
         superseded = true;
         return;
@@ -542,9 +552,9 @@ class PlayerController extends ChangeNotifier {
     if (queue.autoplay.length >= 3) return;
     try {
       if (settings.offline) {
-        final inQueue = {queue.current?.id, ...queue.user.map((e) => e.id), ...queue.context.map((e) => e.id)};
-        final d = (await api.downloads()).map((e) => e.song).where((s) => !inQueue.contains(s.id)).toList()..shuffle();
-        queue = await api.queueSetAutoplay(songs: d.take(10).toList());
+        final inQueue = [?queue.current?.id, ...queue.user.map((e) => e.id), ...queue.context.map((e) => e.id)];
+        final picks = await api.recommendOffline(count: 10, exclude: inQueue);
+        queue = await api.queueSetAutoplay(songs: picks);
       } else {
         final q = await api.fillAutoplay(count: 10, genre: _mood);
         for (final s in q.autoplay) {
@@ -560,6 +570,106 @@ class PlayerController extends ChangeNotifier {
   }
 
   // --- controls ---
+
+  // --- gapless ---
+
+  /// The song waiting in the engine to follow this one (null: none).
+  String? _armedId;
+  bool _arming = false, _armAgain = false;
+
+  /// Queue changes re-arm the next song (cheap when nothing changed).
+  @override
+  void notifyListeners() {
+    super.notifyListeners();
+    if (_loadedId != null) unawaited(_armNext());
+  }
+
+  /// What plays after this song: your queue, then the list, then autoplay.
+  api.SongView? get _upNext {
+    final q = queue;
+    if (q.repeat == 'one') return q.current;
+    return [...q.user, ...q.context, ...q.autoplay].firstOrNull;
+  }
+
+  Future<void> _armNext() async {
+    if (_arming) {
+      _armAgain = true;
+      return;
+    }
+    _arming = true;
+    try {
+      do {
+        _armAgain = false;
+        await _armOnce();
+      } while (_armAgain);
+    } catch (_) {
+      // Not armed: the song still moves on the ordinary way when this one ends.
+    } finally {
+      _arming = false;
+    }
+  }
+
+  Future<void> _armOnce() async {
+    final cur = current;
+    // Not as a party guest (the host decides what's next), not mid-load.
+    final next = (steer != null || cur == null || _loadedId != cur.id || _loading) ? null : _upNext;
+    if (next?.id == _armedId) return;
+    final pl = _player.state.playlist;
+    for (var i = pl.items.length - 1; i > pl.index; i--) {
+      await _player.remove(i);
+    }
+    _armedId = null;
+    if (next == null || (settings.offline && !next.downloaded)) return;
+    final st = await api.resolveStream(id: next.id, quality: settings.streamQuality);
+    // The queue may have changed while that resolved.
+    if (_upNext?.id != next.id || _loadedId != current?.id || _loading) {
+      _armAgain = true;
+      return;
+    }
+    final h = engineHeaders(st.headers, local: st.local);
+    await _player.add(mak.Media(st.url, httpHeaders: h.headers, extras: {'harpId': next.id}));
+    _armedId = next.id;
+  }
+
+  /// The engine moved into the armed song by itself: catch the queue up.
+  void _onEnginePlaylist(mak.Playlist pl) {
+    if (pl.index < 1 || pl.index >= pl.items.length) return;
+    final id = pl.items[pl.index].extras?['harpId'];
+    if (id is! String || id != _armedId) return;
+    unawaited(_onGaplessAdvance(id));
+  }
+
+  Future<void> _onGaplessAdvance(String id) async {
+    _armedId = null;
+    final before = queue;
+    await _finishCurrent(skipped: false, completion: 1.0); // it played to the end
+    queue = await api.queueNext(autoAdvance: true);
+    final s = queue.current;
+    if (s == null || s.id != id) {
+      // The queue changed at the last moment: load what it says properly.
+      await _load();
+      return;
+    }
+    _currentSource = _sourceOf(s, before);
+    _currentSuperliked = false;
+    skippedRecently = null;
+    _loadedId = id;
+    viz.songSeed = id;
+    _publishNowPlaying(s);
+    unawaited(_updateAccent(s));
+    _syncSession();
+    onTransport?.call();
+    unawaited(api.saveLastPlayed(s: s));
+    // Keep the engine's list to [this song, the next one].
+    try {
+      while (_player.state.playlist.index > 0) {
+        await _player.remove(0);
+      }
+    } catch (_) {}
+    notifyListeners();
+    unawaited(_topUpAutoplay());
+    _prefetch();
+  }
 
   // --- Android Auto and other media browsers ---
 
@@ -732,7 +842,7 @@ class PlayerController extends ChangeNotifier {
   Future<void> _step({required bool auto}) async {
     final before = queue;
     await _finishCurrent(skipped: !auto);
-    final hadNext = before.user.isNotEmpty || before.autoplay.isNotEmpty || before.repeat != 'off';
+    final hadNext = before.user.isNotEmpty || before.context.isNotEmpty || before.autoplay.isNotEmpty || before.repeat != 'off';
     queue = hadNext ? await api.queueNext(autoAdvance: auto) : before;
     if (!hadNext) {
       if (settings.offline) {
@@ -758,10 +868,10 @@ class PlayerController extends ChangeNotifier {
   }
 
   /// Records how much of the current song was heard.
-  Future<void> _finishCurrent({required bool skipped, bool record = true}) async {
+  Future<void> _finishCurrent({required bool skipped, bool record = true, double? completion}) async {
     final s = queue.current;
     if (s == null || !record) return;
-    final completion = duration.value.inMilliseconds == 0 ? 0.0 : progress;
+    completion ??= duration.value.inMilliseconds == 0 ? 0.0 : progress;
     try {
       await api.recordPlay(s: s, completion: completion, superliked: _currentSuperliked, source: _currentSource);
     } catch (_) {}

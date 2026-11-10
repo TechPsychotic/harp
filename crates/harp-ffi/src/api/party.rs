@@ -121,3 +121,40 @@ pub fn party_role() -> String {
         _ => "none".into(),
     }
 }
+
+// --- syncing your library between your own devices ---
+
+/// Offers this device's library for syncing; returns the link to paste on the
+/// other device. Then call `sync_wait`.
+pub fn sync_offer(name: String) -> Result<String, String> {
+    let ours = super::engine::library_backup()?;
+    let offer = rt().block_on(harp_party::sync::Offer::start(ours, &name, false)).map_err(|e| e.to_string())?;
+    let link = offer.link.clone();
+    *crate::party_state::OFFER.lock().unwrap() = Some(std::sync::Arc::new(offer));
+    Ok(link)
+}
+
+/// Waits (up to 10 minutes) for the other device, then adds its library to this one.
+pub fn sync_wait() -> Result<super::engine::MergeInfoView, String> {
+    let offer = crate::party_state::OFFER.lock().unwrap().clone().ok_or("no sync offer")?;
+    let theirs = rt().block_on(offer.wait(std::time::Duration::from_secs(600))).map_err(|e| e.to_string());
+    crate::party_state::OFFER.lock().unwrap().take();
+    if let Ok(o) = std::sync::Arc::try_unwrap(offer) {
+        rt().spawn(o.close());
+    }
+    super::engine::library_restore(theirs?)
+}
+
+/// Joins a sync offer: both devices end up with both libraries.
+pub fn sync_join(link: String) -> Result<super::engine::MergeInfoView, String> {
+    let ours = super::engine::library_backup()?;
+    let theirs = rt().block_on(harp_party::sync::join(&link, &ours)).map_err(|e| format!("{e:#}"))?;
+    super::engine::library_restore(theirs)
+}
+
+/// Stops offering (a `sync_wait` in progress returns "cancelled" and closes it).
+pub fn sync_cancel() {
+    if let Some(o) = crate::party_state::OFFER.lock().unwrap().as_ref() {
+        o.cancel();
+    }
+}

@@ -43,6 +43,20 @@
                 <category android:name="android.intent.category.APP_MUSIC"/>
                 <category android:name="android.intent.category.DEFAULT"/>
             </intent-filter>
+                    <!-- harp://party/… and harp://sync/… links open Harp (Listen Together / Sync). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="harp" android:host="party" />
+                <data android:scheme="harp" android:host="sync" />
+            </intent-filter>
+            <!-- Chat apps often don't make harp:// tappable: share the message to Harp instead. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
         </activity>
         <!-- The media session: notification, lock screen, headset buttons, and playback
              that keeps going with the screen off (a foreground service). -->

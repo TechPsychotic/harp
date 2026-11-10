@@ -8,6 +8,7 @@ import '../player/controller.dart';
 import '../src/rust/api/engine.dart' as api;
 import '../theme/glass.dart';
 import '../widgets/song_actions.dart';
+import '../widgets/play_button.dart';
 import '../widgets/song_tile.dart';
 import 'library.dart' show sortSongs;
 
@@ -130,7 +131,7 @@ class _LocalScreenState extends State<LocalScreen> {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
                   child: Row(children: [
-                    Expanded(child: FilledButton.icon(onPressed: songs.isEmpty ? null : () => p.playList(songs, from: _from), icon: const Icon(Icons.play_arrow_rounded), label: const Text('Play'))),
+                    Expanded(child: ListPlayButton(player: p, kind: _from.kind, id: _from.id, onPlay: songs.isEmpty ? null : () => p.playList(songs, from: _from))),
                     const SizedBox(width: 12),
                     Expanded(child: OutlinedButton.icon(onPressed: songs.isEmpty ? null : () => p.playList(songs, shuffle: true, from: _from), icon: const Icon(Icons.shuffle_rounded), label: const Text('Shuffle'))),
                   ]),

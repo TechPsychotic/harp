@@ -26,5 +26,7 @@ cp -r "$HERE/dist/linux/icons/." "$HOME/.local/share/icons/" 2>/dev/null || { mk
 sed "s#^Exec=harp#Exec=$HOME/.local/bin/harp#" "$HERE/dist/linux/dev.harp.harp.desktop" > "$HOME/.local/share/applications/dev.harp.harp.desktop"
 rm -f "$HOME/.local/share/applications/harp.desktop"
 update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
+# harp:// links (party and sync invites) open Harp.
+xdg-mime default dev.harp.harp.desktop x-scheme-handler/harp 2>/dev/null || true
 gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
 echo "Harp installed in $D"

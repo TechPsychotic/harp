@@ -17,8 +17,6 @@ use std::collections::{HashMap, HashSet};
 
 pub const RECENT_WINDOW: usize = 50;
 
-/// How long an early skip keeps a song out of your picks.
-pub const SKIP_MEMORY_DAYS: i64 = 30;
 pub const COLD_INJECT_RATE: f64 = 0.20;
 const SEARCH_SEED_WINDOW: usize = 10;
 
@@ -37,6 +35,10 @@ pub const SEED_QUERIES: &[&str] = &[
     "2000s euro dance hits", "classic edm hits", "80s new wave hits", "60s hits",
     "jazz standards", "classic blues hits", "reggae hits", "latin pop hits", "folk hits",
     "bollywood hits", "k-pop hits", "lofi beats", "indie pop hits", "synthwave hits",
+    // Wider: more of the world's big scenes, so a new listener anywhere gets a fair start.
+    "punjabi hits", "tamil hits", "telugu hits", "sufi songs", "ghazals", "afrobeats hits",
+    "arabic pop hits", "j-pop hits", "anime openings", "metal classics", "classical music essentials",
+    "gospel hits", "reggaeton hits", "90s bollywood songs", "indie hindi songs",
 ];
 
 /// (key, label, queries) for explicit genre requests and the "more/less energy" nudges.
@@ -60,6 +62,17 @@ pub const GENRES: &[(&str, &str, &[&str])] = &[
     ("romance", "Romance", &["romantic songs", "love songs hits", "slow love ballads"]),
     ("sleep", "Wind down", &["sleep music calm", "soft piano relaxing", "ambient calm songs"]),
     ("commute", "On the road", &["road trip songs", "driving songs hits", "feel good hits"]),
+    ("bollywood", "Bollywood", &["bollywood hits", "90s bollywood songs", "arijit singh hits"]),
+    ("punjabi", "Punjabi", &["punjabi hits", "punjabi pop songs"]),
+    ("south", "South Indian", &["tamil hits", "telugu hits", "malayalam hits"]),
+    ("sufi", "Sufi & Ghazal", &["sufi songs", "ghazals"]),
+    ("kpop", "K-Pop", &["k-pop hits", "k-pop ballads"]),
+    ("jpop", "J-Pop & Anime", &["j-pop hits", "anime openings"]),
+    ("afro", "Afrobeats", &["afrobeats hits", "amapiano hits"]),
+    ("arabic", "Arabic", &["arabic pop hits", "khaleeji songs"]),
+    ("metal", "Metal", &["metal classics", "metalcore hits"]),
+    ("classical", "Classical", &["classical music essentials", "piano classics"]),
+    ("gospel", "Gospel", &["gospel hits", "worship songs"]),
     ("more_energy", "More Energy", &["90s dance hits", "80s rock hits", "2000s euro dance hits"]),
     ("less_energy", "Less Energy", &["jazz standards", "folk hits", "70s soul hits", "lofi beats"]),
 ];
@@ -83,6 +96,43 @@ pub struct Request {
 pub struct Recommendation {
     pub song: Song,
     pub reason: String,
+}
+
+/// Picks from a pool you already have (downloads, your own files) with the
+/// same taste model as online picks: artist scores (fading with time), the
+/// time-of-day nudge, no recent repeats and no early skips. Works offline.
+pub fn rank_pool(store: &Store, pool: Vec<Song>, n: usize, exclude: &[String], rng: &mut Rng) -> Result<Vec<Song>> {
+    let mut avoid: HashSet<String> = store.recent_ids(RECENT_WINDOW / 5)?.into_iter().collect();
+    avoid.extend(store.repeatedly_skipped(crate::taste::SKIP_WINDOW_DAYS).unwrap_or_default());
+    avoid.extend(exclude.iter().cloned());
+    let fresh: Vec<Song> = pool.iter().filter(|s| !avoid.contains(&s.id)).cloned().collect();
+    let pool = if fresh.len() >= n.min(pool.len()) && !fresh.is_empty() { fresh } else { pool };
+    let scores = store.artist_scores()?;
+    let hours = store.hour_affinity().unwrap_or_default();
+    let mut ranked: Vec<(f64, Song)> = pool.into_iter().map(|s| (score(&s, &scores, &hours, rng), s)).collect();
+    ranked.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+    // Not every pick from the same artist: at most two in a row of the top.
+    let mut out: Vec<Song> = Vec::new();
+    let mut per_artist: HashMap<String, usize> = HashMap::new();
+    for (_, s) in ranked.iter() {
+        let k = s.artist_key();
+        if per_artist.get(&k).copied().unwrap_or(0) < 2 {
+            *per_artist.entry(k).or_default() += 1;
+            out.push(s.clone());
+        }
+        if out.len() >= n {
+            break;
+        }
+    }
+    for (_, s) in ranked {
+        if out.len() >= n {
+            break;
+        }
+        if !out.iter().any(|x| x.id == s.id) {
+            out.push(s);
+        }
+    }
+    Ok(out)
 }
 
 /// Songs like `song`. Your own files have no online id, so their online
@@ -256,8 +306,8 @@ fn pick_n(
     rng: &mut Rng,
 ) -> Result<Vec<Recommendation>> {
     let mut avoid: HashSet<String> = store.recent_ids(RECENT_WINDOW)?.into_iter().collect();
-    // Songs you skipped early lately stay out of your picks for a month.
-    avoid.extend(store.recently_skipped(SKIP_MEMORY_DAYS).unwrap_or_default());
+    // Songs you keep skipping (more than 5 times in 30 days) stay out of your picks.
+    avoid.extend(store.repeatedly_skipped(crate::taste::SKIP_WINDOW_DAYS).unwrap_or_default());
     avoid.extend(req.exclude.iter().cloned());
     let fresh: Vec<&Song> = g.candidates.iter().filter(|c| !avoid.contains(&c.id)).collect();
     let pool: Vec<&Song> = if fresh.is_empty() { g.candidates.iter().collect() } else { fresh };
@@ -446,8 +496,9 @@ mod tests {
     #[test]
     fn disliked_artist_loses() {
         let st = Store::open_memory().unwrap();
-        for i in 0..3 {
-            play(&st, &song(&format!("x{i}"), "x", "Cold0"), 0.0, false, PlaySource::Recommended);
+        // Skipped again and again (a one-off skip wouldn't count, by design).
+        for _ in 0..(crate::taste::REPEAT_SKIPS + 3) {
+            play(&st, &song("x0", "x", "Cold0"), 0.0, false, PlaySource::Recommended);
         }
         let req = Request { genre: Some("jazz".into()), ..Default::default() };
         for seed in 1..20 {
@@ -562,5 +613,23 @@ mod tests {
         let liked = vec![s("Prateek Kuhad")];
         assert_eq!(top_artists(&history, &liked, 5), vec!["Taylor Swift", "Prateek Kuhad", "Arijit Singh"]);
         assert_eq!(main_artist("A & B"), "A");
+    }
+
+    #[test]
+    fn offline_picks_follow_your_taste() {
+        let st = Store::open_memory().unwrap();
+        let mk = |id: &str, artist: &str| Song { id: id.into(), title: id.into(), artist: artist.into(), artist_id: None, album: None, duration_secs: Some(200), thumbnail: None };
+        // You love Loved Artist, and said "not this artist" about Skipped Artist.
+        for i in 0..5 {
+            st.record_play(&crate::taste::PlayRecord { song: mk(&format!("l{i}"), "Loved Artist"), completion: 1.0, superliked: false, source: crate::taste::PlaySource::Queue }).unwrap();
+            st.skip_reason(&mk(&format!("s{i}"), "Skipped Artist"), crate::taste::SkipReason::NotThisArtist).unwrap();
+        }
+        let pool = vec![mk("a", "Skipped Artist"), mk("b", "Loved Artist"), mk("c", "Loved Artist"), mk("d", "Loved Artist"), mk("e", "Someone")];
+        let picks = rank_pool(&st, pool, 3, &[], &mut Rng::new(7)).unwrap();
+        let ids: Vec<_> = picks.iter().map(|s| s.id.as_str()).collect();
+        assert_eq!(ids.len(), 3);
+        assert!(!ids.contains(&"a"), "the skipped artist isn't picked first: {ids:?}");
+        assert_eq!(picks.iter().filter(|s| s.artist == "Loved Artist").count(), 2, "at most two from one artist at the top: {ids:?}");
+        assert!(GENRES.iter().any(|g| g.0 == "bollywood") && GENRES.iter().any(|g| g.0 == "afro"));
     }
 }

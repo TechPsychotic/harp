@@ -12,12 +12,14 @@ import 'player/media_session.dart';
 import 'player/controller.dart';
 import 'screens/shell.dart';
 import 'settings.dart';
+import 'links.dart';
 import 'src/rust/frb_generated.dart';
 import 'theme/glass.dart';
 import 'theme/logo.dart';
 
-Future<void> main() async {
+Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  Links.listen(args);
   // Draw behind the status and navigation bars (edge to edge); screens use SafeArea.
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
@@ -83,6 +85,7 @@ class _HarpAppState extends State<HarpApp> {
       final p = PlayerController(_settings, widget.session);
       await p.init();
       if (mounted) setState(() => _player = p);
+      await Links.ready(p);
     } catch (e) {
       if (mounted) setState(() => _error = e);
     }
@@ -101,6 +104,7 @@ class _HarpAppState extends State<HarpApp> {
     return ListenableBuilder(
       listenable: _settings,
       builder: (context, _) => MaterialApp(
+        navigatorKey: Links.navigator,
         title: 'Harp',
         debugShowCheckedModeBanner: false,
         themeMode: _settings.themeMode,

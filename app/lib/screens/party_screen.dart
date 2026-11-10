@@ -13,8 +13,11 @@ import '../widgets/song_actions.dart';
 /// hears the same song at the same moment; anyone can play, pause, skip and
 /// suggest songs. Peer to peer, no accounts.
 class PartyScreen extends StatefulWidget {
-  const PartyScreen({super.key, required this.player});
+  const PartyScreen({super.key, required this.player, this.invite});
   final PlayerController player;
+
+  /// A party link that opened Harp: filled in, and offered to join.
+  final String? invite;
 
   @override
   State<PartyScreen> createState() => _PartyScreenState();
@@ -33,6 +36,28 @@ class _PartyScreenState extends State<PartyScreen> {
       if (mounted) _name.text = v ?? (Platform.isAndroid ? 'My phone' : 'My computer');
     });
     p.party.note.addListener(_showNote);
+    final inv = widget.invite;
+    if (inv != null) {
+      _link.text = inv;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _offerJoin(inv));
+    }
+  }
+
+  Future<void> _offerJoin(String link) async {
+    if (p.party.inParty || !mounted) return;
+    final host = Uri.decodeComponent(RegExp(r'[?&]name=([^&]*)').firstMatch(link)?.group(1) ?? '');
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Join the party?'),
+        content: Text(host.isEmpty ? 'Listen together with whoever sent this link.' : 'Listen together with $host.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Not now')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Join')),
+        ],
+      ),
+    );
+    if (ok == true && mounted) await p.party.join(link, _nameValue);
   }
 
   @override

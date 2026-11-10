@@ -235,7 +235,8 @@ pub fn start_engine(cfg: EngineConfig) -> Result<(), String> {
     let _ = harp_core::backup::apply_pending(&db);
     let store = Store::open(&db).map_err(e)?;
     // The queue as it was when the app last closed.
-    let queue: Queue = store.kv_get("queue").ok().flatten().and_then(|j| serde_json::from_str(&j).ok()).unwrap_or_default();
+    let mut queue: Queue = store.kv_get("queue").ok().flatten().and_then(|j| serde_json::from_str(&j).ok()).unwrap_or_default();
+    queue.upgrade();
     let engine = Engine {
         db_path: db.clone(),
         downloads_dir: data.join("downloads"),
@@ -1561,4 +1562,22 @@ pub fn local_songs() -> Result<Vec<SongView>, String> {
     let en = eng()?;
     let v = en.store.lock().unwrap().local_songs().map_err(e)?;
     Ok(views(en, v.into_iter()))
+}
+
+/// Smart Shuffle without a connection: your downloads and your own files,
+/// ranked by your taste. `exclude`: ids already queued.
+pub fn recommend_offline(count: u32, exclude: Vec<String>) -> Result<Vec<SongView>, String> {
+    let en = eng()?;
+    let pool: Vec<Song> = {
+        let st = en.store.lock().unwrap();
+        let mut p: Vec<Song> = st.downloads().map_err(e)?.into_iter().filter(|d| std::path::Path::new(&d.path).is_file()).map(|d| d.song).collect();
+        p.extend(st.local_songs().map_err(e)?);
+        p
+    };
+    let picks = {
+        let st = en.store.lock().unwrap();
+        let mut rng = en.rng.lock().unwrap();
+        recommend::rank_pool(&st, pool, count as usize, &exclude, &mut rng).map_err(e)?
+    };
+    Ok(views(en, picks.into_iter()))
 }

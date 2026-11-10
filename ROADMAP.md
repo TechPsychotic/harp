@@ -132,6 +132,12 @@ the idea and the code. `UPDATES.md` is the dated log of changes; this file is th
 | F51 | Queue gestures: swipe right play next, left remove, hold to drag | 🟡 | All three, in every part of the queue; the − button stays. |
 | F52 | Audio enhancements make little difference | ✅ | Rebuilt and measured: Bass +6.3 dB on the lows (was +0.4), Wide +10.9 dB (was +6.3)… |
 | F53 | Listen together with iroh (M7) | 🟡 | Built and checked over the internet; needs two of your devices to try for real. |
+| F54 | The playing playlist should show Pause | ✅ | On its page (and albums, Liked, Downloaded, On This Device) and on its Library row. |
+| F55 | A skip shouldn't count until a song is skipped more than 5 times in 30 days | ✅ | Done; the 30-day exclusion is gone. 🧪 |
+| F56 | harp:// links open Harp | 🟡 | Android (tap or share to Harp) and Linux (single app, link handed to the open window). |
+| B31 | Old playlist songs stuck in "Next in Queue" | 🟡 | Old saved queues are converted on load. 🧪 |
+| B32 | Opening the player on the laptop is slow | 🟡 | The full-window blur is gone (tiny stretched cover instead). |
+| B33 | A playlist stopped after its first song | ✅ | The next-song check ignored the list; fixed. |
 | F33 | The same for Amazon Music | ⛔ | No public API for listeners (Amazon's web API is invite-only), and shared playlist pages are a JavaScript app with no songs in the page (checked). Workarounds: paste the list, or a CSV from a converter such as TuneMyMusic (already imports). |
 
 **Features (48): 29 done and checked, 15 done but waiting for your confirmation, 3 in progress,
@@ -191,7 +197,7 @@ the music.
 
 ### M3 · Sound
 Goal: control over how it sounds. *(Needs M2 for Android.)*
-- ◐ Equalizer: presets (Flat, Bass, Vocal, Treble, Loudness) **in the app on desktop** (Settings ›
+- ◐ **Custom 10-band equalizer ✅** (live sliders). Equalizer: presets (Flat, Bass, Vocal, Treble, Loudness) **in the app on desktop** (Settings ›
   Playback; each chain played in libmpv together with spatial and the loudness reader ✅). Android
   waits for M2. Then a 10-band custom EQ, then per-headphone correction (AutoEQ profiles).
 - ☐ Spatial audio: Wide stage and Headphone crossfeed on Android (M2); a true **HRTF binaural** mode
@@ -252,8 +258,8 @@ Goal: lyrics as good as Apple Music's: word-by-word where they exist, line-synce
   YouTube Music **mood and genre** as a tile, each opening rows of playlists. Checked live; 🧪.
 - ◐ A smarter taste model: **time decay** (an artist's score halves every 60 days), **time of
   day** (artists you play around this hour get a nudge) and **song-level skips** (an early skip
-  keeps a song out of your picks for 30 days) are in, 🧪. Still to do: wider starter genres,
-  recommendations from downloads when offline.
+  only counts once you've skipped the same song more than 5 times in 30 days, at your request) are
+  in, 🧪. **Wider starter genres ✅** and **offline picks from your downloads ✅**.
 - **Done when:** the Library tab can replace another music app's library for you.
 
 ### M6 · Platform integration
@@ -273,8 +279,8 @@ Goal: lyrics as good as Apple Music's: word-by-word where they exist, line-synce
 - ◐ **Listen together ✅ built** (`crates/harp-party`, iroh, like Warptron's party mode): host
   and share a link, guests join; one player is the truth, the rest follow (position corrected by
   half the round trip, heartbeat every 4 s); everyone can play, pause, skip, seek and suggest songs.
-  Checked over the internet (in sync within 436 ms) and with local tests. Still to do: library sync
-  between your own devices.
+  Checked over the internet (in sync within 436 ms) and with local tests. **Library sync between
+  your own devices ✅** (link, swap, merge both ways). **harp:// links open Harp** (Android and Linux).
 
 ### M8 · Release
 - ☐ A real signing key for APKs; versioning and an in-app update check.

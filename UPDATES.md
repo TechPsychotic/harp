@@ -8,6 +8,60 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-10 (later): gapless, custom equalizer, device sync, offline picks, links that open Harp
+
+**Fixed**
+- **A playlist could stop after its first song** (my bug, from the queue rework). When deciding
+  whether anything came next, Harp looked at your own queue and autoplay but not the new "Next from"
+  list, so it fetched a Smart Shuffle pick instead, which also cleared the playlist. It now plays
+  the list.
+- **Old queued songs that never went away.** A queue saved by the previous version kept a playlist's
+  songs in "Next in Queue" (where your own songs live), so they survived everything you started
+  afterwards. Old saved queues are now converted on load: those songs become the list part, which
+  the next thing you play replaces. 🧪
+- **Opening the player on the laptop was slow.** The background blurred the full-size cover across
+  the whole window, recalculated on every frame of the slide-in, which is heavy on a big desktop
+  window. It's now a tiny copy of the cover stretched smooth: the same look for almost nothing.
+- **The playlist that's playing shows Pause** (Resume when paused) instead of Play, on its page and
+  as a button on its Library row. Same for albums, Liked Songs, Downloaded and On This Device.
+
+**Skips (your rule)**
+- The 30-day "don't pick a song you skipped" rule is gone. **A skip now counts for nothing**, neither
+  against the song nor its artist, **until you've skipped that same song more than 5 times in 30
+  days**. Only then is it set aside (and finishing it once takes that back). The "Why did you skip?"
+  buttons still count, since you choose those. 🧪
+
+**Gapless playback (M2)**
+- The next song is lined up in the engine while the current one plays, so songs follow each other
+  with no gap. Any change to the queue lines up the right one again. ✅ checked on the laptop's
+  engine: the next track starts the moment the first ends, without stopping. (A first try that
+  resolved the next song at the last moment didn't work: the engine stopped; it's resolved ahead now.)
+- **Crossfade is not done:** overlapping two songs needs a second player running beside the first;
+  that's still to come.
+
+**Custom equalizer (M3)**
+- Settings › Playback › Equalizer › **Custom…**: ten sliders (31 Hz to 16 kHz, ±12 dB), applied live
+  as you drag; the volume makes room for your biggest boost so nothing distorts.
+
+**Sync your devices (M7)**
+- Settings › Backup › **Sync with another device**. One device shows a link, the other pastes it, and
+  both end up with each other's likes, playlists, history and follows. Nothing is replaced or lost.
+  Peer to peer over iroh. 🧪 two devices swap libraries (a 300 KB one arrives whole); waiting can be
+  cancelled; a party link pasted by mistake gets a clear message.
+
+**Offline and starter picks (M5)**
+- Smart Shuffle (and autoplay) **offline** now rank your downloads and your own files by your
+  taste, instead of shuffling them at random. 🧪
+- More of the world's music to start from and to ask for: Bollywood, Punjabi, South Indian, Sufi &
+  Ghazal, K-Pop, J-Pop & Anime, Afrobeats, Arabic, Metal, Classical, Gospel.
+
+**harp:// links open Harp**
+- **Android:** tapping a party or sync link opens Harp on Listen Together (asking "Join the party?")
+  or Sync with the link filled in. Many chat apps don't make harp:// tappable, so Harp also appears
+  in **Share**: share the message to Harp and it finds the link. 📱
+- **Laptop:** the link opens Harp; if Harp is already open, the open window takes it and comes forward
+  (Harp is now one app, not a new window each time).
+
 ## 2026-11-10: queue that makes sense, "playing from", stronger sound, listening together, Android Auto
 
 A big batch, built once at the end as you asked.
