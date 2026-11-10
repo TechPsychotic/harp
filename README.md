@@ -98,3 +98,18 @@ Harp is free software under the **GNU General Public License v3.0 or later** (se
 It builds on: yt-dlp (Unlicense), Python (PSF), QuickJS (MIT), mpv_audio_kit (BSD-3-Clause) with libmpv
 (LGPL-2.1+) and FFmpeg (LGPL), iroh (MIT/Apache-2.0), flutter_rust_bridge (MIT/Apache-2.0), AutoEq data
 (MIT), and the Flutter and Rust ecosystems (see each package's license).
+
+## Inspiration and thanks
+
+Projects and work that shaped Harp, beyond the libraries it's built on:
+
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp): streaming, and its notes on YouTube's player clients and PO tokens.
+- [NewPipe Extractor](https://github.com/TeamNewPipe/NewPipeExtractor): how YouTube's InnerTube API is read without an account.
+- [AutoEq](https://github.com/jaakkopasanen/AutoEq): the measured headphone corrections behind headphone correction.
+- [iroh](https://github.com/n0-computer/iroh): peer-to-peer connections for listening together, device sync and shared playlists.
+- [LRCLIB](https://github.com/tranxuanthang/lrclib): free synced lyrics.
+- [Better Lyrics](https://github.com/better-lyrics) and [YouLy+](https://github.com/ibratabian17/youlyplus): ideas for word-synced lyrics.
+- [SwiftyTube](https://github.com/686udjie/SwiftyTube): the approach in the iOS plan (`ROADMAP.md`).
+- [Equalizer314](https://f-droid.org/en/packages/com.bearinmind.equalizer314/), [Steam Audio](https://github.com/ValveSoftware/steam-audio) and [OpenAL-MOB](https://github.com/6779660/OpenAL-MOB): research for the sound work and the planned 3D (HRTF) mode.
+- ["Gravity"](https://codepen.io/editor/Abdughafur-Khujzoda/pen/01a1a59a-ef98-76f4-bbb3-1ecefb3bf32f) by Abdughafur Khujzoda: the look of the website (its code is Harp's own).
+- Spotify's Sound Capsule and Wrapped: the idea behind Your Rhythm and Harp Encore.
