@@ -10,6 +10,13 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ## 2026-11-13: 0.9.3: yt-dlp on iPhone
 
+- **"Shows song B, plays song C" (again).** Two causes left: when a song ended, both the engine's
+  "moved to the lined-up song" and its "finished" signal could move the queue on (skipping one), and
+  the check that compares the engine with the screen ignored a song lined up in the engine (so a
+  stale one could play under the wrong title). Now what you hear is the truth: the queue follows the
+  song the engine is actually playing (jumping to it if it's coming up, otherwise loading the right
+  one), "finished" is ignored while a lined-up song takes over, and a mismatch is corrected within
+  about 2 s. 📱
 - **iPhone plays where the built-in finder is refused.** On iOS, yt-dlp now runs inside the app: an
   embedded Python (serious_python) runs the official yt-dlp release (`app/python/main.py`), reached
   by Harp's Rust core over a loopback port with a per-launch token, with exactly the arguments Harp

@@ -119,7 +119,12 @@ class PlayerController extends ChangeNotifier {
         p.stream.completed.listen((done) {
           // Only a real end counts: not the old file being replaced.
           final d = duration.value.inMilliseconds;
-          if (done && !_loading && d > 0 && position.value.inMilliseconds >= d - 2500) {
+          // A song lined up in the engine takes over by itself (_onEnginePlaylist
+          // moves the queue): advancing here too would skip a song, or show one
+          // song while another plays.
+          final pl = p.state.playlist;
+          final linedUp = _armedId != null || _following || pl.index + 1 < pl.items.length;
+          if (done && !_loading && !linedUp && d > 0 && position.value.inMilliseconds >= d - 2500) {
             if (sleepAfterSong) {
               // The sleep timer said "at the end of this song".
               cancelSleep();
@@ -860,9 +865,38 @@ class PlayerController extends ChangeNotifier {
     final pl = _player.state.playlist;
     if (cur == null || pl.index >= pl.items.length || pl.items.isEmpty) return;
     final playingId = pl.items[pl.index].extras?['harpId'];
-    if (playingId is String && playingId != cur.id && playingId != _armedId) {
+    if (_following || playingId is! String || playingId == cur.id) {
+      _mismatchSince = null;
+      return;
+    }
+    // Seen twice in a row (2 s apart), so a song change in progress isn't mistaken
+    // for a mismatch: what you hear wins. If that song is coming up, the queue
+    // moves to it; otherwise the song on screen is loaded properly.
+    final since = _mismatchSince;
+    if (since == null || since.$1 != playingId) {
+      _mismatchSince = (playingId, now);
+      return;
+    }
+    _mismatchSince = null;
+    if (_indexIn(queue, playingId) != null) {
+      unawaited(_onGaplessAdvance(playingId));
+    } else {
       unawaited(_load());
     }
+  }
+
+  (String, DateTime)? _mismatchSince;
+
+  /// True while the queue is catching up with a song the engine moved into.
+  bool _following = false;
+
+  /// Where [id] is among the songs coming up: (section, index), or null.
+  static (String, int)? _indexIn(api.QueueView q, String id) {
+    for (final (name, list) in [('user', q.user), ('context', q.context), ('auto', q.autoplay)]) {
+      final i = list.indexWhere((s) => s.id == id);
+      if (i >= 0) return (name, i);
+    }
+    return null;
   }
 
   /// The engine moved into the armed song by itself: catch the queue up.
@@ -874,11 +908,26 @@ class PlayerController extends ChangeNotifier {
   }
 
   Future<void> _onGaplessAdvance(String id) async {
+    if (_following) return;
+    _following = true;
+    try {
+      await _followEngine(id);
+    } finally {
+      _following = false;
+    }
+  }
+
+  Future<void> _followEngine(String id) async {
     _armedId = null;
     if (_loadedId != null && _loadedId != id) _prevId = _loadedId;
     final before = queue;
-    await _finishCurrent(skipped: false, completion: 1.0); // it played to the end
-    queue = await api.queueNext(autoAdvance: true);
+    if (before.current?.id != id) {
+      await _finishCurrent(skipped: false, completion: 1.0); // it played to the end
+      // The queue moves to the song the engine is playing: usually the next one,
+      // but if the queue changed meanwhile, wherever that song now is.
+      final at = _indexIn(before, id);
+      queue = at != null ? await api.queueJump(section: at.$1, index: at.$2) : await api.queueNext(autoAdvance: true);
+    }
     final s = queue.current;
     if (s == null || s.id != id) {
       // The queue changed at the last moment: load what it says properly.
