@@ -13,7 +13,8 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 - **iPhone and iPad (iOS 15+), without a developer account:** releases now carry an unsigned
   `harp-ios-unsigned.ipa`. You sign it with your own Apple ID when installing (AltStore, SideStore or
   Sideloadly; re-signed every 7 days with a free Apple ID) or install it with TrollStore. The README
-  explains each way. The iOS app project is new: background audio, `harp://` links, app icons.
+  explains each way, plus LiveContainer (no 3-app limit) and building it yourself with Xcode. The iOS
+  app project is new: background audio, `harp://` links, app icons.
 - **Harp's own stream finder:** one request to the source's player API with a client that returns
   plain audio links: no player code to run, no Python. iOS can't run yt-dlp, so this is how it plays
   there; everywhere else it's tried first (faster: no Python starting per song) with yt-dlp as the

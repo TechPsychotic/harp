@@ -63,6 +63,13 @@ that signs it with **your own (free) Apple ID**:
   in, sign in with your Apple ID. Re-install every 7 days with a free Apple ID.
 - **[TrollStore](https://github.com/opa334/TrollStore)** (only on the iOS versions it supports): installs
   the `.ipa` permanently, no re-signing.
+- **[LiveContainer](https://github.com/LiveContainer/LiveContainer)** (installed through SideStore):
+  runs Harp inside one container app, so it doesn't count against a free Apple ID's limit of 3 apps.
+  Add `harp-ios-unsigned.ipa` to LiveContainer.
+- **Build it yourself (a Mac with Xcode):** clone this repository, install Flutter and Rust (with
+  `rustup target add aarch64-apple-ios`), run `cd app && flutter build ios`, then open
+  `app/ios/Runner.xcworkspace` in Xcode, choose your Apple ID under Signing & Capabilities, connect the
+  iPhone and press Run. With a free Apple ID, run it again from Xcode every 7 days.
 
 After the first install, iOS asks you to trust your Apple ID: Settings › General › VPN & Device
 Management. On iOS 16+, also turn on Developer Mode (Settings › Privacy & Security).
