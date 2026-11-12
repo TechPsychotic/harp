@@ -255,11 +255,18 @@ jobs:
           # The full Xcode log goes to a file; on failure its errors are shown
           # (Flutter's own summary hides the real cause).
           if ! flutter build ios --release --no-codesign -v > ../ios-build.log 2>&1; then
-            grep -nE "error:|Error:|\\*\\* BUILD FAILED|requires a development team|Undefined symbol|ld: " ../ios-build.log | tail -60
-            tail -80 ../ios-build.log
+            grep -nE "error(\\[E[0-9]+\\])?:|\\*\\* BUILD FAILED|Undefined symbol|ld: " ../ios-build.log | grep -v "^.*warning" | head -60
+            # The Rust side's own report, when that's what failed.
+            grep -n -A120 "Cargokit BuildTool failed" ../ios-build.log | head -160
             exit 1
           fi
           tail -5 ../ios-build.log
+      - name: Keep the build log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-log
+          path: ios-build.log
       - name: Package (.ipa, unsigned)
         run: |
           mkdir -p dist/Payload
