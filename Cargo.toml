@@ -12,7 +12,8 @@ lto = true
 opt-level = "s"
 strip = true
 
-# netdev 0.46.3 (used by iroh) doesn't build for iOS: it uses a type `libc`
-# only has for macOS. Patched copy in third_party/netdev (MIT; see its LICENSE).
+# netdev 0.46.3 and netwatch 0.19.3 (used by iroh) don't build for iOS: they use
+# names `libc` only has for macOS. Patched copies in third_party/ (see its README).
 [patch.crates-io]
 netdev = { path = "third_party/netdev" }
+netwatch = { path = "third_party/netwatch" }
