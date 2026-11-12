@@ -59,6 +59,9 @@ that signs it with **your own (free) Apple ID**:
   `harp-ios-unsigned.ipa` with it. With a free Apple ID the app must be refreshed every 7 days; both
   tools do that in the background (SideStore without a computer). A free Apple ID allows 3 sideloaded
   apps at a time.
+- **[iLoader](https://github.com/nab138/iloader)** (Windows, Mac or Linux; tested with Harp): connect
+  the iPhone by cable, sign in with your Apple ID and pick `harp-ios-unsigned.ipa`. Re-install every
+  7 days with a free Apple ID.
 - **[Sideloadly](https://sideloadly.io)** (Windows or Mac): connect the iPhone by cable, drag the `.ipa`
   in, sign in with your Apple ID. Re-install every 7 days with a free Apple ID.
 - **[TrollStore](https://github.com/opa334/TrollStore)** (only on the iOS versions it supports): installs
