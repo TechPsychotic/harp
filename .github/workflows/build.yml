@@ -238,8 +238,18 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
-      - working-directory: app
-        run: flutter build ios --release --no-codesign
+      - name: Build (unsigned)
+        working-directory: app
+        run: |
+          set -o pipefail
+          # The full Xcode log goes to a file; on failure its errors are shown
+          # (Flutter's own summary hides the real cause).
+          if ! flutter build ios --release --no-codesign -v > ../ios-build.log 2>&1; then
+            grep -nE "error:|Error:|\\*\\* BUILD FAILED|requires a development team|Undefined symbol|ld: " ../ios-build.log | tail -60
+            tail -80 ../ios-build.log
+            exit 1
+          fi
+          tail -5 ../ios-build.log
       - name: Package (.ipa, unsigned)
         run: |
           mkdir -p dist/Payload
