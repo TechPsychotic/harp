@@ -263,6 +263,11 @@ jobs:
           done
           echo "SERIOUS_PYTHON_APP=$GITHUB_WORKSPACE/app/python" >> "$GITHUB_ENV"
           echo "SERIOUS_PYTHON_SITE_PACKAGES=$RUNNER_TEMP/site-packages" >> "$GITHUB_ENV"
+      # CocoaPods, not Swift Package Manager: serious_python's CocoaPods route
+      # prepares the embedded Python (download, app and site-packages) at pod
+      # install by itself; its SwiftPM route needs a separate staging step.
+      - name: Use CocoaPods for iOS plugins
+        run: flutter config --no-enable-swift-package-manager
       - name: Build (unsigned)
         working-directory: app
         run: |
@@ -286,6 +291,13 @@ jobs:
         run: |
           mkdir -p dist/Payload
           cp -R app/build/ios/iphoneos/Runner.app dist/Payload/
+          # The embedded Python must really be inside (an empty build plays nothing).
+          app=dist/Payload/Runner.app
+          find "$app" -path "*Python.framework/Python" | grep -q . || { echo "no Python.framework in the app" >&2; exit 1; }
+          find "$app" -path "*python.bundle/app/main.py" | grep -q . || { echo "no app/main.py in the app" >&2; exit 1; }
+          find "$app" -path "*python.bundle/app/harp_jsc.py" | grep -q . || echo "note: no harp_jsc.py (step 1 build)"
+          find "$app" -path "*python.bundle/stdlib/os.py" | grep -q . || { echo "no Python standard library in the app" >&2; exit 1; }
+          find "$app" -path "*python.bundle/site-packages/certifi/cacert.pem" | grep -q . || { echo "no certifi in the app" >&2; exit 1; }
           cd dist && zip -qr harp-ios-unsigned.ipa Payload && rm -rf Payload
           ls -la
       - uses: actions/upload-artifact@v4
