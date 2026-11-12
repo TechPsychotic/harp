@@ -280,7 +280,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   subtitle: Text(
                     s.cacheMb == 0
                         ? 'Off: songs stream only'
-                        : 'Up to ${s.cacheMb} MB. The next ${(s.cacheMb ~/ 10).clamp(1, 5)} songs are fetched onto the device while you listen, so they start instantly and play through a weak connection. A song’s file is deleted once the song after it has finished. Downloaded songs are never fetched again.',
+                        : 'Up to ${s.cacheMb} MB. Upcoming songs are fetched onto the device while you listen, so they start instantly and play through a weak connection. A song’s file is deleted once the song after it has finished. Downloaded songs are never fetched again.',
                     style: TextStyle(color: tok.textDim),
                   ),
                   trailing: PopupMenuButton<int>(
@@ -288,6 +288,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     initialValue: s.cacheMb,
                     onSelected: s.setCacheMb,
                     itemBuilder: (_) => [for (final mb in [0, 256, 512, 1024, 2048]) PopupMenuItem(value: mb, child: Text(mb == 0 ? 'Off' : '$mb MB'))],
+                  ),
+                ),
+                ListTile(
+                  title: const Text('Songs fetched ahead'),
+                  subtitle: Text(
+                    s.cacheMb == 0
+                        ? 'Turn on the play cache to fetch songs ahead.'
+                        : '${s.aheadSongs} upcoming songs, one at a time, as far as ${s.cacheMb} MB allows (about ${s.cacheMb ~/ 10} songs).',
+                    style: TextStyle(color: tok.textDim),
+                  ),
+                  trailing: PopupMenuButton<int>(
+                    icon: const Icon(Icons.expand_more_rounded),
+                    initialValue: s.aheadSongs,
+                    onSelected: s.setAheadSongs,
+                    itemBuilder: (_) => [for (final n in [1, 3, 5, 10, 20, 50]) PopupMenuItem(value: n, child: Text('$n songs'))],
                   ),
                 ),
                 SwitchListTile(

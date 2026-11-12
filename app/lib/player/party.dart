@@ -21,6 +21,13 @@ class PartyController extends ChangeNotifier {
 
   /// "none", "host" or "guest".
   String role = 'none';
+
+  /// A guest's say: "controller" (steers and plays songs for everyone) or
+  /// "listener" (listens, can suggest).
+  String myRole = 'controller';
+
+  /// Host: everyone, with their roles.
+  List<party.PartyMemberView> roster = const [];
   String? link;
   String hostName = '';
   List<String> members = const [];
@@ -61,7 +68,7 @@ class PartyController extends ChangeNotifier {
     try {
       await party.partyJoin(link: inviteLink, name: name);
       role = 'guest';
-      player.steer = (action, ms) => unawaited(party.partyControl(action: action, positionMs: BigInt.from(ms)).catchError((_) {}));
+      _applyRole('controller');
     } catch (e) {
       error = 'Couldn’t join: $e';
     } finally {
@@ -78,12 +85,40 @@ class PartyController extends ChangeNotifier {
   /// Guest: suggest a song to the host.
   Future<void> suggest(api.SongView s) => party.partyRequest(s: s);
 
+  /// Host: make a guest a controller or a listener.
+  Future<void> setRole(party.PartyMemberView m, String r) async {
+    await party.partySetRole(id: m.id, role: r);
+  }
+
+  /// Guest: what our role lets us do.
+  void _applyRole(String r) {
+    myRole = r;
+    if (r == 'controller') {
+      player.steer = (action, ms) => unawaited(party.partyControl(action: action, positionMs: BigInt.from(ms)).catchError((_) {}));
+      player.steerPlay = (s) {
+        unawaited(party.partyPlay(s: s).catchError((_) {}));
+        note.value = 'Playing “${s.title}” for everyone';
+      };
+    } else {
+      // Listeners don't steer: controls do nothing here (the host's music plays on).
+      player.steer = (action, ms) => note.value = 'You’re listening: only the host and controllers can change the music';
+      player.steerPlay = (s) {
+        unawaited(party.partyRequest(s: s).catchError((_) {}));
+        note.value = 'Suggested “${s.title}” to the host';
+      };
+    }
+  }
+
   void _reset() {
     role = 'none';
     link = null;
     members = const [];
     hostName = '';
     player.steer = null;
+    player.steerPlay = null;
+    player.partyUpNext.value = const [];
+    roster = const [];
+    myRole = 'controller';
     player.onTransport = null;
     unawaited(player.endFollow());
     _beat?.cancel();
@@ -94,7 +129,7 @@ class PartyController extends ChangeNotifier {
   void _publish() {
     if (role != 'host') return;
     unawaited(party.partyPublish(
-      state: party.PartyStateView(song: player.current, playing: player.playing, positionMs: BigInt.from(player.position.value.inMilliseconds)),
+      state: party.PartyStateView(song: player.current, playing: player.playing, positionMs: BigInt.from(player.position.value.inMilliseconds), upNext: player.upcoming),
     ).catchError((_) {}));
   }
 
@@ -113,6 +148,13 @@ class PartyController extends ChangeNotifier {
       case 'state':
         final s = e.state;
         if (s != null && role == 'guest') {
+          // The host's next songs: shown here and fetched ahead, so a song
+          // change starts on this device as quickly as on the host's.
+          final ids = s.upNext.map((x) => x.id).join(',');
+          if (ids != player.partyUpNext.value.map((x) => x.id).join(',')) {
+            player.partyUpNext.value = s.upNext;
+            unawaited(player.prefetchFor(s.upNext));
+          }
           await player.followHost(song: s.song, playing: s.playing, position: Duration(milliseconds: s.positionMs.toInt()), host: hostName);
         }
       case 'control':
@@ -132,6 +174,23 @@ class PartyController extends ChangeNotifier {
             await player.seekTo(Duration(milliseconds: e.positionMs.toInt()));
         }
         player.steer = steer;
+      case 'play':
+        // A controller started a song: it plays for everyone.
+        final s = e.song;
+        if (s != null && role == 'host') {
+          final st = player.steerPlay;
+          player.steerPlay = null;
+          await player.playSong(s, source: 'party');
+          player.steerPlay = st;
+          note.value = '${e.name} is playing “${s.title}”';
+        }
+      case 'roster':
+        roster = e.roster;
+      case 'role':
+        if (role == 'guest') {
+          _applyRole(e.action);
+          note.value = e.action == 'controller' ? 'You can now steer the music' : 'You’re now a listener';
+        }
       case 'request':
         final s = e.song;
         if (s != null) {

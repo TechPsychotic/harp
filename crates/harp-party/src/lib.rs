@@ -10,8 +10,12 @@
 //! bytes cross the connection. A playing position is moved on by half the
 //! connection's round trip on arrival, so everyone hears the same moment.
 //!
-//! Guests can steer: play, pause, skip, seek and suggest songs. Those go to the
-//! host, whose player acts and then tells everyone.
+//! Each guest has a role the host can change. A **controller** steers: play,
+//! pause, skip, seek, and a song a controller starts plays for everyone. A
+//! **listener** only listens (and can suggest songs). Steering goes to the host,
+//! whose player acts and then tells everyone. The host's state also carries the
+//! next few songs, so every device can fetch them ahead and start each song at
+//! the same moment.
 //!
 //! Wire format: one bidirectional QUIC stream per guest, newline-separated JSON.
 
@@ -63,6 +67,22 @@ pub struct PlayState {
     pub track: Option<Track>,
     pub playing: bool,
     pub position_ms: u64,
+    /// The host's next songs, so guests can fetch them ahead.
+    #[serde(default)]
+    pub up_next: Vec<Track>,
+}
+
+/// A guest's say in the party.
+pub const CONTROLLER: &str = "controller";
+pub const LISTENER: &str = "listener";
+
+/// Someone in the party, for the host's list.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Member {
+    pub id: u64,
+    pub name: String,
+    /// "host", "controller" or "listener".
+    pub role: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -75,6 +95,10 @@ enum Msg {
     /// "play", "pause", "next", "previous" or "seek" (with `position_ms`).
     Control { action: String, position_ms: u64 },
     Request { track: Track },
+    /// Controller: play this song for everyone.
+    Play { track: Track },
+    /// Host to a guest: your role now.
+    Role { role: String },
     Bye,
 }
 
@@ -88,6 +112,12 @@ pub enum Event {
     Control { from: String, action: String, position_ms: u64 },
     /// Host: a guest suggests a song.
     Request { from: String, track: Track },
+    /// Host: a controller started a song for everyone.
+    Play { from: String, track: Track },
+    /// Host: who's here and their roles (host first).
+    Roster(Vec<Member>),
+    /// Guest: our role changed ("controller" or "listener").
+    Role(String),
     /// Guest: we're in.
     Connected { host: String },
     /// Guest: play this, like this (position already corrected for the trip).
@@ -187,6 +217,7 @@ impl Invite {
 struct Guest {
     id: u64,
     name: String,
+    role: String,
     tx: mpsc::UnboundedSender<Msg>,
 }
 
@@ -225,10 +256,21 @@ impl Inner {
         self.guests.lock().unwrap().retain(|g| g.tx.send(make()).is_ok());
     }
 
+    fn roster(&self) -> Vec<Member> {
+        let mut v = vec![Member { id: 0, name: self.name.lock().unwrap().clone(), role: "host".into() }];
+        v.extend(self.guests.lock().unwrap().iter().map(|g| Member { id: g.id, name: g.name.clone(), role: g.role.clone() }));
+        v
+    }
+
     fn members_changed(&self) {
         let names = self.members();
         self.emit(Event::Members(names.clone()));
+        self.emit(Event::Roster(self.roster()));
         self.broadcast(|| Msg::Members { names: names.clone() });
+    }
+
+    fn role_of(&self, id: u64) -> String {
+        self.guests.lock().unwrap().iter().find(|g| g.id == id).map(|g| g.role.clone()).unwrap_or_else(|| LISTENER.into())
     }
 }
 
@@ -302,13 +344,26 @@ async fn serve_guest(inner: Arc<Inner>, conn: Connection) -> Result<()> {
     let id = inner.next_guest.fetch_add(1, Ordering::SeqCst);
     let tx = spawn_writer(send);
     let host = inner.name.lock().unwrap().clone();
-    inner.guests.lock().unwrap().push(Guest { id, name: name.clone(), tx: tx.clone() });
+    inner.guests.lock().unwrap().push(Guest { id, name: name.clone(), role: CONTROLLER.into(), tx: tx.clone() });
     let _ = tx.send(Msg::Welcome { host, state: inner.now_state(), members: inner.members() });
+    let _ = tx.send(Msg::Role { role: CONTROLLER.into() });
     inner.emit(Event::GuestJoined { name: name.clone() });
     inner.members_changed();
     loop {
         match read_msg(&mut lines, &mut buf).await {
-            Ok(Some(Msg::Control { action, position_ms })) => inner.emit(Event::Control { from: name.clone(), action, position_ms }),
+            // Listeners can't steer; the host only acts for controllers.
+            Ok(Some(Msg::Control { action, position_ms })) => {
+                if inner.role_of(id) == CONTROLLER {
+                    inner.emit(Event::Control { from: name.clone(), action, position_ms });
+                }
+            }
+            Ok(Some(Msg::Play { track })) => {
+                if inner.role_of(id) == CONTROLLER {
+                    inner.emit(Event::Play { from: name.clone(), track });
+                } else {
+                    inner.emit(Event::Request { from: name.clone(), track });
+                }
+            }
             Ok(Some(Msg::Request { track })) => inner.emit(Event::Request { from: name.clone(), track }),
             Ok(Some(Msg::Bye)) | Ok(None) | Err(_) => break,
             Ok(Some(_)) => {}
@@ -446,6 +501,7 @@ impl Party {
                             }
                             Msg::State { state } => inner.emit(Event::State(fix(state))),
                             Msg::Members { names } => inner.emit(Event::Members(names)),
+                            Msg::Role { role } => inner.emit(Event::Role(role)),
                             Msg::Bye => break "The host ended the party".to_string(),
                             _ => {}
                         }
@@ -469,6 +525,31 @@ impl Party {
         let link = self.inner.link.lock().unwrap();
         let (_, tx) = link.as_ref().context("not in a party")?;
         tx.send(Msg::Control { action: action.into(), position_ms }).map_err(|_| anyhow!("the connection closed"))
+    }
+
+    /// Guest (controller): play this song for everyone.
+    pub fn play(&self, track: Track) -> Result<()> {
+        let link = self.inner.link.lock().unwrap();
+        let (_, tx) = link.as_ref().context("not in a party")?;
+        tx.send(Msg::Play { track }).map_err(|_| anyhow!("the connection closed"))
+    }
+
+    /// Host: who's here, with their roles (host first).
+    pub fn roster(&self) -> Vec<Member> {
+        self.inner.roster()
+    }
+
+    /// Host: make a guest a controller or a listener.
+    pub fn set_role(&self, guest: u64, role: &str) -> Result<()> {
+        ensure!(role == CONTROLLER || role == LISTENER, "unknown role");
+        {
+            let mut guests = self.inner.guests.lock().unwrap();
+            let g = guests.iter_mut().find(|g| g.id == guest).context("no such guest")?;
+            g.role = role.into();
+            let _ = g.tx.send(Msg::Role { role: role.into() });
+        }
+        self.inner.emit(Event::Roster(self.inner.roster()));
+        Ok(())
     }
 
     /// Guest: suggest a song to the host.
@@ -537,12 +618,13 @@ mod tests {
         let (host, mut hrx) = Party::bind("Host", true).await.unwrap();
         let (guest, mut grx) = Party::bind("Guest", true).await.unwrap();
         host.host().await.unwrap();
-        host.publish(PlayState { track: Some(track("a")), playing: true, position_ms: 10_000 });
+        host.publish(PlayState { track: Some(track("a")), playing: true, position_ms: 10_000, up_next: vec![track("b")] });
 
         guest.join_addr(host.addr()).await.unwrap();
         assert_eq!(next(&mut grx, |e| matches!(e, Event::Connected { .. })).await, Event::Connected { host: "Host".into() });
         // Welcome carries the host's state, moved on by the time that passed.
         let Event::State(s) = next(&mut grx, |e| matches!(e, Event::State(_))).await else { unreachable!() };
+        assert_eq!(s.up_next, vec![track("b")], "the host's next songs come along");
         assert_eq!(s.track.unwrap().id, "a");
         assert!(s.playing && s.position_ms >= 10_000 && s.position_ms < 15_000, "{}", s.position_ms);
         assert_eq!(next(&mut hrx, |e| matches!(e, Event::GuestJoined { .. })).await, Event::GuestJoined { name: "Guest".into() });
@@ -550,7 +632,7 @@ mod tests {
         assert_eq!(m, ["Host", "Guest"]);
 
         // The host skips: the guest hears about it.
-        host.publish(PlayState { track: Some(track("b")), playing: true, position_ms: 0 });
+        host.publish(PlayState { track: Some(track("b")), playing: true, position_ms: 0, ..Default::default() });
         let Event::State(s) = next(&mut grx, |e| matches!(e, Event::State(s) if s.track.as_ref().is_some_and(|t| t.id == "b"))).await else { unreachable!() };
         assert!(s.position_ms < 2_000);
 
@@ -562,6 +644,23 @@ mod tests {
         );
         guest.request(track("c")).unwrap();
         assert_eq!(next(&mut hrx, |e| matches!(e, Event::Request { .. })).await, Event::Request { from: "Guest".into(), track: track("c") });
+
+        // A controller's song plays for everyone (the host is asked to play it).
+        guest.play(track("d")).unwrap();
+        assert_eq!(next(&mut hrx, |e| matches!(e, Event::Play { .. })).await, Event::Play { from: "Guest".into(), track: track("d") });
+
+        // Made a listener: the guest is told, its steering is ignored, and its
+        // "play" becomes a suggestion.
+        let r = host.roster();
+        assert_eq!(r.len(), 2);
+        assert_eq!(r[1].role, CONTROLLER, "guests start as controllers");
+        let gid = r[1].id;
+        host.set_role(gid, LISTENER).unwrap();
+        assert_eq!(next(&mut grx, |e| matches!(e, Event::Role(r) if r == LISTENER)).await, Event::Role(LISTENER.into()));
+        guest.control("next", 0).unwrap();
+        guest.play(track("e")).unwrap();
+        let e = next(&mut hrx, |e| matches!(e, Event::Control { .. } | Event::Request { .. } | Event::Play { .. })).await;
+        assert_eq!(e, Event::Request { from: "Guest".into(), track: track("e") }, "the listener's skip was ignored");
 
         // The host ends it: the guest is told.
         host.leave().await;
@@ -596,7 +695,7 @@ mod tests {
         let link = host.host().await.unwrap();
         eprintln!("link: {link}");
         assert!(link.contains("relay="), "the link carries a relay");
-        host.publish(PlayState { track: Some(track("live")), playing: true, position_ms: 5_000 });
+        host.publish(PlayState { track: Some(track("live")), playing: true, position_ms: 5_000, ..Default::default() });
         let t = Instant::now();
         guest.join(&link).await.unwrap();
         let Event::State(s) = next(&mut grx, |e| matches!(e, Event::State(_))).await else { unreachable!() };

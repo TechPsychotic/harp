@@ -1,6 +1,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../widgets/error_text.dart';
 import '../desktop/mini_window.dart';
 import '../player/controller.dart';
 import '../src/rust/api/engine.dart' as api;
@@ -281,7 +282,7 @@ class _Controls extends StatelessWidget {
         GlassIconButton(icon: Icons.fast_forward_rounded, size: 64, color: fg, onPressed: player.next),
       ]),
       if (player.error != null)
-        Padding(padding: const EdgeInsets.only(top: 6), child: Text(player.error!, textAlign: TextAlign.center, maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFFFF8A8A), fontSize: 13))),
+        Padding(padding: const EdgeInsets.only(top: 6), child: PlayerErrorText(player: player, center: true)),
       if (player.skippedRecently != null) ...[
         const SizedBox(height: 8),
         Text('Skipped “${player.skippedRecently!.title}”. Why?', style: TextStyle(color: dim, fontSize: 12.5)),

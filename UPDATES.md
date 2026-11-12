@@ -8,6 +8,37 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-12: 0.9.1: the error back, picks that follow you, parties with roles
+
+**Fixes**
+- **"YouTube asked Harp to slow down" on the first song of the day.** Two causes. Harp read any "429"
+  in an error as a rate limit (a video id can contain those digits); now only YouTube's own words count.
+  And on Indian mobile networks the phone's shared carrier IPv4 address is what YouTube flags: when
+  YouTube refuses, Harp now asks again over the other address family (the phone's own IPv6) and keeps
+  using whichever works. Tap the error to see YouTube's exact message (and copy it). 🧪 the switch.
+- **Song B shown, song C playing.** A song lined up in the engine could stay lined up when the queue
+  changed in its last 3 s; when the right song then failed to load, the wrong one kept playing under
+  its title. Loading a song now stops whatever was playing first.
+- **Western songs, Hindi picks.** Up next now follows what you're playing now (the current song and the
+  last 40 minutes) most of the time, ranked by closeness to it with your long-term taste only nudging;
+  the rest still comes from your likes and playlists. 🧪 with a Hindi-heavy library and Western songs
+  playing, about 80% of picks follow the Western songs.
+
+**Listen together**
+- **Roles:** host, controller, listener. Controllers steer and a song they start plays for everyone;
+  listeners listen and suggest. The host switches anyone's role from the party screen. 🧪
+- **The host's queue reaches everyone:** guests see "Up next in the party" and fetch those songs ahead,
+  so a song change starts on every device at once instead of buffering behind the host. 🧪
+
+**Your Rhythm**
+- Step back through earlier days, weeks, months and years (‹ ›). Tap a bar to look closer: an hour of
+  the day, a day of the week or month, a month of the year.
+
+**Fetching ahead**
+- New setting: **Songs fetched ahead** (1, 3, 5, 10, 20 or 50), still limited by the cache size.
+
+---
+
 ## 2026-11-10 (night): Your Rhythm by the day
 
 - **Your Rhythm has a Today view** next to Week, Month and Year: minutes so far with the change from

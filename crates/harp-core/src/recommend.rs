@@ -90,7 +90,15 @@ pub struct Request {
     pub requested: bool,
     /// Song ids not to pick (e.g. what is already queued).
     pub exclude: Vec<String>,
+    /// What you're listening to right now, newest first: the current song and
+    /// what you played in the last half hour or so. Your current taste: it
+    /// weighs more than everything else.
+    pub now: Vec<Song>,
 }
+
+/// How often "up next" follows what you're playing now (the rest of the time
+/// it draws on your longer-term taste, so it doesn't narrow forever).
+pub const SESSION_RATE: f64 = 0.8;
 
 #[derive(Clone, Debug)]
 pub struct Recommendation {
@@ -217,6 +225,24 @@ struct Gathered {
     candidates: Vec<Song>,
     reason: String,
     used_seed: Option<Song>,
+    /// Built from what's playing now: ranked by closeness to it, taste second.
+    session: bool,
+}
+
+/// Songs like what you're playing now: the current song's radio, then a
+/// little from the songs before it. Closest first.
+fn session_pool(src: &dyn CandidateSource, now: &[Song]) -> Vec<Song> {
+    let mut seen: HashSet<String> = now.iter().map(|s| s.id.clone()).collect();
+    let mut out = Vec::new();
+    for (k, seed) in now.iter().take(3).enumerate() {
+        let limit = [30, 15, 10][k];
+        for s in related_to(src, seed, limit).unwrap_or_default() {
+            if playable(&s) && seen.insert(s.id.clone()) {
+                out.push(s);
+            }
+        }
+    }
+    out
 }
 
 /// Collects a pool of candidates (a few network calls, once) and the reason
@@ -249,6 +275,7 @@ fn gather(store: &Store, src: &dyn CandidateSource, req: &Request, rng: &mut Rng
     let mut used_seed: Option<Song> = None;
     let candidates: Vec<Song>;
     let reason: String;
+    let mut session = false;
 
     let genre = req.genre.as_deref().and_then(|g| GENRES.iter().find(|x| x.0 == g));
 
@@ -278,6 +305,13 @@ fn gather(store: &Store, src: &dyn CandidateSource, req: &Request, rng: &mut Rng
             (_, true, _, _) => format!("You asked for: {label}"),
             _ => format!("{label} mood"),
         };
+    } else if let Some(c) = (!req.now.is_empty() && rng.f64() < SESSION_RATE).then(|| session_pool(src, &req.now)).filter(|c| !c.is_empty()) {
+        // What you're playing now comes first.
+        let cur = &req.now[0];
+        used_seed = Some(cur.clone());
+        candidates = c;
+        reason = format!("Because you're playing “{}”", cur.title);
+        session = true;
     } else if let Some(q) = searched_query(store, rng, !seeds.is_empty())? {
         let mut c = cold(src, &q);
         if c.is_empty() {
@@ -318,7 +352,7 @@ fn gather(store: &Store, src: &dyn CandidateSource, req: &Request, rng: &mut Rng
     if candidates.is_empty() {
         return Ok(None);
     }
-    Ok(Some(Gathered { candidates, reason, used_seed }))
+    Ok(Some(Gathered { candidates, reason, used_seed, session }))
 }
 
 /// Picks `n` songs from a gathered pool: best by taste first, at most two per
@@ -339,7 +373,21 @@ fn pick_n(
 
     let scores = store.artist_scores()?;
     let hours = store.hour_affinity().unwrap_or_default();
-    let mut ranked: Vec<(f64, &Song)> = pool.into_iter().map(|s| (score(s, &scores, &hours, rng), s)).collect();
+    let total = pool.len().max(1) as f64;
+    let mut ranked: Vec<(f64, &Song)> = pool
+        .into_iter()
+        .enumerate()
+        .map(|(i, s)| {
+            if g.session {
+                // Closeness to what's playing leads; your taste only nudges.
+                let closeness = 1.0 - i as f64 / total;
+                let taste = (score(s, &scores, &hours, rng) - 1.0).clamp(-3.0, 3.0);
+                (closeness * 6.0 + taste * 0.35 + rng.f64() * 0.8, s)
+            } else {
+                (score(s, &scores, &hours, rng), s)
+            }
+        })
+        .collect();
     ranked.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
 
     let cap = if n > 1 { 2 } else { usize::MAX };
@@ -468,6 +516,39 @@ mod tests {
 
     fn play(st: &Store, s: &Song, c: f64, sl: bool, src: PlaySource) {
         st.record_play(&PlayRecord { song: s.clone(), completion: c, superliked: sl, source: src }).unwrap();
+    }
+
+    /// Songs whose "radio" is a separate world from the rest of the library.
+    struct Worlds;
+    impl CandidateSource for Worlds {
+        fn search(&self, q: &str, _: usize) -> Result<Vec<Song>> {
+            Ok((0..5).map(|i| song(&format!("hindi-{q}-{i}"), "h", "Arijit")).collect())
+        }
+        fn related(&self, id: &str, _: usize) -> Result<Vec<Song>> {
+            let world = if id.starts_with("west") { "west" } else { "hindi" };
+            Ok((0..12).map(|i| song(&format!("{world}-{id}-r{i}"), "rel", &format!("{world}{i}"))).collect())
+        }
+    }
+
+    #[test]
+    fn up_next_follows_what_is_playing_now() {
+        // A library full of Hindi likes; right now you're playing Western songs.
+        let st = Store::open_memory().unwrap();
+        for i in 0..20 {
+            play(&st, &song(&format!("hindi{i}"), "t", "Arijit"), 1.0, true, PlaySource::Queue);
+        }
+        let now = vec![song("west-a", "Venom", "Eminem"), song("west-b", "Lose Yourself", "Eminem")];
+        let mut western = 0;
+        for seed in 0..40 {
+            let req = Request { now: now.clone(), ..Default::default() };
+            let picks = batch(&st, &Worlds, &req, 5, &mut Rng::new(seed)).unwrap();
+            if picks.iter().all(|p| p.song.id.starts_with("west")) {
+                western += 1;
+                assert!(picks[0].reason.contains("Venom"), "{}", picks[0].reason);
+            }
+        }
+        // About 80% of the time from what's playing; the rest from your longer taste.
+        assert!((26..=38).contains(&western), "{western} of 40");
     }
 
     #[test]

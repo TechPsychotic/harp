@@ -72,7 +72,12 @@ class RhythmScreen extends StatefulWidget {
 }
 
 class _RhythmScreenState extends State<RhythmScreen> {
-  int _range = 1; // 0 today, 1 week, 2 month, 3 year
+  int _range = 1; // 0 day, 1 week, 2 month, 3 year
+  /// 0: the current day/week/month/year; -1 the one before, and so on.
+  int _offset = 0;
+
+  /// Day view: the hour you tapped (its stats replace the day's), or null.
+  int? _hour;
   api.StatsView? _now;
   api.StatsView? _before;
 
@@ -82,26 +87,106 @@ class _RhythmScreenState extends State<RhythmScreen> {
     _load();
   }
 
+  /// The period shown: (start, end, start of the one before).
   (DateTime, DateTime, DateTime) _bounds() {
+    final n = DateTime.now();
+    final o = _offset;
+    switch (_range) {
+      case 0:
+        final d = DateTime(n.year, n.month, n.day + o);
+        return (d, DateTime(d.year, d.month, d.day + 1), DateTime(d.year, d.month, d.day - 1));
+      case 1:
+        final monday = DateTime(n.year, n.month, n.day - (n.weekday - 1) + 7 * o);
+        return (monday, DateTime(monday.year, monday.month, monday.day + 7), DateTime(monday.year, monday.month, monday.day - 7));
+      case 2:
+        return (DateTime(n.year, n.month + o), DateTime(n.year, n.month + o + 1), DateTime(n.year, n.month + o - 1));
+      default:
+        return (DateTime(n.year + o), DateTime(n.year + o + 1), DateTime(n.year + o - 1));
+    }
+  }
+
+  static const _months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  static const _days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+  /// "Today", "Yesterday", "Mon 9 Nov"; "This week", "2–8 Nov"; "November 2026"; "2025".
+  String _label() {
+    final (start, end, _) = _bounds();
+    String short(DateTime d) => '${d.day} ${_months[d.month - 1].substring(0, 3)}';
+    switch (_range) {
+      case 0:
+        if (_offset == 0) return 'Today';
+        if (_offset == -1) return 'Yesterday';
+        return '${_days[start.weekday - 1]} ${short(start)}${start.year != DateTime.now().year ? ' ${start.year}' : ''}';
+      case 1:
+        if (_offset == 0) return 'This week';
+        if (_offset == -1) return 'Last week';
+        final last = end.subtract(const Duration(days: 1));
+        return start.month == last.month ? '${start.day}–${short(last)}' : '${short(start)} – ${short(last)}';
+      case 2:
+        return _offset == 0 ? 'This month' : '${_months[start.month - 1]} ${start.year}';
+      default:
+        return _offset == 0 ? 'This year' : '${start.year}';
+    }
+  }
+
+  /// Look closer at a bar: an hour of the day; a day of the week or month;
+  /// a month of the year.
+  void _drill(int i) {
+    final (start, _, _) = _bounds();
     final n = DateTime.now();
     final today = DateTime(n.year, n.month, n.day);
     switch (_range) {
       case 0:
-        return (today, today.add(const Duration(days: 1)), today.subtract(const Duration(days: 1)));
-      case 1:
-        final start = today.subtract(Duration(days: today.weekday - 1));
-        return (start, start.add(const Duration(days: 7)), start.subtract(const Duration(days: 7)));
-      case 2:
-        return (DateTime(n.year, n.month), DateTime(n.year, n.month + 1), DateTime(n.year, n.month - 1));
+        setState(() => _hour = _hour == i ? null : i);
+        _load();
+      case 1 || 2:
+        final day = DateTime(start.year, start.month, start.day + i);
+        if (day.isAfter(today)) return;
+        setState(() {
+          _range = 0;
+          _offset = day.difference(today).inDays;
+          _hour = null;
+          _now = null;
+        });
+        _load();
       default:
-        return (DateTime(n.year), DateTime(n.year + 1), DateTime(n.year - 1));
+        final month = DateTime(start.year, i + 1);
+        if (month.isAfter(today)) return;
+        setState(() {
+          _range = 2;
+          _offset = (month.year - n.year) * 12 + month.month - n.month;
+          _now = null;
+        });
+        _load();
     }
   }
 
+  void _shift(int by) {
+    if (_offset + by > 0) return;
+    setState(() {
+      _offset += by;
+      _hour = null;
+      _now = null;
+    });
+    _load();
+  }
+
+  /// The whole period's stats (for the chart) and, when an hour is picked, that hour's.
+  api.StatsView? _period;
+
   Future<void> _load() async {
     final (start, end, prev) = _bounds();
-    final now = await api.listeningStats(from: _secs(start), to: _secs(end), top: 10);
-    final before = await api.listeningStats(from: _secs(prev), to: _secs(start), top: 1);
+    final period = await api.listeningStats(from: _secs(start), to: _secs(end), top: 10);
+    var now = period;
+    var before = await api.listeningStats(from: _secs(prev), to: _secs(start), top: 1);
+    final h = _hour;
+    if (_range == 0 && h != null) {
+      final a = DateTime(start.year, start.month, start.day, h);
+      now = await api.listeningStats(from: _secs(a), to: _secs(DateTime(a.year, a.month, a.day, h + 1)), top: 10);
+      final y = DateTime(start.year, start.month, start.day - 1, h);
+      before = await api.listeningStats(from: _secs(y), to: _secs(DateTime(y.year, y.month, y.day, h + 1)), top: 1);
+    }
+    _period = period;
     if (!mounted) return;
     setState(() {
       _now = now;
@@ -160,12 +245,38 @@ class _RhythmScreenState extends State<RhythmScreen> {
               onSelectionChanged: (v) {
                 setState(() {
                   _range = v.first;
+                  _offset = 0;
+                  _hour = null;
                   _now = null;
                 });
                 _load();
               },
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                IconButton(tooltip: 'Earlier', onPressed: () => _shift(-1), icon: const Icon(Icons.chevron_left_rounded)),
+                Expanded(
+                  child: Text(
+                    _label(),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                  ),
+                ),
+                IconButton(tooltip: 'Later', onPressed: _offset < 0 ? () => _shift(1) : null, icon: const Icon(Icons.chevron_right_rounded)),
+              ],
+            ),
+            if (_range == 0 && _hour != null)
+              Center(
+                child: InputChip(
+                  label: Text('${hourText(_hour!)} – ${hourText((_hour! + 1) % 24)}'),
+                  onDeleted: () {
+                    setState(() => _hour = null);
+                    _load();
+                  },
+                ),
+              ),
+            const SizedBox(height: 8),
             if (encoreSeason())
               Padding(
                 padding: const EdgeInsets.only(bottom: 16),
@@ -180,7 +291,9 @@ class _RhythmScreenState extends State<RhythmScreen> {
               Padding(
                 padding: const EdgeInsets.all(24),
                 child: Text(
-                  _range == 0 ? 'Nothing played today yet. Your rhythm builds as you listen.' : 'Nothing played this ${names[_range]} yet. Your rhythm builds as you listen.',
+                  _offset == 0 && _hour == null
+                      ? (_range == 0 ? 'Nothing played today yet. Your rhythm builds as you listen.' : 'Nothing played this ${names[_range]} yet. Your rhythm builds as you listen.')
+                      : 'Nothing played then.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: tok.textDim),
                 ),
@@ -202,7 +315,7 @@ class _RhythmScreenState extends State<RhythmScreen> {
                     const SizedBox(height: 14),
                     SizedBox(
                       height: 120,
-                      child: _BarChart(bars: _bars(s), color: accent),
+                      child: _BarChart(bars: _bars(_period ?? s), color: accent, onTap: _drill, selected: _range == 0 ? _hour : null),
                     ),
                   ],
                 ),
@@ -276,7 +389,11 @@ class _RhythmScreenState extends State<RhythmScreen> {
     final pct = ((now - before) / before * 100).round();
     final up = pct >= 0;
     return Text(
-      '${up ? '▲' : '▼'} ${pct.abs()}% vs ${unit == 'day' ? 'yesterday' : 'last $unit'}',
+      '${up ? '▲' : '▼'} ${pct.abs()}% vs ${_hour != null
+          ? 'the day before'
+          : unit == 'day'
+          ? 'the day before'
+          : 'the $unit before'}',
       style: TextStyle(color: up ? const Color(0xFF3DDC84) : context.tok.textDim, fontSize: 13, fontWeight: FontWeight.w600),
     );
   }
@@ -334,9 +451,13 @@ class _KindCard extends StatelessWidget {
 }
 
 class _BarChart extends StatelessWidget {
-  const _BarChart({required this.bars, required this.color});
+  const _BarChart({required this.bars, required this.color, this.onTap, this.selected});
   final List<(String, double)> bars;
   final Color color;
+
+  /// Tap a bar to look closer at it.
+  final void Function(int index)? onTap;
+  final int? selected;
 
   @override
   Widget build(BuildContext context) {
@@ -346,30 +467,37 @@ class _BarChart extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        for (final b in bars)
+        for (final (i, b) in bars.indexed)
           Expanded(
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: gap / 2),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Flexible(
-                    child: FractionallySizedBox(
-                      heightFactor: top == 0 ? 0.02 : (b.$2 / top).clamp(0.02, 1.0),
-                      child: Container(
-                        decoration: BoxDecoration(color: b.$2 == top && top > 0 ? color : color.withValues(alpha: 0.45), borderRadius: BorderRadius.circular(3)),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onTap == null ? null : () => onTap!(i),
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: gap / 2),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Flexible(
+                      child: FractionallySizedBox(
+                        heightFactor: top == 0 ? 0.02 : (b.$2 / top).clamp(0.02, 1.0),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: selected != null ? (i == selected ? color : color.withValues(alpha: 0.25)) : (b.$2 == top && top > 0 ? color : color.withValues(alpha: 0.45)),
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  SizedBox(
-                    height: 14,
-                    child: OverflowBox(
-                      maxWidth: 40,
-                      child: Text(b.$1, style: TextStyle(color: tok.textFaint, fontSize: 10)),
+                    const SizedBox(height: 4),
+                    SizedBox(
+                      height: 14,
+                      child: OverflowBox(
+                        maxWidth: 40,
+                        child: Text(b.$1, style: TextStyle(color: tok.textFaint, fontSize: 10)),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

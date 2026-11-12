@@ -470,7 +470,20 @@ pub fn genres() -> Vec<(String, String)> {
 }
 
 fn request(genre: Option<String>, artist: Option<String>, queued: Vec<String>) -> Request {
-    Request { requested: genre.is_some() || artist.is_some(), genre, artist, exclude: queued }
+    Request { requested: genre.is_some() || artist.is_some(), genre, artist, exclude: queued, now: vec![] }
+}
+
+/// What you're listening to right now, newest first: the current song, then
+/// what you played in the last 40 minutes.
+fn listening_now(en: &Engine) -> Vec<Song> {
+    let mut now: Vec<Song> = en.queue.lock().unwrap().current().cloned().into_iter().collect();
+    let since = now_secs() as i64 - 40 * 60;
+    for s in en.store.lock().unwrap().played_since(since, 6).unwrap_or_default() {
+        if !now.iter().any(|x| x.id == s.id) {
+            now.push(s);
+        }
+    }
+    now
 }
 
 /// The next recommended song, with the reason it was picked.
@@ -480,9 +493,11 @@ pub fn recommend_next(genre: Option<String>, artist: Option<String>) -> Result<O
         let q = en.queue.lock().unwrap();
         q.current().into_iter().chain(q.user_queue()).chain(q.autoplay()).map(|s| s.id.clone()).collect()
     };
+    let mut req = request(genre, artist, exclude);
+    req.now = listening_now(en);
     let st = en.rec_store.lock().unwrap();
     let mut rng = en.rng.lock().unwrap().clone();
-    let r = recommend::next(&st, &en.yt, &request(genre, artist, exclude), &mut rng).map_err(e)?;
+    let r = recommend::next(&st, &en.yt, &req, &mut rng).map_err(e)?;
     drop(st);
     Ok(r.map(|r| Pick {
         song: views(en, std::iter::once(r.song)).remove(0),
@@ -500,7 +515,9 @@ pub fn fill_autoplay(count: u32, genre: Option<String>) -> Result<QueueView, Str
     let picks = {
         let st = en.rec_store.lock().unwrap();
         let mut rng = en.rng.lock().unwrap().clone();
-        recommend::batch(&st, &en.yt, &request(genre, None, exclude), count as usize, &mut rng).map_err(e)?
+        let mut req = request(genre, None, exclude);
+        req.now = listening_now(en);
+        recommend::batch(&st, &en.yt, &req, count as usize, &mut rng).map_err(e)?
     };
     en.queue.lock().unwrap().set_autoplay(picks.into_iter().map(|p| p.song).collect());
     Ok(queue_view(en))

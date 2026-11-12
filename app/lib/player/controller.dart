@@ -244,6 +244,10 @@ class PlayerController extends ChangeNotifier {
   bool loading = false;
   String? error;
 
+  /// What actually went wrong (yt-dlp's or the engine's own words), shown when
+  /// you tap the error, so a problem can be reported precisely.
+  String? errorDetail;
+
   /// Why each recommended song was picked.
   final Map<String, String> reasons = {};
 
@@ -437,8 +441,32 @@ class PlayerController extends ChangeNotifier {
 
   /// Tapping a song plays that song only.
   Future<void> playSong(api.SongView s, {String source = 'searched'}) {
+    // In a party as a controller: the song plays for everyone (through the host).
+    if (steerPlay != null) {
+      steerPlay!(s);
+      return Future.value();
+    }
     _mood = null;
     return _start(s, source);
+  }
+
+  /// Set while you're a controller in a party: songs you start play for everyone.
+  void Function(api.SongView s)? steerPlay;
+
+  /// As a guest: the host's next songs (shown in the party, fetched ahead).
+  final ValueNotifier<List<api.SongView>> partyUpNext = ValueNotifier(const []);
+
+  /// What plays next here, for the party's guests to fetch ahead.
+  List<api.SongView> get upcoming => [...queue.user, ...queue.context, ...queue.autoplay].take(5).toList();
+
+  /// Guest: fetch the host's next songs ahead, so each song starts here as
+  /// soon as it does there.
+  Future<void> prefetchFor(List<api.SongView> songs) async {
+    if (settings.cacheMb <= 0 || settings.offline) return;
+    if (!settings.prefetchOnMobile && await Native.isMetered()) return;
+    final ids = songs.where((s) => !s.downloaded).take(_aheadCount.clamp(1, 5)).map((s) => s.id).toList();
+    if (ids.isEmpty) return;
+    await api.prefetchSongs(ids: ids, quality: settings.streamQuality, limitMb: settings.cacheMb);
   }
 
   Future<void> playSearchResult(api.SongView s) => playSong(s);
@@ -454,6 +482,7 @@ class PlayerController extends ChangeNotifier {
     }
     loading = true;
     error = null;
+    errorDetail = null;
     notifyListeners();
     try {
       final pick = await api.recommendNext(genre: genre, artist: artist);
@@ -507,6 +536,10 @@ class PlayerController extends ChangeNotifier {
   /// context; [from] says where it's from ("Playing from …").
   Future<void> playList(List<api.SongView> songs, {bool shuffle = false, From? from}) async {
     if (songs.isEmpty) return;
+    if (steerPlay != null) {
+      steerPlay!(shuffle ? (songs.toList()..shuffle()).first : songs.first);
+      return;
+    }
     _mood = null;
     await _supersede();
     queue = await api.queuePlayList(songs: songs, shuffle: shuffle, sourceKind: from?.kind ?? '', sourceId: from?.id ?? '', sourceTitle: from?.title ?? '');
@@ -574,6 +607,19 @@ class PlayerController extends ChangeNotifier {
     unawaited(_updateAccent(s));
     _syncSession();
     notifyListeners();
+    // Whatever the engine was playing stops now: if this song then fails to
+    // load, nothing else may keep playing under its title.
+    if (_loadedId != s.id || _player.state.playlist.items.length > 1) {
+      _loadedId = null;
+      _armedId = null;
+      try {
+        await _player.pause();
+        final pl = _player.state.playlist;
+        for (var i = pl.items.length - 1; i > pl.index; i--) {
+          await _player.remove(i);
+        }
+      } catch (_) {}
+    }
     var superseded = false;
     try {
       if (settings.offline && !s.downloaded) {
@@ -620,6 +666,7 @@ class PlayerController extends ChangeNotifier {
     } catch (e) {
       if (gen == _loadGen) {
         error = "Couldn't play “${s.title}”: ${_friendly('$e')}";
+        errorDetail = '$e';
         _errorStreak++;
         // Skipping on to the next song would only ask YouTube again.
         if (_isBotCheck('$e')) _errorStreak = 99;
@@ -641,8 +688,9 @@ class PlayerController extends ChangeNotifier {
   }
 
   static bool _isBotCheck(String e) {
+    // YouTube's own words only: a bare "429" could be part of a video id.
     final l = e.toLowerCase();
-    return l.contains('not a bot') || l.contains('confirm you') || l.contains('429') || l.contains('too many requests');
+    return l.contains('not a bot') || l.contains('confirm you') || l.contains('http error 429') || l.contains('too many requests');
   }
 
   static String _friendly(String e) {
@@ -668,7 +716,9 @@ class PlayerController extends ChangeNotifier {
 
   /// How many songs ahead are kept on the device: five, fewer if the cache
   /// limit in Settings is small (about 10 MB a song at the best quality).
-  int get _aheadCount => (settings.cacheMb ~/ 10).clamp(0, 5);
+  /// How many songs ahead are kept on the device: as many as Settings asks
+  /// for, as long as they fit in the cache (about 10 MB a song at best quality).
+  int get _aheadCount => settings.cacheMb <= 0 ? 0 : settings.aheadSongs.clamp(0, settings.cacheMb ~/ 10);
 
   /// The songs that play next (not ones already downloaded: they're on the
   /// device anyway, and are never fetched again).
@@ -722,7 +772,7 @@ class PlayerController extends ChangeNotifier {
         queue = await api.queueSetAutoplay(songs: picks);
       } else {
         final q = await api.fillAutoplay(count: 10, genre: _mood);
-        final why = _mood != null ? '${queue.source?.title ?? _mood} mood · picked for you' : 'Up next from your taste';
+        final why = _mood != null ? '${queue.source?.title ?? _mood} mood · picked for you' : 'Like what you’re playing now';
         for (final s in q.autoplay) {
           reasons.putIfAbsent(s.id, () => why);
         }
@@ -1346,6 +1396,7 @@ class PlayerController extends ChangeNotifier {
       return;
     }
     error = "Playback failed: $message";
+    errorDetail = message;
     notifyListeners();
   }
 

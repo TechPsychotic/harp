@@ -61,12 +61,26 @@ impl Proxy {
     }
 }
 
-/// IPv4 first (many phones resolve an IPv6 address they cannot reach), then the
-/// rest, alternating so one dead family never blocks the other.
+static PREFER_V6: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Which address family goes first. IPv4 normally; IPv6 after YouTube refused
+/// the IPv4 route (a mobile carrier's shared IPv4 address is what YouTube flags
+/// as a bot; a phone's IPv6 address is its own).
+pub fn set_prefer_v6(on: bool) {
+    PREFER_V6.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+pub fn prefer_v6() -> bool {
+    PREFER_V6.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// The preferred family first (IPv4 unless switched; many phones resolve an
+/// IPv6 address they cannot reach), alternating so one dead family never
+/// blocks the other.
 pub(crate) fn order_addrs(addrs: &[SocketAddr]) -> Vec<SocketAddr> {
     let (v4, v6): (Vec<SocketAddr>, Vec<SocketAddr>) = addrs.iter().copied().partition(|a| a.is_ipv4());
+    let (first, second) = if prefer_v6() { (v6, v4) } else { (v4, v6) };
     let mut out = Vec::new();
-    let (mut i4, mut i6) = (v4.into_iter(), v6.into_iter());
+    let (mut i4, mut i6) = (first.into_iter(), second.into_iter());
     loop {
         match (i4.next(), i6.next()) {
             (None, None) => break,

@@ -160,6 +160,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<LyricLineView> dco_decode_list_lyric_line_view(dynamic raw);
 
   @protected
+  List<PartyMemberView> dco_decode_list_party_member_view(dynamic raw);
+
+  @protected
   List<PlaylistView> dco_decode_list_playlist_view(dynamic raw);
 
   @protected
@@ -233,6 +236,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   PartyEventView dco_decode_party_event_view(dynamic raw);
+
+  @protected
+  PartyMemberView dco_decode_party_member_view(dynamic raw);
 
   @protected
   PartyStateView dco_decode_party_state_view(dynamic raw);
@@ -461,6 +467,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  List<PartyMemberView> sse_decode_list_party_member_view(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   List<PlaylistView> sse_decode_list_playlist_view(
     SseDeserializer deserializer,
   );
@@ -552,6 +563,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   PartyEventView sse_decode_party_event_view(SseDeserializer deserializer);
+
+  @protected
+  PartyMemberView sse_decode_party_member_view(SseDeserializer deserializer);
 
   @protected
   PartyStateView sse_decode_party_state_view(SseDeserializer deserializer);
@@ -842,6 +856,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_party_member_view(
+    List<PartyMemberView> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_playlist_view(
     List<PlaylistView> self,
     SseSerializer serializer,
@@ -958,6 +978,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_party_event_view(
     PartyEventView self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_party_member_view(
+    PartyMemberView self,
     SseSerializer serializer,
   );
 

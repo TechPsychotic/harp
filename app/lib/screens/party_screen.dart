@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../widgets/cover.dart';
 import '../native.dart';
 import '../player/controller.dart';
 import '../src/rust/api/engine.dart' as api;
@@ -93,7 +94,7 @@ class _PartyScreenState extends State<PartyScreen> {
           return ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 24), children: [
             if (!party.inParty) ...[
               Text('Play the same music at the same moment with friends, wherever they are. '
-                  'Anyone in the party can play, pause, skip and suggest songs. Peer to peer: no accounts.',
+                  'The host decides who can steer: controllers can play, pause, skip, and start songs for everyone; listeners listen and suggest. Peer to peer: no accounts.',
                   style: TextStyle(color: tok.textDim)),
               const SizedBox(height: 16),
               TextField(controller: _name, decoration: const InputDecoration(labelText: 'Your name in the party')),
@@ -143,8 +144,10 @@ class _PartyScreenState extends State<PartyScreen> {
                   const SizedBox(height: 6),
                   Text(
                     party.role == 'host'
-                        ? 'What you play, everyone hears. Guests can play, pause, skip and suggest songs.'
-                        : 'You hear what the host plays. Your play, pause, skip and seek steer the party; “Suggest to the party” is in every song’s menu.',
+                        ? 'What you play, everyone hears. Controllers can steer and start songs for everyone; listeners can suggest. Tap someone to change their role.'
+                        : party.myRole == 'controller'
+                            ? 'You’re a controller: your play, pause, skip and seek steer the party, and a song you start plays for everyone.'
+                            : 'You’re a listener: you hear what the host plays and can suggest songs from any song’s menu.',
                     style: TextStyle(color: tok.textDim, fontSize: 13.5),
                   ),
                 ]),
@@ -198,13 +201,49 @@ class _PartyScreenState extends State<PartyScreen> {
                   ),
                 ),
               ],
-              SectionHeader('In the party (${party.members.length})'),
-              for (final (i, m) in party.members.indexed)
-                ListTile(
-                  leading: CircleAvatar(backgroundColor: accent.withValues(alpha: 0.2), child: Text(m.isEmpty ? '?' : m.characters.first.toUpperCase())),
-                  title: Text(m),
-                  subtitle: i == 0 ? const Text('Host') : null,
+              if (party.role == 'guest')
+                ValueListenableBuilder(
+                  valueListenable: p.partyUpNext,
+                  builder: (context, up, _) => up.isEmpty
+                      ? const SizedBox.shrink()
+                      : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          const SectionHeader('Up next in the party'),
+                          for (final s in up)
+                            ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: Cover(url: s.thumbnail, seed: s.id, size: 44),
+                              title: Text(s.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                              subtitle: Text(s.artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: tok.textDim)),
+                            ),
+                        ]),
                 ),
+              SectionHeader('In the party (${party.members.length})'),
+              if (party.role == 'host' && party.roster.isNotEmpty)
+                for (final m in party.roster)
+                  ListTile(
+                    leading: CircleAvatar(backgroundColor: accent.withValues(alpha: 0.2), child: Text(m.name.isEmpty ? '?' : m.name.characters.first.toUpperCase())),
+                    title: Text(m.name),
+                    subtitle: Text(m.role == 'host' ? 'Host (you)' : m.role == 'controller' ? 'Controller · can steer' : 'Listener · can suggest', style: TextStyle(color: tok.textDim)),
+                    trailing: m.role == 'host'
+                        ? null
+                        : SegmentedButton<String>(
+                            segments: const [
+                              ButtonSegment(value: 'controller', label: Text('Steer')),
+                              ButtonSegment(value: 'listener', label: Text('Listen')),
+                            ],
+                            selected: {m.role},
+                            showSelectedIcon: false,
+                            style: const ButtonStyle(visualDensity: VisualDensity.compact),
+                            onSelectionChanged: (v) => party.setRole(m, v.first),
+                          ),
+                  )
+              else
+                for (final (i, m) in party.members.indexed)
+                  ListTile(
+                    leading: CircleAvatar(backgroundColor: accent.withValues(alpha: 0.2), child: Text(m.isEmpty ? '?' : m.characters.first.toUpperCase())),
+                    title: Text(m),
+                    subtitle: i == 0 ? const Text('Host') : null,
+                  ),
               const SizedBox(height: 16),
               OutlinedButton.icon(
                 onPressed: party.leave,

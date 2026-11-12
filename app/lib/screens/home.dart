@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../widgets/error_text.dart';
 import '../player/controller.dart';
 import '../src/rust/api/engine.dart' as api;
 import '../theme/glass.dart';
@@ -177,7 +178,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Padding(padding: const EdgeInsets.fromLTRB(16, 10, 16, 0), child: _heroRow(context)),
           ListenableBuilder(listenable: p, builder: (context, _) => _playingFrom(context)),
           if (encoreSeason()) Padding(padding: const EdgeInsets.fromLTRB(16, 10, 16, 0), child: EncoreBanner(player: p)),
-          if (p.error != null) Padding(padding: const EdgeInsets.fromLTRB(16, 10, 16, 0), child: Text(p.error!, style: const TextStyle(color: Color(0xFFFF6B6B)))),
+          if (p.error != null) Padding(padding: const EdgeInsets.fromLTRB(16, 10, 16, 0), child: PlayerErrorText(player: p, maxLines: 4)),
           if (f == null)
             const Padding(padding: EdgeInsets.all(40), child: Center(child: CircularProgressIndicator()))
           else ...[

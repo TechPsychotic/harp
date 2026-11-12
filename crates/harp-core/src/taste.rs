@@ -357,6 +357,11 @@ impl Store {
         Ok(rows.filter_map(|r| r.ok()).filter_map(from_json).collect())
     }
 
+    /// Songs heard (past 30%) since `since` (unix seconds), newest first.
+    pub fn played_since(&self, since: i64, limit: usize) -> Result<Vec<Song>> {
+        self.songs_where(&format!("played_at >= {since} AND completion >= 0.3"), limit)
+    }
+
     pub fn superliked(&self, limit: usize) -> Result<Vec<Song>> {
         self.songs_where("superliked=1", limit)
     }

@@ -4,7 +4,7 @@
 use crate::frb_generated::StreamSink;
 use crate::party_state::{party, rt, PARTY, SINK};
 use harp_core::Song;
-use harp_party::{Event, PlayState, Track};
+use harp_party::{Event, Member, PlayState, Track};
 
 use super::engine::{song, view, SongView};
 
@@ -14,10 +14,25 @@ pub struct PartyStateView {
     pub song: Option<SongView>,
     pub playing: bool,
     pub position_ms: u64,
+    /// The host's next songs (guests fetch them ahead).
+    pub up_next: Vec<SongView>,
+}
+
+/// Someone in the party: `role` is "host", "controller" or "listener".
+#[derive(Clone, Debug)]
+pub struct PartyMemberView {
+    pub id: u64,
+    pub name: String,
+    pub role: String,
+}
+
+fn member_view(m: Member) -> PartyMemberView {
+    PartyMemberView { id: m.id, name: m.name, role: m.role }
 }
 
 /// Something that happened in the party. `kind`: "guest_joined", "guest_left",
-/// "control", "request", "connected", "state", "members", "ended".
+/// "control", "request", "play", "roster", "role" (guest: `action` is the new
+/// role), "connected", "state", "members", "ended".
 #[derive(Clone, Debug)]
 pub struct PartyEventView {
     pub kind: String,
@@ -28,7 +43,9 @@ pub struct PartyEventView {
     pub position_ms: u64,
     pub state: Option<PartyStateView>,
     pub members: Vec<String>,
-    /// request: the suggested song.
+    /// roster (host): everyone with their roles.
+    pub roster: Vec<PartyMemberView>,
+    /// request: the suggested song; play: the song a controller started.
     pub song: Option<SongView>,
     /// ended: why.
     pub reason: String,
@@ -45,7 +62,7 @@ fn song_view(t: Track) -> SongView {
 }
 
 fn event_view(e: Event) -> PartyEventView {
-    let mut v = PartyEventView { kind: String::new(), name: String::new(), action: String::new(), position_ms: 0, state: None, members: vec![], song: None, reason: String::new() };
+    let mut v = PartyEventView { kind: String::new(), name: String::new(), action: String::new(), position_ms: 0, state: None, members: vec![], roster: vec![], song: None, reason: String::new() };
     match e {
         Event::GuestJoined { name } => (v.kind, v.name) = ("guest_joined".into(), name),
         Event::GuestLeft { name } => (v.kind, v.name) = ("guest_left".into(), name),
@@ -53,10 +70,13 @@ fn event_view(e: Event) -> PartyEventView {
             (v.kind, v.name, v.action, v.position_ms) = ("control".into(), from, action, position_ms);
         }
         Event::Request { from, track } => (v.kind, v.name, v.song) = ("request".into(), from, Some(song_view(track))),
+        Event::Play { from, track } => (v.kind, v.name, v.song) = ("play".into(), from, Some(song_view(track))),
+        Event::Roster(r) => (v.kind, v.roster) = ("roster".into(), r.into_iter().map(member_view).collect()),
+        Event::Role(role) => (v.kind, v.action) = ("role".into(), role),
         Event::Connected { host } => (v.kind, v.name) = ("connected".into(), host),
         Event::State(s) => {
             v.kind = "state".into();
-            v.state = Some(PartyStateView { song: s.track.map(song_view), playing: s.playing, position_ms: s.position_ms });
+            v.state = Some(PartyStateView { song: s.track.map(song_view), playing: s.playing, position_ms: s.position_ms, up_next: s.up_next.into_iter().map(song_view).collect() });
         }
         Event::Members(m) => (v.kind, v.members) = ("members".into(), m),
         Event::Ended { reason } => (v.kind, v.reason) = ("ended".into(), reason),
@@ -95,7 +115,7 @@ pub fn party_leave() -> Result<(), String> {
 /// Host: our player's state, for the guests.
 pub fn party_publish(state: PartyStateView) -> Result<(), String> {
     if let Some(p) = PARTY.lock().unwrap().clone() {
-        p.publish(PlayState { track: state.song.as_ref().map(track), playing: state.playing, position_ms: state.position_ms });
+        p.publish(PlayState { track: state.song.as_ref().map(track), playing: state.playing, position_ms: state.position_ms, up_next: state.up_next.iter().map(track).collect() });
     }
     Ok(())
 }
@@ -104,6 +124,23 @@ pub fn party_publish(state: PartyStateView) -> Result<(), String> {
 pub fn party_control(action: String, position_ms: u64) -> Result<(), String> {
     let p = PARTY.lock().unwrap().clone().ok_or("not in a party")?;
     p.control(&action, position_ms).map_err(|e| e.to_string())
+}
+
+/// Guest (controller): play this song for everyone.
+pub fn party_play(s: SongView) -> Result<(), String> {
+    let p = PARTY.lock().unwrap().clone().ok_or("not in a party")?;
+    p.play(track(&s)).map_err(|e| e.to_string())
+}
+
+/// Host: make a guest a "controller" or a "listener".
+pub fn party_set_role(id: u64, role: String) -> Result<(), String> {
+    let p = PARTY.lock().unwrap().clone().ok_or("not in a party")?;
+    p.set_role(id, &role).map_err(|e| e.to_string())
+}
+
+/// Host: everyone in the party, with their roles.
+pub fn party_roster() -> Vec<PartyMemberView> {
+    PARTY.lock().unwrap().as_ref().map(|p| p.roster().into_iter().map(member_view).collect()).unwrap_or_default()
 }
 
 /// Guest: suggest a song to the host.

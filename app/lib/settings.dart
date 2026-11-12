@@ -31,6 +31,10 @@ class AppSettings extends ChangeNotifier {
   /// Also fetch ahead on mobile data (off: only on Wi-Fi / unmetered networks).
   bool prefetchOnMobile = false;
 
+  /// How many upcoming songs are fetched onto the device (still limited by the
+  /// cache size).
+  int aheadSongs = 5;
+
   /// Lyrics in Hindi, Urdu, Punjabi and other Indian scripts: "both" (the
   /// original with English letters under it), "roman" (English letters only)
   /// or "original".
@@ -121,6 +125,7 @@ class AppSettings extends ChangeNotifier {
     spatial = await get('spatial') ?? 'off';
     cacheMb = int.tryParse(await get('cache_mb') ?? '') ?? 512;
     prefetchOnMobile = await get('prefetch_mobile') == '1';
+    aheadSongs = int.tryParse(await get('ahead_songs') ?? '') ?? 5;
     lyricsScript = await get('lyrics_script') ?? 'both';
     eq = await get('eq') ?? 'flat';
     final ce = (await get('eq_custom') ?? '').split(',').map(double.tryParse).toList();
@@ -166,6 +171,12 @@ class AppSettings extends ChangeNotifier {
     notifyListeners();
     await _save('effects', v);
     await _save('effects_auto', _autoLevel);
+  }
+
+  Future<void> setAheadSongs(int v) async {
+    aheadSongs = v;
+    notifyListeners();
+    await _save('ahead_songs', '$v');
   }
 
   Future<void> setPrefetchOnMobile(bool v) async {

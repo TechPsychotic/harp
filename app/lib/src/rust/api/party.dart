@@ -8,9 +8,9 @@ import 'engine.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `event_view`, `fetch_shared`, `song_view`, `track`
+// These functions are ignored because they are not marked as `pub`: `event_view`, `fetch_shared`, `member_view`, `song_view`, `track`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `SharedPlaylist`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// The app listens here for everything that happens in a party.
 Stream<PartyEventView> partyEvents() =>
@@ -39,6 +39,18 @@ Future<void> partyControl({
   action: action,
   positionMs: positionMs,
 );
+
+/// Guest (controller): play this song for everyone.
+Future<void> partyPlay({required SongView s}) =>
+    RustLib.instance.api.crateApiPartyPartyPlay(s: s);
+
+/// Host: make a guest a "controller" or a "listener".
+Future<void> partySetRole({required BigInt id, required String role}) =>
+    RustLib.instance.api.crateApiPartyPartySetRole(id: id, role: role);
+
+/// Host: everyone in the party, with their roles.
+Future<List<PartyMemberView>> partyRoster() =>
+    RustLib.instance.api.crateApiPartyPartyRoster();
 
 /// Guest: suggest a song to the host.
 Future<void> partyRequest({required SongView s}) =>
@@ -123,7 +135,8 @@ class DeviceView {
 }
 
 /// Something that happened in the party. `kind`: "guest_joined", "guest_left",
-/// "control", "request", "connected", "state", "members", "ended".
+/// "control", "request", "play", "roster", "role" (guest: `action` is the new
+/// role), "connected", "state", "members", "ended".
 class PartyEventView {
   final String kind;
 
@@ -136,7 +149,10 @@ class PartyEventView {
   final PartyStateView? state;
   final List<String> members;
 
-  /// request: the suggested song.
+  /// roster (host): everyone with their roles.
+  final List<PartyMemberView> roster;
+
+  /// request: the suggested song; play: the song a controller started.
   final SongView? song;
 
   /// ended: why.
@@ -149,6 +165,7 @@ class PartyEventView {
     required this.positionMs,
     this.state,
     required this.members,
+    required this.roster,
     this.song,
     required this.reason,
   });
@@ -161,6 +178,7 @@ class PartyEventView {
       positionMs.hashCode ^
       state.hashCode ^
       members.hashCode ^
+      roster.hashCode ^
       song.hashCode ^
       reason.hashCode;
 
@@ -175,8 +193,34 @@ class PartyEventView {
           positionMs == other.positionMs &&
           state == other.state &&
           members == other.members &&
+          roster == other.roster &&
           song == other.song &&
           reason == other.reason;
+}
+
+/// Someone in the party: `role` is "host", "controller" or "listener".
+class PartyMemberView {
+  final BigInt id;
+  final String name;
+  final String role;
+
+  const PartyMemberView({
+    required this.id,
+    required this.name,
+    required this.role,
+  });
+
+  @override
+  int get hashCode => id.hashCode ^ name.hashCode ^ role.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PartyMemberView &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          name == other.name &&
+          role == other.role;
 }
 
 /// The host's playback, as the app sends or receives it.
@@ -185,14 +229,19 @@ class PartyStateView {
   final bool playing;
   final BigInt positionMs;
 
+  /// The host's next songs (guests fetch them ahead).
+  final List<SongView> upNext;
+
   const PartyStateView({
     this.song,
     required this.playing,
     required this.positionMs,
+    required this.upNext,
   });
 
   @override
-  int get hashCode => song.hashCode ^ playing.hashCode ^ positionMs.hashCode;
+  int get hashCode =>
+      song.hashCode ^ playing.hashCode ^ positionMs.hashCode ^ upNext.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -201,5 +250,6 @@ class PartyStateView {
           runtimeType == other.runtimeType &&
           song == other.song &&
           playing == other.playing &&
-          positionMs == other.positionMs;
+          positionMs == other.positionMs &&
+          upNext == other.upNext;
 }

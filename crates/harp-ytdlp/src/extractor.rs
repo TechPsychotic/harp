@@ -57,6 +57,8 @@ pub struct YtDlp {
     cache: Mutex<HashMap<(String, Quality), Stream>>,
     ytmusic: bool,
     light_client: bool,
+    /// Desktop: `--force-ipv4` / `--force-ipv6` once one family got refused.
+    family: Mutex<Option<&'static str>>,
 }
 
 const LIGHT_CLIENT: &str = "youtube:player_client=visionos;player_skip=webpage,configs";
@@ -81,7 +83,7 @@ pub(crate) fn is_transient(msg: &str) -> bool {
 
 impl YtDlp {
     pub fn new(tool: Tool) -> Self {
-        YtDlp { tool, cache: Mutex::new(HashMap::new()), ytmusic: true, light_client: true }
+        YtDlp { tool, cache: Mutex::new(HashMap::new()), ytmusic: true, light_client: true, family: Mutex::new(None) }
     }
 
     /// Use only yt-dlp, never YouTube Music's web API (tests, or if it breaks).
@@ -98,7 +100,11 @@ impl YtDlp {
 
     fn run(&self, extra: &[String]) -> Result<String> {
         let mut cmd = Command::new(&self.tool.program);
-        cmd.args(self.tool.base_args()).args(extra);
+        cmd.args(self.tool.base_args());
+        if let Some(f) = *self.family.lock().unwrap() {
+            cmd.arg(f);
+        }
+        cmd.args(extra);
         for (k, v) in &self.tool.env {
             cmd.env(k, v);
         }
@@ -258,13 +264,41 @@ impl YtDlp {
     /// "confirm you're not a bot" sooner. If the light client has nothing, the
     /// default runs as before.
     fn with_clients(&self, f: impl Fn(&[&str]) -> Result<String>) -> Result<String> {
-        if !self.light_client {
-            return f(&[]);
+        let attempt = || -> Result<String> {
+            if !self.light_client {
+                return f(&[]);
+            }
+            match f(&["--extractor-args", LIGHT_CLIENT]) {
+                Ok(o) => Ok(o),
+                Err(Error::Timeout) => Err(Error::Timeout),
+                Err(first) => f(&[]).map_err(|e| if is_bot_check(&e.to_string()) || !is_bot_check(&first.to_string()) { e } else { first }),
+            }
+        };
+        match attempt() {
+            Err(e) if is_bot_check(&e.to_string()) => {
+                // YouTube refused this address. Try the other family (IPv6
+                // instead of a carrier's shared IPv4, or the reverse) and keep
+                // it if it works.
+                self.switch_family();
+                attempt().map_err(|second| {
+                    self.switch_family();
+                    if is_bot_check(&second.to_string()) { e } else { second }
+                })
+            }
+            r => r,
         }
-        match f(&["--extractor-args", LIGHT_CLIENT]) {
-            Ok(o) => Ok(o),
-            Err(Error::Timeout) => Err(Error::Timeout),
-            Err(first) => f(&[]).map_err(|e| if is_bot_check(&e.to_string()) || !is_bot_check(&first.to_string()) { e } else { first }),
+    }
+
+    /// Flips which address family YouTube is asked from.
+    fn switch_family(&self) {
+        if self.tool.proxy.is_some() {
+            crate::proxy::set_prefer_v6(!crate::proxy::prefer_v6());
+        } else {
+            let mut f = self.family.lock().unwrap();
+            *f = match *f {
+                Some("--force-ipv6") => Some("--force-ipv4"),
+                _ => Some("--force-ipv6"),
+            };
         }
     }
 
@@ -390,6 +424,31 @@ mod tests {
         assert!(!lines[1].contains("visionos"));
         assert!(is_bot_check("ERROR: Sign in to confirm you're not a bot"));
         assert!(!is_bot_check("ERROR: Video unavailable"));
+    }
+
+    #[test]
+    fn refused_address_switches_family_and_keeps_it() {
+        // YouTube refuses unless asked over IPv6: Harp switches and stays switched.
+        let d = tmp("family");
+        let tool = d.join("yt-dlp");
+        let info = include_str!("../tests/fixtures/info.json").replace('\n', "");
+        std::fs::write(
+            &tool,
+            format!(
+                "#!/bin/sh\necho \"$*\" >> \"{d}/calls\"\ncase \"$*\" in *--force-ipv6*) ;; *) echo 'ERROR: [youtube] x: Sign in to confirm you’re not a bot' >&2; exit 1;; esac\ncat <<'EOF'\n{info}\nEOF\n",
+                d = d.display()
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&tool, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let y = YtDlp::new(Tool::binary(tool)).without_ytmusic();
+        assert!(y.resolve("5NV6Rdv1a3I", Quality::High).is_ok());
+        y.forget("5NV6Rdv1a3I");
+        let before = std::fs::read_to_string(d.join("calls")).unwrap().lines().count();
+        assert!(y.resolve("5NV6Rdv1a3I", Quality::High).is_ok());
+        let calls = std::fs::read_to_string(d.join("calls")).unwrap();
+        assert_eq!(calls.lines().count(), before + 1, "the working family is remembered: {calls}");
+        assert!(calls.lines().last().unwrap().contains("--force-ipv6"));
     }
 
     #[test]
