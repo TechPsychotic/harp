@@ -143,6 +143,22 @@ impl Queue {
         self.source = source;
     }
 
+    /// A party guest's queue: the host's song and what plays next there. Your
+    /// own upcoming songs give way (in a party the host's queue is what plays);
+    /// a new song puts the one before it in history, the same song stays put.
+    pub fn mirror(&mut self, current: Song, upcoming: Vec<Song>, source: Option<Source>) {
+        if self.current.as_ref().is_none_or(|c| c.id != current.id) {
+            if let Some(c) = self.current.take() {
+                self.history.push(c);
+            }
+        }
+        self.current = Some(current);
+        self.user.clear();
+        self.context = upcoming.into_iter().collect();
+        self.auto.clear();
+        self.source = source;
+    }
+
     /// Smart shuffle: mixes `picks` into the playing list, one after every
     /// `every` of its songs (songs already there are skipped).
     pub fn mix_into_context(&mut self, picks: Vec<Song>, every: usize) {
@@ -330,6 +346,24 @@ mod tests {
     }
     fn id(q: &Queue) -> Option<&str> {
         q.current().map(|c| c.id.as_str())
+    }
+
+    #[test]
+    fn mirror_follows_the_host() {
+        let mut q = Queue::new();
+        q.play_now(s("mine"));
+        q.add_to_queue(s("queued"));
+        q.mirror(s("h1"), vec![s("h2"), s("h3")], None);
+        assert_eq!(id(&q), Some("h1"));
+        assert_eq!(q.user_len(), 0);
+        assert_eq!(q.context().map(|c| c.id.as_str()).collect::<Vec<_>>(), ["h2", "h3"]);
+        assert_eq!(q.history().len(), 1);
+        // The same song with a new list: nothing goes to history.
+        q.mirror(s("h1"), vec![s("h3")], None);
+        assert_eq!(q.history().len(), 1);
+        assert_eq!(q.context_len(), 1);
+        q.mirror(s("h3"), vec![], None);
+        assert_eq!(q.history().last().map(|c| c.id.as_str()), Some("h1"));
     }
 
     #[test]

@@ -17,6 +17,27 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
   song the engine is actually playing (jumping to it if it's coming up, otherwise loading the right
   one), "finished" is ignored while a lined-up song takes over, and a mismatch is corrected within
   about 2 s. 📱
+- **A paused song no longer starts by itself.** Reloads that fix something (a stream that dropped
+  while paused, the engine/screen check, a song change racing the queue) always loaded the song
+  *playing*. Now Harp remembers whether you paused (in the app, the notification, headphones, a call,
+  the sleep timer) and every reload keeps to it; a dropped stream also reloads where it was instead
+  of from the start. Pausing during a call keeps it paused after the call. Tapping play/pause while a
+  song is still loading decides whether it starts (it used to restart the load). 📱
+- **Listening together: the queue is the host's, on every device.** A guest's queue now mirrors the
+  host's (new `queue_mirror` in the core, 🧪): the queue sheet shows the party's next songs, they're
+  fetched onto the guest's phone right away, and nothing of the guest's own autoplay gets in. Queueing
+  a song as a guest asks the host to play it next; tapping a song in the queue plays it for everyone
+  (controllers) or suggests it (listeners); the guest's queue can't be reordered locally. The host now
+  shares its next 10 songs (was 5).
+- **Fewer party glitches.** Host updates (every 2 s) are applied one at a time, newest only: two
+  overlapping loads used to restart the song. A new song starts at the host's position (no play from
+  0 then jump), a guest doesn't move on by itself at the end of a song (it waits for the host's next),
+  and drift is corrected more gently (seek only past 0.7 s, speed nudges at most 5 %).
+- **Fetching ahead you can see, and that actually helps.** Songs fetched in the background were never
+  looked at again, so the next song was often not lined up for a gapless start even when it was on
+  the device. Harp now checks every 2 s: a song that arrived is lined up at once, and the queue shows
+  a ⚡ on each song already on the device, with "N songs ahead on this device" at the top. Fetching
+  starts 6 s into a song (was 10 s), at once for a party guest.
 - **iPhone plays where the built-in finder is refused.** On iOS, yt-dlp now runs inside the app: an
   embedded Python (serious_python) runs the official yt-dlp release (`app/python/main.py`), reached
   by Harp's Rust core over a loopback port with a per-launch token, with exactly the arguments Harp

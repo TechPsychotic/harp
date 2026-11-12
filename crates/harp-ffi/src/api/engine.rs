@@ -411,6 +411,16 @@ pub fn queue_promote(section: String, index: u32) -> Result<QueueView, String> {
     Ok(queue_view(en))
 }
 
+/// Party guest: the queue becomes the host's (the song playing there and
+/// what plays next there), so the queue sheet, fetching ahead and the next
+/// song all follow the host. Playback isn't touched.
+pub fn queue_mirror(current: SongView, upcoming: Vec<SongView>, title: String) -> Result<QueueView, String> {
+    let en = eng()?;
+    let source = Some(harp_core::queue::Source { kind: "party".into(), id: String::new(), title });
+    en.queue.lock().unwrap().mirror(song(&current), upcoming.iter().map(song).collect(), source);
+    Ok(queue_view(en))
+}
+
 /// Marks where the music plays from (for a single song started by a mood, Smart Shuffle…).
 pub fn queue_set_source(kind: String, id: String, title: String) -> Result<QueueView, String> {
     let en = eng()?;

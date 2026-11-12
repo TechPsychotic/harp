@@ -59,18 +59,12 @@ class PlayerController extends ChangeNotifier {
         unawaited(_applyAudioFx());
       }
     });
-    session.onPlay = () {
-      _userPaused = false;
-      return _player.play();
-    };
-    session.onPause = () {
-      _userPaused = true;
-      return _player.pause();
-    };
+    session.onPlay = () => setPlaying(true);
+    session.onPause = () => setPlaying(false);
     session.onNext = next;
     session.onPrevious = previous;
     session.onSeek = seekTo;
-    session.onStop = () => _player.pause();
+    session.onStop = () => setPlaying(false);
     session.onBrowse = _browse;
     session.onPlayFromId = _playFromId;
     unawaited(_watchOutput());
@@ -124,7 +118,8 @@ class PlayerController extends ChangeNotifier {
           // song while another plays.
           final pl = p.state.playlist;
           final linedUp = _armedId != null || _following || pl.index + 1 < pl.items.length;
-          if (done && !_loading && !linedUp && d > 0 && position.value.inMilliseconds >= d - 2500) {
+          // A party guest waits for the host's next song instead of moving on alone.
+          if (done && !_loading && !linedUp && steer == null && d > 0 && position.value.inMilliseconds >= d - 2500) {
             if (sleepAfterSong) {
               // The sleep timer said "at the end of this song".
               cancelSleep();
@@ -154,7 +149,7 @@ class PlayerController extends ChangeNotifier {
       final s = await AudioSession.instance;
       await s.configure(const AudioSessionConfiguration.music());
       _focus = s;
-      _subs.add(s.becomingNoisyEventStream.listen((_) => _player.pause()));
+      _subs.add(s.becomingNoisyEventStream.listen((_) => _pauseHere()));
       _subs.add(s.interruptionEventStream.listen((e) {
         if (e.begin) {
           if (e.type == AudioInterruptionType.duck) {
@@ -163,11 +158,11 @@ class PlayerController extends ChangeNotifier {
             // Come back after a short interruption (a call), not after another
             // app started its own music.
             _resumeAfterInterruption = e.type == AudioInterruptionType.pause;
-            _player.pause();
+            _pauseHere(resumable: true);
           }
         } else {
           _player.setVolume(100);
-          if (_resumeAfterInterruption && e.type == AudioInterruptionType.pause) _player.play();
+          if (_resumeAfterInterruption && e.type == AudioInterruptionType.pause) _playHere();
           _resumeAfterInterruption = false;
         }
       }));
@@ -368,7 +363,7 @@ class PlayerController extends ChangeNotifier {
     sleepAt = d == null ? null : DateTime.now().add(d);
     if (d != null) {
       _sleepTimer = Timer(d, () {
-        _player.pause();
+        _pauseHere();
         sleepAt = null;
         notifyListeners();
       });
@@ -389,7 +384,7 @@ class PlayerController extends ChangeNotifier {
     sleepAt = null;
     if (sleepAfterSong) {
       sleepAfterSong = false;
-      _player.pause();
+      _pauseHere();
     }
     notifyListeners();
   }
@@ -463,17 +458,7 @@ class PlayerController extends ChangeNotifier {
   final ValueNotifier<List<api.SongView>> partyUpNext = ValueNotifier(const []);
 
   /// What plays next here, for the party's guests to fetch ahead.
-  List<api.SongView> get upcoming => [...queue.user, ...queue.context, ...queue.autoplay].take(5).toList();
-
-  /// Guest: fetch the host's next songs ahead, so each song starts here as
-  /// soon as it does there.
-  Future<void> prefetchFor(List<api.SongView> songs) async {
-    if (settings.cacheMb <= 0 || settings.offline) return;
-    if (!settings.prefetchOnMobile && await Native.isMetered()) return;
-    final ids = songs.where((s) => !s.downloaded).take(_aheadCount.clamp(1, 5)).map((s) => s.id).toList();
-    if (ids.isEmpty) return;
-    await api.prefetchSongs(ids: ids, quality: settings.streamQuality, limitMb: settings.cacheMb);
-  }
+  List<api.SongView> get upcoming => [...queue.user, ...queue.context, ...queue.autoplay].take(10).toList();
 
   Future<void> playSearchResult(api.SongView s) => playSong(s);
 
@@ -595,12 +580,15 @@ class PlayerController extends ChangeNotifier {
     await _load();
   }
 
-  Future<void> _load() async {
+  /// Loads the queue's current song. [play]: false loads it paused (a reload
+  /// that corrects something must not start music you paused); [at]: where
+  /// to start (a reload of the same song carries on where it was).
+  Future<void> _load({bool play = true, Duration? at}) async {
     final s = queue.current;
     if (s == null) return;
     final gen = ++_loadGen;
     if (_loadedId != null && _loadedId != s.id) _prevId = _loadedId;
-    _userPaused = false;
+    _userPaused = !play;
     _fadeTried = null;
     _saveLongSpot(); // the song being left, while its position is still known
     _loading = true;
@@ -637,7 +625,7 @@ class PlayerController extends ChangeNotifier {
         return;
       }
       // A restored song starts where it was when the app closed.
-      var resume = _resumeAt != null && _resumeAt!.$1 == s.id && _resumeAt!.$2 > 5000 ? Duration(milliseconds: _resumeAt!.$2) : null;
+      var resume = at ?? (_resumeAt != null && _resumeAt!.$1 == s.id && _resumeAt!.$2 > 5000 ? Duration(milliseconds: _resumeAt!.$2) : null);
       _resumeAt = null;
       // A long track you stopped partway through starts where you left it.
       if (resume == null && (s.durationSecs == null || s.durationSecs! >= _longTrack.inSeconds)) {
@@ -648,15 +636,19 @@ class PlayerController extends ChangeNotifier {
           return;
         }
       }
-      // play: true — this engine doesn't start a newly opened song by itself
-      // (the old one did), which left skips and autoplay paused.
+      // play is explicit: this engine doesn't start a newly opened song by
+      // itself (the old one did), which left skips and autoplay paused. Paused
+      // meanwhile (or loading to stay paused): it opens paused.
       final h = engineHeaders(st.headers, local: st.local);
       if (h.userAgent != null && h.userAgent != _userAgent) {
         await _player.setRawProperty('user-agent', h.userAgent!);
         _userAgent = h.userAgent;
       }
-      await _player.open(mak.Media(st.url, start: resume, httpHeaders: h.headers, extras: {'harpId': s.id}), play: true);
+      final opened = !_userPaused;
+      await _player.open(mak.Media(st.url, start: resume, httpHeaders: h.headers, extras: {'harpId': s.id}), play: opened);
       _armedId = null; // open() replaced the engine's list
+      // Play or pause tapped while it opened: that has the last word.
+      if (!_userPaused != opened) await (_userPaused ? _player.pause() : _player.play());
       if (gen != _loadGen) {
         superseded = true;
         return;
@@ -666,7 +658,7 @@ class PlayerController extends ChangeNotifier {
       _retried = false;
       _errorStreak = 0;
       unawaited(api.saveLastPlayed(s: s));
-      unawaited(_topUpAutoplay());
+      if (steer == null) unawaited(_topUpAutoplay()); // a party guest's queue is the host's
       _tidyCache();
       _prefetch();
     } catch (e) {
@@ -678,7 +670,9 @@ class PlayerController extends ChangeNotifier {
         // Skipping on to the next song would only ask the source again.
         if (_isBotCheck('$e')) _errorStreak = 99;
         // A broken song should not stall the queue: move on (a few times at most).
-        if (_errorStreak <= 3 && !settings.offline || _errorStreak <= 1 && !_isBotCheck('$e')) {
+        // Not as a party guest: that would skip the song for everyone (the
+        // host's next update tries this one again).
+        if (steer == null && (_errorStreak <= 3 && !settings.offline || _errorStreak <= 1 && !_isBotCheck('$e'))) {
           Future.delayed(const Duration(milliseconds: 1500), () {
             if (gen == _loadGen && error != null) unawaited(next());
           });
@@ -737,10 +731,11 @@ class PlayerController extends ChangeNotifier {
 
   /// Fetches the next few songs onto the device, one at a time and a few
   /// seconds apart (a burst is what makes the source refuse). Waits until
-  /// this song has played 10 s, so quick skipping doesn't fetch anything.
+  /// this song has played 6 s, so quick skipping doesn't fetch anything.
   Future<void> _prefetchIfAllowed() async {
     _prefetchTimer?.cancel();
-    final wait = const Duration(seconds: 10) - position.value;
+    // A party guest fetches at once: the host already decided what's next.
+    final wait = (steer != null ? Duration.zero : const Duration(seconds: 6)) - position.value;
     if (wait > Duration.zero) {
       final id = current?.id;
       _prefetchTimer = Timer(wait, () {
@@ -860,6 +855,7 @@ class PlayerController extends ChangeNotifier {
     final now = DateTime.now();
     if (now.difference(_lastEngineCheck) < const Duration(seconds: 2)) return;
     _lastEngineCheck = now;
+    _watchCache();
     if (_loading || _fading || steer != null) return;
     final cur = current;
     final pl = _player.state.playlist;
@@ -881,11 +877,27 @@ class PlayerController extends ChangeNotifier {
     if (_indexIn(queue, playingId) != null) {
       unawaited(_onGaplessAdvance(playingId));
     } else {
-      unawaited(_load());
+      unawaited(_load(play: !_userPaused));
     }
   }
 
   (String, DateTime)? _mismatchSince;
+
+  /// Upcoming songs already on this device (fetched ahead or downloaded).
+  /// Fetching runs in the background, so this is looked at every 2 s: a song
+  /// that just arrived is shown as ready and lined up for a gapless start.
+  Set<String> readyAhead = const {};
+
+  void _watchCache() {
+    final q = queue;
+    final ready = {
+      for (final s in [...q.user, ...q.context, ...q.autoplay].take(_aheadCount.clamp(1, 50)))
+        if (s.downloaded || api.songOnDevice(id: s.id)) s.id,
+    };
+    if (ready.length == readyAhead.length && ready.containsAll(readyAhead)) return;
+    readyAhead = ready;
+    notifyListeners(); // also lines up the next song if it just arrived
+  }
 
   /// True while the queue is catching up with a song the engine moved into.
   bool _following = false;
@@ -931,7 +943,7 @@ class PlayerController extends ChangeNotifier {
     final s = queue.current;
     if (s == null || s.id != id) {
       // The queue changed at the last moment: load what it says properly.
-      await _load();
+      await _load(play: !_userPaused);
       return;
     }
     _currentSource = _sourceOf(s, before);
@@ -951,7 +963,7 @@ class PlayerController extends ChangeNotifier {
       }
     } catch (_) {}
     notifyListeners();
-    unawaited(_topUpAutoplay());
+    if (steer == null) unawaited(_topUpAutoplay());
     _tidyCache();
     _prefetch();
     _ensureStarted(id);
@@ -1144,38 +1156,59 @@ class PlayerController extends ChangeNotifier {
   }
 
   /// Guest: do what the host's player is doing (without steering it back).
+  /// The queue here is the host's ([upNext]: what plays next there), so the
+  /// queue sheet shows it and its songs are fetched onto this device ahead.
   ///
-  /// Staying in step, the way multi-room speakers do it: a gap over 0.4 s
+  /// Staying in step, the way multi-room speakers do it: a gap over 0.7 s
   /// (e.g. a new song that took a while to load) is closed with one exact
-  /// seek; smaller drift by playing up to 8 % faster or slower (the pitch is
+  /// seek; smaller drift by playing up to 5 % faster or slower (the pitch is
   /// kept) until we're back on the host's beat, so there's no jump.
-  Future<void> followHost({required api.SongView? song, required bool playing, required Duration position, required String host}) async {
+  Future<void> followHost({required api.SongView? song, required bool playing, required Duration position, required String host, List<api.SongView> upNext = const []}) async {
     if (song == null) {
-      if (this.playing) await _player.pause();
+      if (this.playing) await _pauseHere();
       return;
     }
     final received = DateTime.now();
     // Where the host is now (its position moved on while we worked), plus your
     // own offset (Bluetooth adds its own delay that no app can measure).
     Duration hostNow() => (playing ? position + DateTime.now().difference(received) : position) + Duration(milliseconds: syncOffsetMs);
+    final ids = upNext.map((s) => s.id).join(',');
     if (current?.id != song.id || _loadedId != song.id) {
       _mood = null;
-      await _start(song, 'party');
-      queue = await api.queueSetSource(kind: 'party', id: '', title: host);
-      notifyListeners();
+      await _supersede();
+      _currentSource = 'party';
+      _currentSuperliked = false;
+      skippedRecently = null;
+      queue = await api.queueMirror(current: song, upcoming: upNext, title: host);
+      _mirrored = ids;
+      resumeOffer = null;
+      // Starts where the host is, playing or paused as there: no jump from 0.
       final at = hostNow();
-      if (at > const Duration(milliseconds: 500)) await _player.seek(at, exact: true);
-    } else {
-      final diff = hostNow() - this.position.value; // > 0: we're behind
-      if (diff.abs() > const Duration(milliseconds: 400)) {
-        await _player.seek(hostNow(), exact: true);
-        await _nudgeRate(0);
-      } else if (playing) {
-        await _nudgeRate(diff.inMilliseconds);
-      }
+      await _load(play: playing, at: at > const Duration(milliseconds: 500) ? at : null);
+      if (current?.id != song.id) return;
+      final late = hostNow() - this.position.value;
+      if (late.abs() > const Duration(milliseconds: 700)) await _player.seek(hostNow(), exact: true);
+      return;
     }
-    if (playing != this.playing) await (playing ? _player.play() : _player.pause());
+    if (ids != _mirrored) {
+      _mirrored = ids;
+      queue = await api.queueMirror(current: song, upcoming: upNext, title: host);
+      notifyListeners();
+      _prefetch();
+    }
+    if (_loading) return;
+    final diff = hostNow() - this.position.value; // > 0: we're behind
+    if (diff.abs() > const Duration(milliseconds: 700)) {
+      await _player.seek(hostNow(), exact: true);
+      await _nudgeRate(0);
+    } else if (playing) {
+      await _nudgeRate(diff.inMilliseconds);
+    }
+    if (playing != this.playing) await (playing ? _playHere() : _pauseHere());
   }
+
+  /// The host's upcoming songs last mirrored here (their ids).
+  String _mirrored = '';
 
   double _nudge = 1;
 
@@ -1184,13 +1217,16 @@ class PlayerController extends ChangeNotifier {
   int syncOffsetMs = 0;
 
   /// Leaving a party: back to your own speed.
-  Future<void> endFollow() => _nudgeRate(0);
+  Future<void> endFollow() {
+    _mirrored = '';
+    return _nudgeRate(0);
+  }
 
   /// [behindMs] > 0: speed up a little; < 0: slow down; ~0: normal speed.
   /// The correction is sized to close the gap within about two seconds (the
-  /// time to the host's next update), at most 8 %.
+  /// time to the host's next update), at most 5 %.
   Future<void> _nudgeRate(int behindMs) async {
-    final want = behindMs.abs() < 40 ? 1.0 : (1 + (behindMs / 2000).clamp(-0.08, 0.08));
+    final want = behindMs.abs() < 60 ? 1.0 : (1 + (behindMs / 2000).clamp(-0.05, 0.05));
     if ((want - _nudge).abs() < 0.002) return;
     _nudge = want;
     try {
@@ -1200,17 +1236,49 @@ class PlayerController extends ChangeNotifier {
 
   Future<void> togglePlay() async {
     if (steer != null) return steer!(playing ? 'pause' : 'play', position.value.inMilliseconds);
-    _userPaused = playing;
-    if (current == null) return;
+    // While a song loads, the button decides whether it starts.
+    return setPlaying(_loading ? _userPaused : !playing);
+  }
+
+  /// Play or pause, from the app, the notification or headphones. What you
+  /// asked for is remembered, so a reload (a dropped stream, a correction)
+  /// never starts music you paused.
+  Future<void> setPlaying(bool want) async {
+    if (steer != null) {
+      if (want != playing) steer!(want ? 'play' : 'pause', position.value.inMilliseconds);
+      return;
+    }
+    _userPaused = !want;
+    if (!want) _resumeAfterInterruption = false; // paused during a call: stay paused after it
+    final s = current;
+    if (s == null) return;
+    if (_loading) {
+      notifyListeners();
+      return; // the song being loaded starts, or not, as asked
+    }
+    if (!want) return _player.pause();
     // After a restart the queue is back but nothing is loaded yet; and if the
     // engine stopped on a song that never started, play loads it properly.
-    final stalled = !playing && !_loading && (_player.state.completed || duration.value == Duration.zero);
-    if (_loadedId != current!.id || stalled) {
+    final stalled = !playing && (_player.state.completed || duration.value == Duration.zero);
+    if (_loadedId != s.id || stalled) {
       _pendingSkips = 0;
       await _load();
       return;
     }
-    await (playing ? _player.pause() : _player.play());
+    await _player.play();
+  }
+
+  /// Pauses this device only (headphones out, a call, the sleep timer, the
+  /// party host pausing), remembered like your own pause.
+  Future<void> _pauseHere({bool resumable = false}) {
+    _userPaused = true;
+    if (!resumable) _resumeAfterInterruption = false;
+    return _player.pause();
+  }
+
+  Future<void> _playHere() {
+    _userPaused = false;
+    return _player.play();
   }
 
   Future<void> seekFraction(double f) => seekTo(Duration(milliseconds: (duration.value.inMilliseconds * f).round()));
@@ -1244,6 +1312,12 @@ class PlayerController extends ChangeNotifier {
 
   /// Jump to an item in the queue, skipping the songs before it.
   Future<void> jumpTo(String section, int index) async {
+    // A party guest's queue is the host's: the song is played (or suggested) there.
+    if (steer != null) {
+      final list = switch (section) { 'user' => queue.user, 'context' => queue.context, _ => queue.autoplay };
+      if (index < list.length) steerPlay?.call(list[index]);
+      return;
+    }
     await _supersede();
     queue = await api.queueJump(section: section, index: index);
     _currentSource = section == 'auto' ? 'recommended' : 'queue';
@@ -1378,13 +1452,22 @@ class PlayerController extends ChangeNotifier {
 
   // --- queue edits ---
 
+  /// A party guest's queue is the host's: queueing a song asks the host to
+  /// play it next (set by the party).
+  void Function(api.SongView s)? steerQueue;
+
+  /// A party guest: the queue here mirrors the host's and isn't edited here.
+  bool get guest => steer != null;
+
   Future<void> playNext(api.SongView s) async {
+    if (steerQueue != null) return steerQueue!(s);
     queue = await api.queuePlayNext(s: s);
     notifyListeners();
     _prefetch();
   }
 
   Future<void> addToQueue(api.SongView s) async {
+    if (steerQueue != null) return steerQueue!(s);
     queue = await api.queueAdd(s: s);
     notifyListeners();
     _prefetch();
@@ -1392,29 +1475,34 @@ class PlayerController extends ChangeNotifier {
 
   /// [section]: "user", "context" or "auto".
   Future<void> removeFromQueue(String section, int i) async {
+    if (guest) return;
     queue = await api.queueRemove(section: section, index: i);
     notifyListeners();
   }
 
   /// Plays an upcoming song next; the others keep their order.
   Future<void> promoteInQueue(String section, int i) async {
+    if (guest) return;
     queue = await api.queuePromote(section: section, index: i);
     notifyListeners();
     _prefetch();
   }
 
   Future<void> moveInQueue(String section, int from, int to) async {
+    if (guest) return;
     queue = await api.queueMove(section: section, from: from, to: to);
     notifyListeners();
     _prefetch();
   }
 
   Future<void> shuffleUpcoming() async {
+    if (guest) return;
     queue = await api.queueShuffle();
     notifyListeners();
   }
 
   Future<void> cycleRepeat() async {
+    if (guest) return;
     final next = switch (queue.repeat) { 'off' => 'all', 'all' => 'one', _ => 'off' };
     queue = await api.queueSetRepeat(mode: next);
     notifyListeners();
@@ -1428,9 +1516,13 @@ class PlayerController extends ChangeNotifier {
     final s = current;
     if (s == null) return;
     // An expired stream URL: resolve again once.
+    // Where it was and whether it was playing stay as they were: a stream
+    // that dropped while paused reloads paused (it used to start playing).
     if (!_retried) {
       _retried = true;
-      api.forgetStream(id: s.id).then((_) => _load());
+      final at = position.value;
+      final play = !_userPaused;
+      api.forgetStream(id: s.id).then((_) => _load(play: play, at: at > const Duration(seconds: 2) ? at : null));
       return;
     }
     error = "Couldn't play “${s.title}” · ${herr.playbackFailed.code}: ${herr.playbackFailed.message}";

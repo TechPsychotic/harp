@@ -93,6 +93,11 @@ class PartyController extends ChangeNotifier {
   /// Guest: what our role lets us do.
   void _applyRole(String r) {
     myRole = r;
+    // Queueing a song (anyone): the host plays it next, for everyone.
+    player.steerQueue = (s) {
+      unawaited(party.partyRequest(s: s).catchError((_) {}));
+      note.value = 'Asked the host to play “${s.title}” next';
+    };
     if (r == 'controller') {
       player.steer = (action, ms) => unawaited(party.partyControl(action: action, positionMs: BigInt.from(ms)).catchError((_) {}));
       player.steerPlay = (s) {
@@ -116,6 +121,7 @@ class PartyController extends ChangeNotifier {
     hostName = '';
     player.steer = null;
     player.steerPlay = null;
+    player.steerQueue = null;
     player.partyUpNext.value = const [];
     roster = const [];
     myRole = 'controller';
@@ -148,14 +154,12 @@ class PartyController extends ChangeNotifier {
       case 'state':
         final s = e.state;
         if (s != null && role == 'guest') {
-          // The host's next songs: shown here and fetched ahead, so a song
-          // change starts on this device as quickly as on the host's.
-          final ids = s.upNext.map((x) => x.id).join(',');
-          if (ids != player.partyUpNext.value.map((x) => x.id).join(',')) {
+          // The host's next songs are this device's queue too (shown, and
+          // fetched ahead, so a song change starts here as quickly as there).
+          if (s.upNext.map((x) => x.id).join(',') != player.partyUpNext.value.map((x) => x.id).join(',')) {
             player.partyUpNext.value = s.upNext;
-            unawaited(player.prefetchFor(s.upNext));
           }
-          await player.followHost(song: s.song, playing: s.playing, position: Duration(milliseconds: s.positionMs.toInt()), host: hostName);
+          _follow(s);
         }
       case 'control':
         // A guest pressed something: act here (we're the host); everyone follows.
@@ -163,9 +167,9 @@ class PartyController extends ChangeNotifier {
         player.steer = null;
         switch (e.action) {
           case 'play':
-            if (!player.playing) await player.togglePlay();
+            await player.setPlaying(true);
           case 'pause':
-            if (player.playing) await player.togglePlay();
+            await player.setPlaying(false);
           case 'next':
             await player.next();
           case 'previous':
@@ -203,6 +207,32 @@ class PartyController extends ChangeNotifier {
         return;
     }
     notifyListeners();
+  }
+
+  /// The host's latest state, waiting while the previous one is applied.
+  party.PartyStateView? _next;
+  bool _applying = false;
+
+  /// Updates arrive every 2 s, and loading a song can take longer: applied one
+  /// at a time, only the newest (two overlapping loads restarted the song).
+  void _follow(party.PartyStateView s) {
+    _next = s;
+    if (_applying) return;
+    _applying = true;
+    () async {
+      try {
+        while (_next != null && role == 'guest') {
+          final st = _next!;
+          _next = null;
+          await player.followHost(song: st.song, playing: st.playing, position: Duration(milliseconds: st.positionMs.toInt()), host: hostName, upNext: st.upNext);
+        }
+      } catch (_) {
+        // A song that wouldn't load: the next update tries again.
+      } finally {
+        _applying = false;
+        _next = null;
+      }
+    }();
   }
 
   @override

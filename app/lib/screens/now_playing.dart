@@ -381,6 +381,8 @@ void showQueueSheet(BuildContext context, PlayerController player) {
           final tok = context.tok;
           final accent = Theme.of(context).colorScheme.primary;
           final empty = q.user.isEmpty && q.context.isEmpty && q.autoplay.isEmpty;
+          final guest = player.guest;
+          final ready = player.readyAhead.length;
           // One scroll view with lazy sections (nested shrink-wrapped lists made it rough).
           return CustomScrollView(controller: scroll, slivers: [
             SliverToBoxAdapter(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -391,10 +393,19 @@ void showQueueSheet(BuildContext context, PlayerController player) {
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     const Text('Playing Next', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
                     if (q.source != null) Text('Playing from ${sourceLabel(q.source!)}', style: TextStyle(color: tok.textDim, fontSize: 13)),
+                    if (ready > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Row(children: [
+                          Icon(Icons.offline_bolt_rounded, size: 14, color: accent),
+                          const SizedBox(width: 4),
+                          Text('$ready ${ready == 1 ? 'song' : 'songs'} ahead on this device: instant, even offline', style: TextStyle(color: tok.textDim, fontSize: 12)),
+                        ]),
+                      ),
                   ]),
                 ),
-                IconButton(tooltip: 'Shuffle', icon: Icon(Icons.shuffle_rounded, color: accent), onPressed: player.shuffleUpcoming),
-                IconButton(
+                if (!guest) IconButton(tooltip: 'Shuffle', icon: Icon(Icons.shuffle_rounded, color: accent), onPressed: player.shuffleUpcoming),
+                if (!guest) IconButton(
                   tooltip: 'Repeat: ${q.repeat}',
                   icon: Icon(q.repeat == 'one' ? Icons.repeat_one_rounded : Icons.repeat_rounded, color: q.repeat == 'off' ? tok.textFaint : accent),
                   onPressed: player.cycleRepeat,
@@ -404,7 +415,10 @@ void showQueueSheet(BuildContext context, PlayerController player) {
             if (!empty)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 2, 16, 4),
-                child: Text('Swipe right: play next · swipe left: remove · hold and drag: move', style: TextStyle(color: tok.textFaint, fontSize: 12)),
+                child: Text(
+                  guest ? 'The party’s queue, as it plays at the host · tap a song to play it for everyone' : 'Swipe right: play next · swipe left: remove · hold and drag: move',
+                  style: TextStyle(color: tok.textFaint, fontSize: 12),
+                ),
               ),
               if (empty) const Padding(padding: EdgeInsets.all(24), child: EmptyState(icon: Icons.queue_music_rounded, text: 'Nothing queued')),
             ])),
@@ -465,8 +479,10 @@ Widget _queueSection(PlayerController player, String section, List<api.SongView>
         color: Colors.transparent,
         child: ReorderableDelayedDragStartListener(
           index: i,
+          enabled: !player.guest,
           child: Dismissible(
             key: ValueKey('d-$section-$i-${song.id}'),
+            direction: player.guest ? DismissDirection.none : DismissDirection.horizontal,
             background: swipeBg(const Color(0xFF2E9E5B), Icons.playlist_play_rounded, 'Play next', Alignment.centerLeft),
             secondaryBackground: swipeBg(const Color(0xFFD9443B), Icons.delete_outline_rounded, 'Remove', Alignment.centerRight),
             // Act, then let the row spring back: the list itself updates from the queue.
@@ -483,11 +499,17 @@ Widget _queueSection(PlayerController player, String section, List<api.SongView>
               song: song,
               player: player,
               onPlay: () => player.jumpTo(section, i),
-              trailing: IconButton(
-                tooltip: 'Remove',
-                icon: Icon(Icons.remove_circle_outline_rounded, color: tok.textDim),
-                onPressed: () => player.removeFromQueue(section, i),
-              ),
+              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                // Fetched ahead (or downloaded): starts at once, needs no connection.
+                if (player.readyAhead.contains(song.id))
+                  Tooltip(message: 'On this device: plays instantly', child: Icon(Icons.offline_bolt_rounded, size: 18, color: Theme.of(context).colorScheme.primary)),
+                if (!player.guest)
+                  IconButton(
+                    tooltip: 'Remove',
+                    icon: Icon(Icons.remove_circle_outline_rounded, color: tok.textDim),
+                    onPressed: () => player.removeFromQueue(section, i),
+                  ),
+              ]),
             ),
           ),
         ),

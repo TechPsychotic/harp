@@ -99,6 +99,19 @@ Future<QueueView> queuePromote({required String section, required int index}) =>
       index: index,
     );
 
+/// Party guest: the queue becomes the host's (the song playing there and
+/// what plays next there), so the queue sheet, fetching ahead and the next
+/// song all follow the host. Playback isn't touched.
+Future<QueueView> queueMirror({
+  required SongView current,
+  required List<SongView> upcoming,
+  required String title,
+}) => RustLib.instance.api.crateApiEngineQueueMirror(
+  current: current,
+  upcoming: upcoming,
+  title: title,
+);
+
 /// Marks where the music plays from (for a single song started by a mood, Smart Shuffle…).
 Future<QueueView> queueSetSource({
   required String kind,
