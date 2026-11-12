@@ -28,12 +28,23 @@ if ZIPAPP and ZIPAPP not in sys.path:
 
 import yt_dlp  # noqa: E402  (from the zipapp above)
 
+# A JavaScript runtime for yt-dlp's challenge solver: JavaScriptCore, inside
+# the app (see harp_jsc.py). Without it yt-dlp still runs, with fewer clients.
+try:
+    import harp_jsc  # noqa: E402,F401  (registers itself with yt-dlp)
+except Exception as e:  # never stop yt-dlp from starting
+    sys.stderr.write(f"harp: JavaScriptCore runtime unavailable: {e}\n")
+
 # yt-dlp keeps process-wide state (stdout, its own settings), so one run at a time.
 LOCK = threading.Lock()
 
 
 def run(args):
     """Runs yt-dlp's command line with `args`; returns (code, stdout, stderr)."""
+    if "--version" in args:
+        # Shown in Harp's Settings › About: which pieces are running on this phone.
+        js = "JavaScriptCore ready" if getattr(sys.modules.get("harp_jsc"), "_JSC", None) else "no JavaScript runtime"
+        return 0, f"{yt_dlp.version.__version__} · in-app Python {sys.version.split()[0]} · {js}\n", ""
     out_buf, err_buf = io.BytesIO(), io.BytesIO()
     # Real text streams with a .buffer, as yt-dlp writes through it.
     out = io.TextIOWrapper(out_buf, encoding="utf-8", write_through=True)
