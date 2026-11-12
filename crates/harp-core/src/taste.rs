@@ -466,7 +466,8 @@ mod tests {
         let s = song("1", "t", "A");
         st.record_play(&rec(&s, 0.3, PlaySource::Recommended, true)).unwrap();
         let sc = st.artist_scores().unwrap()[&s.artist_key()];
-        assert_eq!(sc, ArtistScore { likes: 4.0, skips: 0.0 });
+        // Scores fade with time, so allow the moment between writing and reading.
+        assert!((sc.likes - 4.0).abs() < 1e-3 && sc.skips == 0.0, "{sc:?}");
         assert_eq!(st.superliked(5).unwrap().len(), 1);
     }
 
@@ -476,7 +477,7 @@ mod tests {
         let s = song("1", "t", "A");
         st.record_play(&rec(&s, 0.0, PlaySource::Searched, false)).unwrap();
         let sc = st.artist_scores().unwrap()[&s.artist_key()];
-        assert_eq!(sc.likes, 0.5);
+        assert!((sc.likes - 0.5).abs() < 1e-3, "{}", sc.likes);
         assert_eq!(sc.skips, 0.0, "a single skip of a searched song doesn't count either");
     }
 
