@@ -8,7 +8,7 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
-## 2026-11-12: iPhone, and a built-in stream finder
+## 2026-11-12: 0.9.2: iPhone, and a built-in stream finder
 
 - **iPhone and iPad (iOS 15+), without a developer account:** releases now carry an unsigned
   `harp-ios-unsigned.ipa`. You sign it with your own Apple ID when installing (AltStore, SideStore or
@@ -23,7 +23,11 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
   🧪 stream choice per quality and refusals.
 - If yt-dlp can't be fetched on a computer's first start (offline), Harp now starts anyway and plays
   with its own finder.
-- 📱 Not yet run on an iPhone: the iOS build is checked on GitHub's Mac machines only.
+- Getting iOS to build: iroh's network libraries `netdev` 0.46.3 and `netwatch` 0.19.3 use names `libc`
+  only has for macOS; both are patched in `third_party/` (see its README). The iOS app links Apple's
+  Network and Security frameworks. GitHub Actions can now build one platform on its own (`only: ios`).
+- A flaky test fixed (scores fade between writing and reading them on slow machines).
+- ✅ The unsigned iOS app builds on GitHub's Macs (24 MB). 📱 Not yet run on an iPhone.
 
 ---
 
