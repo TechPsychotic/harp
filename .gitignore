@@ -22,3 +22,6 @@ key.properties
 
 # Kept locally, not published.
 ROADMAP.md
+
+# Python bytecode from local runs of app/python
+__pycache__/

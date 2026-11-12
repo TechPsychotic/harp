@@ -8,6 +8,24 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-13: 0.9.3: yt-dlp on iPhone
+
+- **iPhone plays where the built-in finder is refused.** On iOS, yt-dlp now runs inside the app: an
+  embedded Python (serious_python) runs the official yt-dlp release (`app/python/main.py`), reached
+  by Harp's Rust core over a loopback port with a per-launch token, with exactly the arguments Harp
+  uses everywhere else. Harp fetches the latest yt-dlp on the phone (checked against its published
+  checksums, refreshed weekly); the app ships one as a fallback.
+- **JavaScriptCore as yt-dlp's JavaScript runtime** (`app/python/harp_jsc.py`): yt-dlp's own solver
+  scripts run in iOS's built-in engine through its C API, so yt-dlp can use all its clients. yt-dlp's
+  logic is unchanged; only the engine it runs its script in differs.
+- Settings › About › yt-dlp on iOS shows what runs: the yt-dlp version, the in-app Python and whether
+  JavaScriptCore is ready.
+- The iOS build is checked: CI fails if the app lacks Python, its standard library, certifi or the
+  script.
+- ✅ On an iPhone (sideloaded with iLoader), on the network where 0.9.2 was refused: songs play.
+
+---
+
 ## 2026-11-12: 0.9.2: iPhone, and a built-in stream finder
 
 - **iPhone and iPad (iOS 15+), without a developer account:** releases now carry an unsigned

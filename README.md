@@ -74,8 +74,9 @@ that signs it with **your own (free) Apple ID**:
 After the first install, iOS asks you to trust your Apple ID: Settings › General › VPN & Device
 Management. On iOS 16+, also turn on Developer Mode (Settings › Privacy & Security).
 
-On iOS, Harp finds streams with its own built-in finder (iOS doesn't let apps run yt-dlp), so if the
-source changes how it answers, an update may be needed sooner than on other platforms.
+On iOS, apps can't start other programs, so yt-dlp runs inside Harp itself: an embedded Python
+(`app/python/`) runs the official yt-dlp release, with iOS's built-in JavaScriptCore as its
+JavaScript runtime. Harp keeps yt-dlp up to date on the phone, as on every other platform.
 
 ## Build from source
 
