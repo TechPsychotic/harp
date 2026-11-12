@@ -68,7 +68,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => -1889165849;
+  int get rustContentHash => -2080878023;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -508,7 +508,11 @@ abstract class RustLibApi extends BaseApi {
 
   bool crateApiEngineYoutubeBackingOff();
 
+  void crateApiEngineYtdlpServer({required int port, required String token});
+
   Future<String> crateApiEngineYtdlpVersion();
+
+  Future<String?> crateApiEngineYtdlpZipapp({String? bundled});
 }
 
 class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
@@ -4507,6 +4511,36 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "youtube_backing_off", argNames: []);
 
   @override
+  void crateApiEngineYtdlpServer({required int port, required String token}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_u_16(port, serializer);
+          sse_encode_String(token, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 134,
+          )!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiEngineYtdlpServerConstMeta,
+        argValues: [port, token],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiEngineYtdlpServerConstMeta => const TaskConstMeta(
+    debugName: "ytdlp_server",
+    argNames: ["port", "token"],
+  );
+
+  @override
   Future<String> crateApiEngineYtdlpVersion() {
     return handler.executeNormal(
       NormalTask(
@@ -4515,7 +4549,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 134,
+            funcId: 135,
             port: port_,
           );
         },
@@ -4532,6 +4566,34 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   TaskConstMeta get kCrateApiEngineYtdlpVersionConstMeta =>
       const TaskConstMeta(debugName: "ytdlp_version", argNames: []);
+
+  @override
+  Future<String?> crateApiEngineYtdlpZipapp({String? bundled}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_opt_String(bundled, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 136,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_opt_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiEngineYtdlpZipappConstMeta,
+        argValues: [bundled],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiEngineYtdlpZipappConstMeta =>
+      const TaskConstMeta(debugName: "ytdlp_zipapp", argNames: ["bundled"]);
 
   @protected
   AnyhowException dco_decode_AnyhowException(dynamic raw) {
@@ -5356,6 +5418,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       liked: dco_decode_u_32(arr[1]),
       artists: dco_decode_u_32(arr[2]),
     );
+  }
+
+  @protected
+  int dco_decode_u_16(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
   }
 
   @protected
@@ -6436,6 +6504,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  int sse_decode_u_16(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getUint16();
+  }
+
+  @protected
   int sse_decode_u_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getUint32();
@@ -7378,6 +7452,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_u_32(self.plays, serializer);
     sse_encode_u_32(self.liked, serializer);
     sse_encode_u_32(self.artists, serializer);
+  }
+
+  @protected
+  void sse_encode_u_16(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putUint16(self);
   }
 
   @protected

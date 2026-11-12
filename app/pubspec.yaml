@@ -48,6 +48,7 @@ dependencies:
   audio_session: ^0.2.4
   mpv_audio_kit: ^0.6.4
   window_manager: ^0.6.0
+  serious_python_darwin: ^6.1.3
 
 dev_dependencies:
   flutter_test:

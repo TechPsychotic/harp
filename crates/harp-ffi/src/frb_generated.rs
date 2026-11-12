@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1889165849;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -2080878023;
 
 // Section: executor
 
@@ -4472,6 +4472,39 @@ fn wire__crate__api__engine__youtube_backing_off_impl(
         },
     )
 }
+fn wire__crate__api__engine__ytdlp_server_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "ytdlp_server",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_port = <u16>::sse_decode(&mut deserializer);
+            let api_token = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Ok::<_, ()>({
+                    crate::api::engine::ytdlp_server(api_port, api_token);
+                })?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
 fn wire__crate__api__engine__ytdlp_version_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -4498,6 +4531,39 @@ fn wire__crate__api__engine__ytdlp_version_impl(
             move |context| {
                 transform_result_sse::<_, String>((move || {
                     let output_ok = crate::api::engine::ytdlp_version()?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__engine__ytdlp_zipapp_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "ytdlp_zipapp",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_bundled = <Option<String>>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Ok::<_, ()>(crate::api::engine::ytdlp_zipapp(api_bundled))?;
                     std::result::Result::Ok(output_ok)
                 })())
             }
@@ -5565,6 +5631,13 @@ impl SseDecode for crate::api::engine::TasteStats {
     }
 }
 
+impl SseDecode for u16 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_u16::<NativeEndian>().unwrap()
+    }
+}
+
 impl SseDecode for u32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -5752,7 +5825,8 @@ fn pde_ffi_dispatcher_primary_impl(
             wire__crate__api__engine__thumbnail_cache_bytes_impl(port, ptr, rust_vec_len, data_len)
         }
         132 => wire__crate__api__engine__toggle_like_impl(port, ptr, rust_vec_len, data_len),
-        134 => wire__crate__api__engine__ytdlp_version_impl(port, ptr, rust_vec_len, data_len),
+        135 => wire__crate__api__engine__ytdlp_version_impl(port, ptr, rust_vec_len, data_len),
+        136 => wire__crate__api__engine__ytdlp_zipapp_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -5771,6 +5845,7 @@ fn pde_ffi_dispatcher_sync_impl(
         99 => wire__crate__api__engine__romanize_lines_impl(ptr, rust_vec_len, data_len),
         112 => wire__crate__api__engine__song_on_device_impl(ptr, rust_vec_len, data_len),
         133 => wire__crate__api__engine__youtube_backing_off_impl(ptr, rust_vec_len, data_len),
+        134 => wire__crate__api__engine__ytdlp_server_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -7315,6 +7390,13 @@ impl SseEncode for crate::api::engine::TasteStats {
         <u32>::sse_encode(self.plays, serializer);
         <u32>::sse_encode(self.liked, serializer);
         <u32>::sse_encode(self.artists, serializer);
+    }
+}
+
+impl SseEncode for u16 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_u16::<NativeEndian>(self).unwrap();
     }
 }
 

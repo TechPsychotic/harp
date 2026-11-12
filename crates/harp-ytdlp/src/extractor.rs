@@ -66,6 +66,48 @@ pub struct YtDlp {
     has_tool: bool,
 }
 
+/// iOS: yt-dlp runs inside the app's own Python (apps there can't start other
+/// programs) and answers on a loopback port, guarded by a token.
+static SERVER: Mutex<Option<(u16, String)>> = Mutex::new(None);
+
+/// Points yt-dlp runs at the in-app Python (port, token).
+pub fn set_server(port: u16, token: String) {
+    *SERVER.lock().unwrap() = Some((port, token));
+}
+
+/// Runs yt-dlp with `args` in the in-app Python: one JSON line out
+/// (`{"token", "args"}`), one back (`{"code", "stdout", "stderr"}`).
+fn run_in_app(port: u16, token: &str, args: &[String], timeout: std::time::Duration) -> Result<String> {
+    use std::io::{BufRead, BufReader, Write};
+    // Python may still be starting: try for a few seconds.
+    let started = Instant::now();
+    let mut stream = loop {
+        match std::net::TcpStream::connect(("127.0.0.1", port)) {
+            Ok(s) => break s,
+            Err(e) if started.elapsed() < std::time::Duration::from_secs(8) => {
+                let _ = e;
+                std::thread::sleep(std::time::Duration::from_millis(200));
+            }
+            Err(e) => return Err(Error::Failed(format!("yt-dlp inside the app isn't answering: {e}"))),
+        }
+    };
+    stream.set_read_timeout(Some(timeout))?;
+    let req = serde_json::json!({"token": token, "args": args});
+    stream.write_all(format!("{req}\n").as_bytes())?;
+    let mut line = String::new();
+    BufReader::new(stream).read_line(&mut line).map_err(|e| {
+        if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) { Error::Timeout } else { Error::Spawn(e) }
+    })?;
+    let v: serde_json::Value = serde_json::from_str(line.trim()).map_err(|e| Error::Parse(e.to_string()))?;
+    let stdout = v["stdout"].as_str().unwrap_or_default().to_string();
+    if v["code"].as_i64().unwrap_or(1) != 0 {
+        let stderr = v["stderr"].as_str().unwrap_or_default();
+        let msg = stderr.lines().rev().find(|l| l.contains("ERROR")).unwrap_or(stderr.trim()).trim();
+        return Err(Error::Failed(msg.chars().take(300).collect()));
+    }
+    Ok(stdout)
+}
+
 const LIGHT_CLIENT: &str = "youtube:player_client=visionos;player_skip=webpage,configs";
 
 /// YouTube refusing an address for asking too much.
@@ -112,7 +154,21 @@ impl YtDlp {
         y
     }
 
+    /// yt-dlp can run here: as a program, or (iOS) inside the app's own Python.
+    fn can_run(&self) -> bool {
+        self.has_tool || SERVER.lock().unwrap().is_some()
+    }
+
     fn run(&self, extra: &[String]) -> Result<String> {
+        let server = SERVER.lock().unwrap().clone();
+        if let Some((port, token)) = server {
+            let mut args = self.tool.base_args();
+            if let Some(f) = *self.family.lock().unwrap() {
+                args.push(f.to_string());
+            }
+            args.extend(extra.iter().cloned());
+            return run_in_app(port, &token, &args, self.tool.timeout);
+        }
         if !self.has_tool {
             return Err(Error::Failed("not available on this device".into()));
         }
@@ -221,7 +277,7 @@ impl YtDlp {
                     self.cache.lock().unwrap().insert(key, s.clone());
                     return Ok(s);
                 }
-                Err(e) if !self.has_tool => return Err(e),
+                Err(e) if !self.can_run() => return Err(e),
                 Err(_) => {}
             }
         }
@@ -243,7 +299,7 @@ impl YtDlp {
         if self.native {
             match crate::native::download(id, dir, q) {
                 Ok(r) => return Ok(r),
-                Err(e) if !self.has_tool => return Err(e),
+                Err(e) if !self.can_run() => return Err(e),
                 Err(_) => {}
             }
         }
@@ -484,6 +540,33 @@ mod tests {
         let calls = std::fs::read_to_string(d.join("calls")).unwrap();
         assert_eq!(calls.lines().count(), before + 1, "the working family is remembered: {calls}");
         assert!(calls.lines().last().unwrap().contains("--force-ipv6"));
+    }
+
+    #[test]
+    fn runs_through_the_in_app_python() {
+        use std::io::{BufRead, BufReader, Write};
+        // A stand-in for the app's Python: checks the token, echoes the args.
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = l.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            for _ in 0..2 {
+                let (s, _) = l.accept().unwrap();
+                let mut line = String::new();
+                BufReader::new(s.try_clone().unwrap()).read_line(&mut line).unwrap();
+                let v: serde_json::Value = serde_json::from_str(&line).unwrap();
+                let ok = v["token"] == "t0k";
+                let reply = if ok {
+                    serde_json::json!({"code": 0, "stdout": v["args"].as_array().unwrap().iter().map(|a| a.as_str().unwrap()).collect::<Vec<_>>().join(" "), "stderr": ""})
+                } else {
+                    serde_json::json!({"code": 1, "stdout": "", "stderr": "WARNING: x\nERROR: [youtube] y: Sign in to confirm you're not a bot"})
+                };
+                (&s).write_all(format!("{reply}\n").as_bytes()).unwrap();
+            }
+        });
+        let out = run_in_app(port, "t0k", &["--version".into()], std::time::Duration::from_secs(5)).unwrap();
+        assert_eq!(out, "--version");
+        let err = run_in_app(port, "wrong", &["-J".into()], std::time::Duration::from_secs(5)).unwrap_err().to_string();
+        assert!(err.contains("ERROR") && is_bot_check(&err), "{err}");
     }
 
     #[test]

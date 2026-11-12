@@ -1,10 +1,14 @@
+import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:archive/archive_io.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:serious_python_darwin/serious_python_darwin.dart';
 
 import 'src/rust/api/engine.dart' as api;
+import 'version.dart';
 import 'widgets/cover.dart';
 
 const _native = MethodChannel('dev.harp/native');
@@ -39,6 +43,37 @@ Future<void> bootEngine() async {
     );
   } else {
     await api.startEngine(cfg: api.EngineConfig(dataDir: data));
+    // iOS: yt-dlp runs inside the app's own Python (apps there can't start
+    // other programs). Started in the background; until it answers, Harp's
+    // built-in finder plays on its own.
+    if (Platform.isIOS) unawaited(_startPython(data));
+  }
+}
+
+/// iOS: starts the embedded Python running yt-dlp (app/python/main.py) on a
+/// loopback port with a random token, and points the engine at it.
+Future<void> _startPython(String data) async {
+  try {
+    final bundled = await _unpackBundledYtdlp('$data/tools', appVersion);
+    final zipapp = await api.ytdlpZipapp(bundled: bundled);
+    if (zipapp == null) return;
+    // A free loopback port (taken, then released for Python to bind).
+    final probe = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final port = probe.port;
+    await probe.close();
+    final rnd = Random.secure();
+    final token = List.generate(24, (_) => rnd.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
+    final python = SeriousPythonDarwin();
+    final appDir = await python.prepareApp();
+    final failed = await python.run(
+      '$appDir/main.py',
+      environmentVariables: {'HARP_PY_PORT': '$port', 'HARP_PY_TOKEN': token, 'HARP_YTDLP': zipapp},
+      sync: false,
+    );
+    if (failed != null) return;
+    api.ytdlpServer(port: port, token: token);
+  } catch (_) {
+    // Without it, the built-in finder still plays where the source accepts it.
   }
 }
 

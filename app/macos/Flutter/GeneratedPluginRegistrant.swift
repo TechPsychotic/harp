@@ -9,6 +9,7 @@ import audio_service
 import audio_session
 import file_picker_darwin
 import mpv_audio_kit
+import serious_python_darwin
 import sqflite_darwin
 import url_launcher_macos
 
@@ -17,6 +18,7 @@ func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
   AudioSessionPlugin.register(with: registry.registrar(forPlugin: "AudioSessionPlugin"))
   FilePickerPlugin.register(with: registry.registrar(forPlugin: "FilePickerPlugin"))
   MpvAudioKitPlugin.register(with: registry.registrar(forPlugin: "MpvAudioKitPlugin"))
+  SeriousPythonPlugin.register(with: registry.registrar(forPlugin: "SeriousPythonPlugin"))
   SqflitePlugin.register(with: registry.registrar(forPlugin: "SqflitePlugin"))
   UrlLauncherPlugin.register(with: registry.registrar(forPlugin: "UrlLauncherPlugin"))
 }

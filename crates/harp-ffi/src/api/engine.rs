@@ -268,6 +268,25 @@ pub fn ytdlp_version() -> Result<String, String> {
     eng()?.yt.version().map_err(e)
 }
 
+/// iOS: yt-dlp runs inside the app's own Python, answering on this loopback
+/// port (with this token). From then on every yt-dlp run goes there.
+#[flutter_rust_bridge::frb(sync)]
+pub fn ytdlp_server(port: u16, token: String) {
+    harp_ytdlp::extractor::set_server(port, token);
+}
+
+/// iOS: the yt-dlp zipapp for the in-app Python: the latest release (fetched
+/// and checked against its published checksums, refreshed weekly), else the
+/// one shipped in the app (`bundled`).
+pub fn ytdlp_zipapp(bundled: Option<String>) -> Option<String> {
+    let en = eng().ok()?;
+    let tools = en.db_path.parent()?.join("tools");
+    match install::ensure(&tools, install::asset_name("ios", "aarch64", true), false) {
+        Ok(p) => Some(p.to_string_lossy().into_owned()),
+        Err(_) => bundled.filter(|b| std::path::Path::new(b).is_file()),
+    }
+}
+
 pub fn search(query: String) -> Result<Vec<SongView>, String> {
     let en = eng()?;
     // Not saved to history here: typing is not searching. The app saves a search when

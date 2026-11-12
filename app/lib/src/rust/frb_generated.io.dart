@@ -286,6 +286,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   TasteStats dco_decode_taste_stats(dynamic raw);
 
   @protected
+  int dco_decode_u_16(dynamic raw);
+
+  @protected
   int dco_decode_u_32(dynamic raw);
 
   @protected
@@ -617,6 +620,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   TasteStats sse_decode_taste_stats(SseDeserializer deserializer);
+
+  @protected
+  int sse_decode_u_16(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_32(SseDeserializer deserializer);
@@ -1043,6 +1049,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_taste_stats(TasteStats self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_u_16(int self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_32(int self, SseSerializer serializer);

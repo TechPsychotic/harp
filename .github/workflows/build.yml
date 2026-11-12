@@ -248,6 +248,21 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
+      # yt-dlp runs inside the iOS app's own Python (app/python/main.py, embedded
+      # with serious_python): the app ships the official yt-dlp zipapp as a
+      # fallback (Harp fetches the latest itself) and certifi for HTTPS.
+      - name: Python bits for the iOS app
+        run: |
+          YTDLP=2026.10.26
+          YTDLP_SUM=e51e69e89489f199530f13d32a4342da3ddb2cf34842f364603a066db05afbf3
+          curl -fsSL --retry 3 -o app/assets/yt-dlp.pyz "https://github.com/yt-dlp/yt-dlp/releases/download/$YTDLP/yt-dlp"
+          echo "$YTDLP_SUM  app/assets/yt-dlp.pyz" | shasum -a 256 -c
+          printf 'certifi==2026.10.23 --hash=sha256:e9b54de76e530bb6cf0ccd036787103acb58fd42ba930ea8bf948ddbaa2f61d1\n' > "$RUNNER_TEMP/py-req.txt"
+          for arch in iphoneos.arm64 iphonesimulator.arm64 iphonesimulator.x86_64; do
+            python3 -m pip install --quiet --no-deps --only-binary=:all: --require-hashes -r "$RUNNER_TEMP/py-req.txt" --target "$RUNNER_TEMP/site-packages/$arch"
+          done
+          echo "SERIOUS_PYTHON_APP=$GITHUB_WORKSPACE/app/python" >> "$GITHUB_ENV"
+          echo "SERIOUS_PYTHON_SITE_PACKAGES=$RUNNER_TEMP/site-packages" >> "$GITHUB_ENV"
       - name: Build (unsigned)
         working-directory: app
         run: |

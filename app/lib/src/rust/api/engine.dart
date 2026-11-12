@@ -19,6 +19,17 @@ Future<void> startEngine({required EngineConfig cfg}) =>
 Future<String> ytdlpVersion() =>
     RustLib.instance.api.crateApiEngineYtdlpVersion();
 
+/// iOS: yt-dlp runs inside the app's own Python, answering on this loopback
+/// port (with this token). From then on every yt-dlp run goes there.
+void ytdlpServer({required int port, required String token}) =>
+    RustLib.instance.api.crateApiEngineYtdlpServer(port: port, token: token);
+
+/// iOS: the yt-dlp zipapp for the in-app Python: the latest release (fetched
+/// and checked against its published checksums, refreshed weekly), else the
+/// one shipped in the app (`bundled`).
+Future<String?> ytdlpZipapp({String? bundled}) =>
+    RustLib.instance.api.crateApiEngineYtdlpZipapp(bundled: bundled);
+
 Future<List<SongView>> search({required String query}) =>
     RustLib.instance.api.crateApiEngineSearch(query: query);
 
