@@ -6,6 +6,12 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      only:
+        description: "Build only one platform (for trying a fix), or all"
+        type: choice
+        default: all
+        options: [all, ios, android, linux, windows, macos]
 
 concurrency:
   group: build-${{ github.ref }}
@@ -21,6 +27,7 @@ env:
 jobs:
   test:
     name: Tests (Rust + Flutter)
+    if: ${{ !inputs.only || inputs.only == 'all' || inputs.only == 'tests' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -51,6 +58,7 @@ jobs:
   linux:
     name: Linux
     needs: test
+    if: ${{ !inputs.only || inputs.only == 'all' || inputs.only == 'linux' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -79,6 +87,7 @@ jobs:
   android:
     name: Android (arm64 APK)
     needs: test
+    if: ${{ !inputs.only || inputs.only == 'all' || inputs.only == 'android' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -169,7 +178,7 @@ jobs:
   windows:
     name: Windows
     needs: test
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && (inputs.only == 'all' || inputs.only == 'windows'))
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -195,7 +204,7 @@ jobs:
   macos:
     name: macOS
     needs: test
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && (inputs.only == 'all' || inputs.only == 'macos'))
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -225,7 +234,8 @@ jobs:
   ios:
     name: iOS (unsigned)
     needs: test
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    # Alone (only: ios) it runs without the test job.
+    if: always() && (needs.test.result == 'success' || needs.test.result == 'skipped') && (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && (inputs.only == 'all' || inputs.only == 'ios')))
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
