@@ -53,7 +53,7 @@ class _SyncScreenState extends State<SyncScreen> {
     if (mounted) setState(() => _devices = d);
   }
 
-  Future<String> _name() async => await api.settingGet(key: 'party_name') ?? (Platform.isAndroid ? 'My phone' : 'My computer');
+  Future<String> _name() async => await api.settingGet(key: 'party_name') ?? (Platform.isAndroid || Platform.isIOS ? 'My phone' : 'My computer');
 
   String _summary(api.MergeInfoView m) {
     if (m.liked == 0 && m.playlistsNew == 0 && m.playlistsGrown == 0 && m.plays == 0) {

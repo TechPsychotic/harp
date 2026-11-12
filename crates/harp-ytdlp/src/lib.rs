@@ -11,6 +11,7 @@ pub mod config;
 pub mod extractor;
 pub mod install;
 pub mod lyrics;
+pub mod native;
 pub mod parse;
 pub mod proxy;
 pub mod spotify;

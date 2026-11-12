@@ -219,9 +219,41 @@ jobs:
           name: harp-macos
           path: dist/harp-macos.zip
 
+  # iOS without an Apple developer account: an unsigned .ipa that people sign
+  # with their own Apple ID when they install it (AltStore, SideStore,
+  # Sideloadly) or install as is with TrollStore.
+  ios:
+    name: iOS (unsigned)
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+      - uses: Swatinem/rust-cache@v2
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - working-directory: app
+        run: flutter build ios --release --no-codesign
+      - name: Package (.ipa, unsigned)
+        run: |
+          mkdir -p dist/Payload
+          cp -R app/build/ios/iphoneos/Runner.app dist/Payload/
+          cd dist && zip -qr harp-ios-unsigned.ipa Payload && rm -rf Payload
+          ls -la
+      - uses: actions/upload-artifact@v4
+        with:
+          name: harp-ios
+          path: dist/harp-ios-unsigned.ipa
+
   release:
     name: GitHub release
-    needs: [linux, android, windows, macos]
+    needs: [linux, android, windows, macos, ios]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
@@ -241,4 +273,4 @@ jobs:
           --repo "${{ github.repository }}"
           --title "Harp ${{ github.ref_name }}"
           --latest --generate-notes
-          --notes "Android: harp-android-arm64.apk, signed with Harp's release key. Linux: harp-linux-x64.tar.gz. Windows: harp-windows-x64.zip. macOS: harp-macos.zip (not notarized; right-click and Open the first time). SHA256SUMS.txt lists the checksums."
+          --notes "Android: harp-android-arm64.apk, signed with Harp's release key. iOS: harp-ios-unsigned.ipa (sign it with your own Apple ID via AltStore, SideStore or Sideloadly, or install with TrollStore; see the README). Linux: harp-linux-x64.tar.gz. Windows: harp-windows-x64.zip. macOS: harp-macos.zip (not notarized; right-click and Open the first time). SHA256SUMS.txt lists the checksums."

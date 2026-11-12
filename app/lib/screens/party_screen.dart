@@ -35,7 +35,7 @@ class _PartyScreenState extends State<PartyScreen> {
     super.initState();
     api.settingGet(key: 'party_offset').then((v) => p.syncOffsetMs = int.tryParse(v ?? '') ?? 0);
     api.settingGet(key: 'party_name').then((v) {
-      if (mounted) _name.text = v ?? (Platform.isAndroid ? 'My phone' : 'My computer');
+      if (mounted) _name.text = v ?? (Platform.isAndroid || Platform.isIOS ? 'My phone' : 'My computer');
     });
     p.party.note.addListener(_showNote);
     final inv = widget.invite;

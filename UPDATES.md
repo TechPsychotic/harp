@@ -8,6 +8,24 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-12: iPhone, and a built-in stream finder
+
+- **iPhone and iPad (iOS 15+), without a developer account:** releases now carry an unsigned
+  `harp-ios-unsigned.ipa`. You sign it with your own Apple ID when installing (AltStore, SideStore or
+  Sideloadly; re-signed every 7 days with a free Apple ID) or install it with TrollStore. The README
+  explains each way. The iOS app project is new: background audio, `harp://` links, app icons.
+- **Harp's own stream finder:** one request to the source's player API with a client that returns
+  plain audio links: no player code to run, no Python. iOS can't run yt-dlp, so this is how it plays
+  there; everywhere else it's tried first (faster: no Python starting per song) with yt-dlp as the
+  fallback. Downloads use it too, in 4 MB pieces. If the source refuses an address, it asks again over
+  the other address family. ✅ live on the laptop: stream found and a song downloaded (3.4 MB) in 1.4 s.
+  🧪 stream choice per quality and refusals.
+- If yt-dlp can't be fetched on a computer's first start (offline), Harp now starts anyway and plays
+  with its own finder.
+- 📱 Not yet run on an iPhone: the iOS build is checked on GitHub's Mac machines only.
+
+---
+
 ## 2026-11-12: 0.9.1: the error back, picks that follow you, parties with roles
 
 **Fixes**

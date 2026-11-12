@@ -226,13 +226,22 @@ pub fn start_engine(cfg: EngineConfig) -> Result<(), String> {
             t.js_runtime = Some(format!("quickjs:{q}"));
         }
         t
+    } else if cfg!(target_os = "ios") {
+        // iOS: apps can't start other programs, so no yt-dlp; Harp's own
+        // finder and the catalogue API do everything.
+        Tool::binary("")
     } else {
         let asset = install::asset_name(std::env::consts::OS, std::env::consts::ARCH, false);
-        Tool::binary(install::ensure(&tools, asset, false).map_err(e)?)
+        match install::ensure(&tools, asset, false) {
+            Ok(p) => Tool::binary(p),
+            // No yt-dlp yet (offline on first start): Harp's own finder still plays.
+            Err(_) => Tool::binary(""),
+        }
     };
 
     let mut tool = tool;
     tool.cache_dir = Some(data.join("ytdlp-cache"));
+    let has_tool = !tool.program.as_os_str().is_empty();
     // A backup an older build left staged is merged in (never swapped over this library).
     let _ = harp_core::backup::apply_pending(&db);
     let store = Store::open(&db).map_err(e)?;
@@ -244,7 +253,7 @@ pub fn start_engine(cfg: EngineConfig) -> Result<(), String> {
         downloads_dir: data.join("downloads"),
         cache_dir: data.join("cache"),
         thumbs_dir: data.join("thumbs"),
-        yt: YtDlp::new(tool),
+        yt: if has_tool { YtDlp::new(tool) } else { YtDlp::native_only() },
         store: Mutex::new(store),
         rec_store: Mutex::new(Store::open(&db).map_err(e)?),
         queue: Mutex::new(queue),

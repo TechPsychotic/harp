@@ -11,7 +11,7 @@
 </p>
 
 **A music app that learns your taste on your own device.** No account, no sign-in, no API keys and
-no servers of ours. For Android, Linux, Windows and macOS.
+no servers of ours. For Android, iPhone, Linux, Windows and macOS.
 
 Harp streams music from the web (through [yt-dlp](https://github.com/yt-dlp/yt-dlp)), plays your
 own files, and builds its recommendations from what you listen to, right on the device.
@@ -42,12 +42,33 @@ Download the latest release from **[Releases](../../releases)**:
 | Platform | File | Notes |
 | --- | --- | --- |
 | Android 9+ (64-bit) | `harp-android-arm64.apk` | Signed with Harp's release key. Allow installing from your browser or file manager. |
+| iPhone / iPad (iOS 15+) | `harp-ios-unsigned.ipa` | Unsigned: you sign it with your own Apple ID when you install it. See below. |
 | Linux (x64) | `harp-linux-x64.tar.gz` | Unpack and run `harp`, or use `scripts/install-linux.sh` for a menu entry. |
 | Windows (x64) | `harp-windows-x64.zip` | Unzip and run `harp.exe`. |
 | macOS | `harp-macos.zip` | Not notarized: right-click › Open the first time. |
 
 `SHA256SUMS.txt` in each release lists the files' checksums. Harp checks for new releases itself
 (Settings › About).
+
+### iPhone and iPad (no App Store)
+
+Harp isn't on the App Store, and the `.ipa` isn't signed by a developer account. Install it with a tool
+that signs it with **your own (free) Apple ID**:
+
+- **[AltStore](https://altstore.io) or [SideStore](https://sidestore.io):** install the tool, then open
+  `harp-ios-unsigned.ipa` with it. With a free Apple ID the app must be refreshed every 7 days; both
+  tools do that in the background (SideStore without a computer). A free Apple ID allows 3 sideloaded
+  apps at a time.
+- **[Sideloadly](https://sideloadly.io)** (Windows or Mac): connect the iPhone by cable, drag the `.ipa`
+  in, sign in with your Apple ID. Re-install every 7 days with a free Apple ID.
+- **[TrollStore](https://github.com/opa334/TrollStore)** (only on the iOS versions it supports): installs
+  the `.ipa` permanently, no re-signing.
+
+After the first install, iOS asks you to trust your Apple ID: Settings › General › VPN & Device
+Management. On iOS 16+, also turn on Developer Mode (Settings › Privacy & Security).
+
+On iOS, Harp finds streams with its own built-in finder (iOS doesn't let apps run yt-dlp), so if the
+source changes how it answers, an update may be needed sooner than on other platforms.
 
 ## Build from source
 

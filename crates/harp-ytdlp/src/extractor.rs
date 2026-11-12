@@ -59,6 +59,11 @@ pub struct YtDlp {
     light_client: bool,
     /// Desktop: `--force-ipv4` / `--force-ipv6` once one family got refused.
     family: Mutex<Option<&'static str>>,
+    /// Find streams with Harp's own finder first (see `native`).
+    native: bool,
+    /// False where yt-dlp can't run (iOS): only the built-in finder and the
+    /// catalogue API are used.
+    has_tool: bool,
 }
 
 const LIGHT_CLIENT: &str = "youtube:player_client=visionos;player_skip=webpage,configs";
@@ -83,7 +88,7 @@ pub(crate) fn is_transient(msg: &str) -> bool {
 
 impl YtDlp {
     pub fn new(tool: Tool) -> Self {
-        YtDlp { tool, cache: Mutex::new(HashMap::new()), ytmusic: true, light_client: true, family: Mutex::new(None) }
+        YtDlp { tool, cache: Mutex::new(HashMap::new()), ytmusic: true, light_client: true, family: Mutex::new(None), native: !cfg!(test), has_tool: true }
     }
 
     /// Use only yt-dlp, never YouTube Music's web API (tests, or if it breaks).
@@ -98,7 +103,19 @@ impl YtDlp {
         self
     }
 
+    /// Without yt-dlp (iOS): streams and downloads with the built-in finder,
+    /// search and radio with the catalogue API.
+    pub fn native_only() -> Self {
+        let mut y = YtDlp::new(Tool::binary(""));
+        y.native = true;
+        y.has_tool = false;
+        y
+    }
+
     fn run(&self, extra: &[String]) -> Result<String> {
+        if !self.has_tool {
+            return Err(Error::Failed("not available on this device".into()));
+        }
         let mut cmd = Command::new(&self.tool.program);
         cmd.args(self.tool.base_args());
         if let Some(f) = *self.family.lock().unwrap() {
@@ -197,6 +214,17 @@ impl YtDlp {
                 return Ok(s.clone());
             }
         }
+        // Harp's own finder first (one request, no Python); yt-dlp if it can't.
+        if self.native {
+            match crate::native::resolve(id, q) {
+                Ok(s) => {
+                    self.cache.lock().unwrap().insert(key, s.clone());
+                    return Ok(s);
+                }
+                Err(e) if !self.has_tool => return Err(e),
+                Err(_) => {}
+            }
+        }
         let url = format!("https://www.youtube.com/watch?v={id}");
         let out = self.with_clients(|client| {
             let mut a = vec!["--no-playlist".to_string()];
@@ -212,6 +240,13 @@ impl YtDlp {
     /// Downloads a song's audio into `dir` for offline playback. Returns the
     /// file path and its size.
     pub fn download(&self, id: &str, dir: &std::path::Path, q: Quality) -> Result<(std::path::PathBuf, u64)> {
+        if self.native {
+            match crate::native::download(id, dir, q) {
+                Ok(r) => return Ok(r),
+                Err(e) if !self.has_tool => return Err(e),
+                Err(_) => {}
+            }
+        }
         std::fs::create_dir_all(dir)?;
         let template = dir.join(format!("{id}.%(ext)s"));
         let url = format!("https://www.youtube.com/watch?v={id}");
