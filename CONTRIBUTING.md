@@ -9,6 +9,7 @@ sign-ins.
 Open an issue with:
 
 - what you did, what you expected, and what happened instead;
+- the error code (H-101 and so on, see `ERRORS.md`) and its copied **Details**, if there was one;
 - your platform and Harp version (Settings › About);
 - on Android, the crash report if Harp closed on its own (Settings › About › Last crash report);
 - for playback problems, the result of Settings › About › Test the audio engine.

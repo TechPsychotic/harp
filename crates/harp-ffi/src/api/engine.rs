@@ -983,7 +983,7 @@ pub fn import_link(url: String) -> Result<Vec<ImportPlaylistView>, String> {
     if url.contains("youtube.com") || url.contains("youtu.be") {
         // YouTube Music reads a playlist in full (100 at a time), with proper artists.
         let mut resolved: Vec<SongView> = vec![];
-        let mut name = "YouTube playlist".to_string();
+        let mut name = "Imported playlist".to_string();
         if let Some(list) = youtube_list_id(&url) {
             if let Ok((c, songs)) = ytmusic::open(&format!("VL{list}")) {
                 if !songs.is_empty() {
@@ -1016,7 +1016,7 @@ pub fn import_link(url: String) -> Result<Vec<ImportPlaylistView>, String> {
     if url.contains("amazon.") {
         return Err("Amazon Music doesn't share playlist contents in links or to other apps. Paste the song list (Artist - Title per line), or import a CSV made by a converter.".into());
     }
-    Err("Paste a Spotify, Apple Music, YouTube or YouTube Music playlist link.".into())
+    Err("Paste a public playlist link (Spotify, Apple Music and others).".into())
 }
 
 /// Finds the best match for a track on YouTube Music, with alternatives for the review screen.

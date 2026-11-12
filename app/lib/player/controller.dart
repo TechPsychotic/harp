@@ -7,6 +7,7 @@ import 'package:flutter/material.dart' show Color;
 import 'package:flutter/foundation.dart';
 import 'package:mpv_audio_kit/mpv_audio_kit.dart' as mak;
 
+import '../errors.dart' as herr;
 import '../native.dart';
 import '../settings.dart';
 import '../theme/art_color.dart';
@@ -665,10 +666,11 @@ class PlayerController extends ChangeNotifier {
       _prefetch();
     } catch (e) {
       if (gen == _loadGen) {
-        error = "Couldn't play “${s.title}”: ${_friendly('$e')}";
-        errorDetail = '$e';
+        final he = herr.classify('$e');
+        error = "Couldn't play “${s.title}” · ${he.code}: ${he.message}";
+        errorDetail = '${he.code}\n\n${herr.neutral('$e')}';
         _errorStreak++;
-        // Skipping on to the next song would only ask YouTube again.
+        // Skipping on to the next song would only ask the source again.
         if (_isBotCheck('$e')) _errorStreak = 99;
         // A broken song should not stall the queue: move on (a few times at most).
         if (_errorStreak <= 3 && !settings.offline || _errorStreak <= 1 && !_isBotCheck('$e')) {
@@ -687,23 +689,9 @@ class PlayerController extends ChangeNotifier {
     }
   }
 
-  static bool _isBotCheck(String e) {
-    // YouTube's own words only: a bare "429" could be part of a video id.
-    final l = e.toLowerCase();
-    return l.contains('not a bot') || l.contains('confirm you') || l.contains('http error 429') || l.contains('too many requests');
-  }
-
-  static String _friendly(String e) {
-    final l = e.toLowerCase();
-    if (_isBotCheck(e)) {
-      return 'YouTube asked Harp to slow down for a moment. Harp has paused fetching in the background; try this song again in a minute or two.';
-    }
-    if (l.contains('502') || l.contains('tunnel') || l.contains('timed out') || l.contains('urlopen') || l.contains('network')) {
-      return 'the connection dropped. Check your internet and try again.';
-    }
-    if (l.contains('not available') || l.contains('private') || l.contains('removed')) return 'this video is not available.';
-    return e.length > 160 ? '${e.substring(0, 160)}…' : e;
-  }
+  /// The source refusing for asking too much (its own words only: a bare
+  /// "429" could be part of a song's id).
+  static bool _isBotCheck(String e) => identical(herr.classify(e), herr.sourceBusy);
 
   /// Fetches the next songs (and this one) into the play cache so skips are
   /// instant and playback survives a dropped connection or a sleeping screen.
@@ -743,7 +731,7 @@ class PlayerController extends ChangeNotifier {
   }
 
   /// Fetches the next few songs onto the device, one at a time and a few
-  /// seconds apart (a burst is what triggers YouTube's bot check). Waits until
+  /// seconds apart (a burst is what makes the source refuse). Waits until
   /// this song has played 10 s, so quick skipping doesn't fetch anything.
   Future<void> _prefetchIfAllowed() async {
     _prefetchTimer?.cancel();
@@ -1323,7 +1311,8 @@ class PlayerController extends ChangeNotifier {
       queue = await api.queueState();
       return null;
     } catch (e) {
-      return "Couldn't download: ${_friendly('$e')}";
+      final he = herr.classify('$e');
+      return "Couldn't download · ${he.code}: ${he.message}";
     } finally {
       downloading.value = {...downloading.value}..remove(s.id);
       _bump();
@@ -1395,8 +1384,8 @@ class PlayerController extends ChangeNotifier {
       api.forgetStream(id: s.id).then((_) => _load());
       return;
     }
-    error = "Playback failed: $message";
-    errorDetail = message;
+    error = "Couldn't play “${s.title}” · ${herr.playbackFailed.code}: ${herr.playbackFailed.message}";
+    errorDetail = '${herr.playbackFailed.code}\n\n${herr.neutral(message)}';
     notifyListeners();
   }
 

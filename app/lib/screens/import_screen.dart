@@ -182,7 +182,7 @@ class _ImportScreenState extends State<ImportScreen> {
               _Card(
                 icon: Icons.link_rounded,
                 title: 'From a link',
-                subtitle: 'Public Spotify (first 100 songs), Apple Music, YouTube or YouTube Music playlist',
+                subtitle: 'A public playlist link: Spotify (first 100 songs), Apple Music and others',
                 child: Row(children: [
                   Expanded(child: TextField(controller: _link, decoration: const InputDecoration(hintText: 'https://open.spotify.com/playlist/…'))),
                   const SizedBox(width: 8),
@@ -222,7 +222,7 @@ class _ImportScreenState extends State<ImportScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(32),
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  Text('Finding “${_chosen!.name}” on YouTube Music…', textAlign: TextAlign.center),
+                  Text('Finding the songs of “${_chosen!.name}”…', textAlign: TextAlign.center),
                   const SizedBox(height: 16),
                   LinearProgressIndicator(value: _rows.isEmpty ? null : _done / _rows.length),
                   const SizedBox(height: 8),

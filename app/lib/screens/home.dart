@@ -250,7 +250,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       const Text('Bring your music over', style: TextStyle(fontWeight: FontWeight.w600)),
-                      Text('From Spotify, Apple Music, YouTube or a file', style: TextStyle(color: tok.textDim, fontSize: 13)),
+                      Text('From Spotify, Apple Music, other playlist links or a file', style: TextStyle(color: tok.textDim, fontSize: 13)),
                     ]),
                   ),
                   Icon(Icons.chevron_right_rounded, color: tok.textFaint),

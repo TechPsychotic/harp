@@ -115,7 +115,7 @@ pub fn fetch(video_id: &str, title: &str, artist: &str, album: Option<&str>, dur
     if plain.is_none() && !video_id.is_empty() && !harp_core::local::is_local(video_id) {
         let yt = crate::ytmusic::lyrics(video_id).map(|o| {
             o.map(|(text, credit)| {
-                let src = if credit.is_empty() { "YouTube Music".to_string() } else { format!("YouTube Music ({credit})") };
+                let src = if credit.is_empty() { "Synced lyrics".to_string() } else { credit.to_string() };
                 from_texts(None, Some(&text), &src)
             })
             .filter(|l| !l.is_empty())

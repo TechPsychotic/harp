@@ -13,7 +13,7 @@
 **A music app that learns your taste on your own device.** No account, no sign-in, no API keys and
 no servers of ours. For Android, Linux, Windows and macOS.
 
-Harp streams from YouTube Music (through [yt-dlp](https://github.com/yt-dlp/yt-dlp)), plays your
+Harp streams music from the web (through [yt-dlp](https://github.com/yt-dlp/yt-dlp)), plays your
 own files, and builds its recommendations from what you listen to, right on the device.
 
 **Website:** https://techpsychotic.github.io/harp/ · **Download:** [latest release](../../releases/latest)
@@ -29,7 +29,7 @@ own files, and builds its recommendations from what you listen to, right on the 
   scripts shown in English letters if you like.
 - **Library:** playlists with folders, pins, covers, sorting, Smart Shuffle and recommendations;
   liked songs, saved albums and podcasts, followed artists. Import from Spotify, Apple Music links,
-  YouTube and playlist files; export as CSV, M3U or JSON; back up and restore.
+  other public playlist links and playlist files; export as CSV, M3U or JSON; back up and restore.
 - **Together:** listen in sync with friends, sync your library between your own devices, and share
   playlists that stay up to date. All peer to peer over [iroh](https://github.com/n0-computer/iroh).
 - **Everywhere:** notification and lock-screen controls, Android Auto, a home-screen widget, desktop
@@ -66,7 +66,7 @@ scripts/android-tools.sh && flutter build apk --release --target-platform androi
 
 - `crates/harp-core`: songs, queue, the taste model and recommender, playlists, library, backup, lyrics,
   transliteration (Rust).
-- `crates/harp-ytdlp`: yt-dlp, YouTube Music's InnerTube API, lyrics sources, AutoEq, imports.
+- `crates/harp-ytdlp`: yt-dlp, the music catalogue (search, artists, albums, radio), lyrics sources, AutoEq, imports.
 - `crates/harp-party`: listening together, device sync and shared playlists over iroh.
 - `crates/harp-ffi`: the bridge to the app ([flutter_rust_bridge](https://github.com/fzyzcjy/flutter_rust_bridge)).
 - `app/`: the Flutter app; audio through [mpv_audio_kit](https://pub.dev/packages/mpv_audio_kit) (libmpv + FFmpeg).
@@ -76,19 +76,20 @@ The website lives in `docs/` (GitHub Pages).
 
 ## Contributing
 
-Bug reports, ideas and pull requests are welcome: see [`CONTRIBUTING.md`](CONTRIBUTING.md). Security
+Bug reports, ideas and pull requests are welcome: see [`CONTRIBUTING.md`](CONTRIBUTING.md). Error codes
+(H-101 and so on) are explained in [`ERRORS.md`](ERRORS.md). Security
 issues: see [`SECURITY.md`](SECURITY.md).
 
 ## Privacy
 
-Your listening history, taste and library stay on your devices. Harp talks to YouTube Music (search and
+Your listening history, taste and library stay on your devices. Harp talks to its music source (search and
 streams), the lyrics sources, GitHub (yt-dlp, AutoEq, update checks) and, only when you use them, iroh's
 relays to reach your other devices or friends. There is no Harp account and no analytics.
 
 ## Legal
 
-Streaming from YouTube with yt-dlp may go against YouTube's terms of service, and Harp is not affiliated
-with YouTube, Google, Spotify or Apple. Harp is distributed here and for side-loading, not on Google Play
+Streaming through yt-dlp may go against the terms of service of the sites it fetches from, and Harp is
+not affiliated with any music service, Spotify or Apple. Harp is distributed here and for side-loading, not on Google Play
 or the App Store.
 
 ## License
@@ -103,8 +104,8 @@ It builds on: yt-dlp (Unlicense), Python (PSF), QuickJS (MIT), mpv_audio_kit (BS
 
 Projects and work that shaped Harp, beyond the libraries it's built on:
 
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp): streaming, and its notes on YouTube's player clients and PO tokens.
-- [NewPipe Extractor](https://github.com/TeamNewPipe/NewPipeExtractor): how YouTube's InnerTube API is read without an account.
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp): streaming, and its research into how the source's players work.
+- [NewPipe Extractor](https://github.com/TeamNewPipe/NewPipeExtractor): how a music catalogue is read without an account.
 - [AutoEq](https://github.com/jaakkopasanen/AutoEq): the measured headphone corrections behind headphone correction.
 - [iroh](https://github.com/n0-computer/iroh): peer-to-peer connections for listening together, device sync and shared playlists.
 - [LRCLIB](https://github.com/tranxuanthang/lrclib): free synced lyrics.

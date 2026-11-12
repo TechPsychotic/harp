@@ -11,11 +11,13 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 ## 2026-11-12: 0.9.1: the error back, picks that follow you, parties with roles
 
 **Fixes**
-- **"YouTube asked Harp to slow down" on the first song of the day.** Two causes. Harp read any "429"
-  in an error as a rate limit (a video id can contain those digits); now only YouTube's own words count.
-  And on Indian mobile networks the phone's shared carrier IPv4 address is what YouTube flags: when
-  YouTube refuses, Harp now asks again over the other address family (the phone's own IPv6) and keeps
-  using whichever works. Tap the error to see YouTube's exact message (and copy it). 🧪 the switch.
+- **Harp error codes.** Errors now show Harp's own codes (H-101 and so on) with a plain explanation;
+  `ERRORS.md` lists them all with what to do. The app no longer names the services it fetches from. 🧪
+- **"Slow down" (H-101) on the first song of the day.** Two causes. Harp read any "429"
+  in an error as a rate limit (a video id can contain those digits); now only the source's own words count.
+  And on Indian mobile networks the phone's shared carrier IPv4 address is what the source flags: when
+  the source refuses, Harp now asks again over the other address family (the phone's own IPv6) and keeps
+  using whichever works. Tap the error to see the source's exact message (and copy it). 🧪 the switch.
 - **Song B shown, song C playing.** A song lined up in the engine could stay lined up when the queue
   changed in its last 3 s; when the right song then failed to load, the wrong one kept playing under
   its title. Loading a song now stops whatever was playing first.
@@ -111,9 +113,9 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
   resumed the stopped engine. Now only songs **on the device** (downloaded or fetched ahead) are lined
   up in the engine; others load the ordinary way when the song ends. If a song hasn't really started
   5 s after the engine moved on, it is loaded again, and play on a stalled song loads it properly. 📱
-- **"Confirm you're not a bot" again.** Each song cost 4–5 requests to YouTube (its web page, its
+- **"Confirm you're not a bot" again.** Each song cost 4–5 requests to the source (its web page, its
   player code, three player clients), with yt-dlp's cache switched off so the player code was fetched
-  and solved again every time (slow with QuickJS on the phone). Now Harp asks with YouTube's lightest
+  and solved again every time (slow with QuickJS on the phone). Now Harp asks with the source's lightest
   client first: one request, plain audio links, no player code. If that has nothing, yt-dlp's usual
   way runs, now with its cache kept between songs. 🧪 the fallback order; ✅ live on the laptop: the
   stream resolves and a song downloads (3.4 MB) through the light client.
@@ -134,9 +136,9 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
   the song *after* the one shown, or stop. Now the next song is lined up only in the last 30 s (never in
   the last 3 s), the player checks every couple of seconds that what the engine plays is what it shows
   (and corrects it), and a watchdog moves on if playback stops at the end without you pausing. 📱
-- **"Sign in to confirm you're not a bot".** Harp was asking YouTube for too much at once (three songs
+- **"Sign in to confirm you're not a bot".** Harp was asking the source for too much at once (three songs
   ahead, plus crossfade retrying every tick). Now: only the next song is fetched, after 20 s of play;
-  crossfade tries once per song; and when YouTube pushes back, background fetching pauses for 2 minutes,
+  crossfade tries once per song; and when the source pushes back, background fetching pauses for 2 minutes,
   with a clear message and no skipping through the queue. 📱
 - **Library play/pause** on a playlist row no longer overlaps the text.
 - **Queue scrolling** is smooth: one scrolling list, and dragging to reorder starts from the handle (or a
@@ -219,7 +221,7 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
   back up (Settings › Backup), uninstall, install, restore (restore adds, so nothing is lost). Once.
 
 **Docs:** README and the GPL-3.0 LICENSE ready for a public repository; the roadmap shows today's
-status without the impossible items, plus an **iOS plan** (a Rust extractor running YouTube's player
+status without the impossible items, plus an **iOS plan** (a Rust extractor running the source's player
 code in JavaScriptCore with tokens from a hidden web view, since yt-dlp can't stay current there).
 
 ## 2026-11-10 (evening): playlists like Spotify, sharing, the ✓, smarter menus
@@ -362,12 +364,12 @@ A big batch, built once at the end as you asked.
 ## 2026-11-09 (late night): moods and Smart Shuffle play again
 
 - **Fixed: "Couldn't play …: the value of User-Agent must not contain … comma".** It hit songs that
-  stream straight from YouTube (moods and Smart Shuffle pick new songs; songs already cached play from
+  stream straight from the source (moods and Smart Shuffle pick new songs; songs already cached play from
   disk, so they were fine). yt-dlp gives browser headers whose values contain commas (the
   User-Agent's "(KHTML, like Gecko)", Accept, Accept-Language), and the new engine refuses commas in
   per-song headers. Now the User-Agent goes through the player's own setting, which has no such
   limit, and the browser-only headers are left out. ✅ reproduced your exact error with a real
-  YouTube stream on the laptop, then played it with the fix. 🧪
+  the source stream on the laptop, then played it with the fix. 🧪
 
 ## 2026-11-09 (night, fixes): skips play again, light-mode player, the original waves
 
@@ -463,7 +465,7 @@ one) through `mpv_audio_kit` for about 30 seconds, tries each effect, and shows 
 - The Search tab now shows a few recent searches, then **Browse**:
   - **Charts** for your country (picked from your device's region): top songs and videos, charts
     by language, and the top artists.
-  - Every YouTube Music **mood and genre** as a coloured tile: 12 moods and 38 genres, each
+  - Every the music catalogue **mood and genre** as a coloured tile: 12 moods and 38 genres, each
     opening rows of playlists.
 - ✅ checked live (India: 13 rows for "Chill"; the charts with 40 top artists), and a playlist from
   a mood opens and plays. 🧪 on saved real pages.
@@ -517,11 +519,11 @@ used, so one Rust test was failing. It never reached a build; it's restored and 
 
 **Lyrics (M4): three sources instead of one**
 - In order: LRCLIB synced → **NetEase** synced (no key needed; strong for Hindi and other Indian
-  and Asian songs, often already in English letters) → LRCLIB plain → **YouTube Music's own
+  and Asian songs, often already in English letters) → LRCLIB plain → **The music catalogue's own
   lyrics** (from LyricFind, without timings, often in the original script, which the अ/A switch
   then spells out in English letters). The source is shown under the lyrics.
 - Songs that had no lyrics before are looked up again once (a one-time database update).
-- ✅ checked live on "Tum Hi Ho": NetEase gave synced lines, YouTube Music the Devanagari text.
+- ✅ checked live on "Tum Hi Ho": NetEase gave synced lines, the music catalogue the Devanagari text.
   🧪 parsers tested on saved real responses (credit lines like "作曲 : …" are dropped,
   instrumentals give nothing, a wrong length or artist doesn't match).
 
@@ -649,7 +651,7 @@ marked 📱 needs your phone; output-change pausing is Android-only for now (Lin
 - **History is saved only when you search on purpose**: pressing search / enter, or opening a
   result (song, album, artist, podcast). Typing still shows results as you go, but nothing is
   saved for every keystroke.
-- **"All" is the default**, ranked by YouTube Music's own relevance: a top result, then songs,
+- **"All" is the default**, ranked by the music catalogue's own relevance: a top result, then songs,
   artists, albums and podcasts. Videos, playlists and profiles are left out. 🧪 on real responses.
 - Filters are **All, Songs, Albums, Artists, Podcasts** (Playlists removed).
 
@@ -737,8 +739,8 @@ marked 📱 needs your phone; output-change pausing is Android-only for now (Lin
 **Added**
 - **Artists are searchable** (Search › Artists) and have a page: top songs (the full
   song list, not just five), albums & singles, playlists, similar artists.
-  Tapping the artist name in Now Playing opens it. ✅ live against YouTube Music, 🧪
-- **Playlists are read in full.** YouTube Music hands out 100 songs per page; the
+  Tapping the artist name in Now Playing opens it. ✅ live against the music catalogue, 🧪
+- **Playlists are read in full.** the music catalogue hands out 100 songs per page; the
   rest are now followed page by page (up to 5000). This is why imports and
   playlist pages stopped at 100. ✅ live (read a 150+ song playlist), 🧪
 - **Cover art loads without blocking playback.** Covers are fetched in Dart now; before,
@@ -750,7 +752,7 @@ marked 📱 needs your phone; output-change pausing is Android-only for now (Lin
   and one big page title style on every main screen; one empty-state look; Library
   tabs use the same chips as Search. 🧪 (visual check still needed)
 - **Import speed**: songs are matched 4 at a time instead of one by one.
-- **YouTube / YouTube Music playlist links** now import through YouTube Music (full
+- **The source / the music catalogue playlist links** now import through the music catalogue (full
   length, proper artists) and fall back to yt-dlp (up to 5000 songs).
 - **`UPDATES.md`** (this file) is kept up to date with every change.
 - **CI**: GitHub's release downloads (the media player's Android libraries, QuickJS, the
@@ -816,7 +818,7 @@ marked 📱 needs your phone; output-change pausing is Android-only for now (Lin
 - **Offline**: download songs; offline mode plays and searches only downloads. 🧪
 - **Playlists**: create, rename, reorder, delete; add from any song. 🧪
 - **Import playlists**: Spotify (public link, data export JSON, Exportify CSV), Apple
-  Music (exported text), M3U, YouTube / YouTube Music links, pasted "Artist - Title"
+  Music (exported text), M3U, the source / the music catalogue links, pasted "Artist - Title"
   lists, with a match-review screen for weak matches. 🧪
 - **Home**: Recommended for you, Change the mood, Similar to what you played, Recently
   played, playlists, downloads, liked songs; saved so it opens instantly.
@@ -852,7 +854,7 @@ marked 📱 needs your phone; output-change pausing is Android-only for now (Lin
   loopback proxy for DNS and a CA bundle. Not Chaquopy.
 - **Recommender** (no sign-in, no API keys): graded skip/finish scoring, 4× superlike,
   search as a signal, skip reasons, genre injection, a reason line for every pick.
-- **Search via YouTube Music's public web API** (the calls `ytmusicapi` makes), because
+- **Search via the music catalogue's public web API** (the calls `ytmusicapi` makes), because
   yt-dlp's flat results had no artists. yt-dlp is the fallback. ✅ live
 - **Flutter app** with the glassmorphic look; Linux release installed on the laptop.
 
@@ -878,7 +880,7 @@ marked 📱 needs your phone; output-change pausing is Android-only for now (Lin
 
 **Notes**
 - Dolby Atmos is not possible: it needs a licensed decoder and Atmos-encoded content;
-  YouTube's music streams are stereo.
+  the source's music streams are stereo.
 - Laptop crash cause: the kernel logged `BUG: unable to handle page fault` on 6.17.1
   (a kernel-memory fault, not an out-of-memory kill). Update the kernel and run
   memtest86+ if it continues.

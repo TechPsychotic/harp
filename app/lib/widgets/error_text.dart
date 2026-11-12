@@ -47,6 +47,8 @@ Future<void> showErrorDetail(BuildContext context, PlayerController player) {
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Text('What went wrong', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17)),
+          const SizedBox(height: 4),
+          Text('Codes are explained in ERRORS.md on Harp’s GitHub page.', style: TextStyle(color: context.tok.textDim, fontSize: 12.5)),
           const SizedBox(height: 10),
           ConstrainedBox(
             constraints: const BoxConstraints(maxHeight: 260),
