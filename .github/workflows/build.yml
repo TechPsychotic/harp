@@ -296,7 +296,8 @@ jobs:
           find "$app" -path "*Python.framework/Python" | grep -q . || { echo "no Python.framework in the app" >&2; exit 1; }
           find "$app" -path "*python.bundle/app/main.py" | grep -q . || { echo "no app/main.py in the app" >&2; exit 1; }
           find "$app" -path "*python.bundle/app/harp_jsc.py" | grep -q . || echo "note: no harp_jsc.py (step 1 build)"
-          find "$app" -path "*python.bundle/stdlib/os.py" | grep -q . || { echo "no Python standard library in the app" >&2; exit 1; }
+          echo "stdlib sample:"; find "$app" -path "*python.bundle/stdlib/*" -maxdepth 6 | head -8
+          find "$app" -path "*python.bundle/stdlib/*" \( -name "os.py" -o -name "os.*.pyc" -o -name "os.pyc" -o -name "python3*.zip" \) | grep -q . || { echo "no Python standard library in the app" >&2; exit 1; }
           find "$app" -path "*python.bundle/site-packages/certifi/cacert.pem" | grep -q . || { echo "no certifi in the app" >&2; exit 1; }
           cd dist && zip -qr harp-ios-unsigned.ipa Payload && rm -rf Payload
           ls -la
