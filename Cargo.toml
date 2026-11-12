@@ -11,3 +11,8 @@ license = "GPL-3.0-or-later"
 lto = true
 opt-level = "s"
 strip = true
+
+# netdev 0.46.3 (used by iroh) doesn't build for iOS: it uses a type `libc`
+# only has for macOS. Patched copy in third_party/netdev (MIT; see its LICENSE).
+[patch.crates-io]
+netdev = { path = "third_party/netdev" }
