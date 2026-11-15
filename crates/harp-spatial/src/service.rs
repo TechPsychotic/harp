@@ -2,10 +2,10 @@
 //! default output, and (when wanted) the AirPods head tracker.
 
 use crate::aacp::{self, Channel};
-use crate::head::{Tracker, TrackerConfig};
+use crate::head::{self, Calibrating, Recenter, Tracker, TrackerConfig, UpCalibration};
 use crate::render::{Binaural, BLOCK};
 use crate::route::{self, Pulse, Stream};
-use crate::Status;
+use crate::{Options, Status};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering::Relaxed};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
@@ -34,9 +34,16 @@ mod tests {
 struct Shared {
     stop: AtomicBool,
     yaw: AtomicU32,
+    pitch: AtomicU32,
     tracking: AtomicBool,
     flip: AtomicBool,
+    room: AtomicBool,
+    bounce: AtomicBool,
     recenter: AtomicBool,
+    recenter_mode: Mutex<Option<Recenter>>,
+    calibrate: AtomicBool,
+    calibrating: Mutex<String>,
+    calibrations: Mutex<Vec<f32>>,
     latency_us: AtomicU64,
     output: Mutex<String>,
     head_state: Mutex<(String, String)>,
@@ -50,8 +57,23 @@ impl Shared {
     fn yaw(&self) -> f32 {
         f32::from_bits(self.yaw.load(Relaxed))
     }
-    fn set_yaw(&self, y: f32) {
-        self.yaw.store(y.to_bits(), Relaxed);
+    fn pitch(&self) -> f32 {
+        f32::from_bits(self.pitch.load(Relaxed))
+    }
+    fn set_pose(&self, yaw: f32, pitch: f32) {
+        self.yaw.store(yaw.to_bits(), Relaxed);
+        self.pitch.store(pitch.to_bits(), Relaxed);
+    }
+    fn apply(&self, o: &Options) {
+        self.tracking.store(o.head_tracking, Relaxed);
+        self.flip.store(o.flip, Relaxed);
+        self.room.store(o.room, Relaxed);
+        self.bounce.store(o.bounce, Relaxed);
+        *self.recenter_mode.lock().unwrap() = Some(Recenter::parse(&o.recenter));
+        let mut c = self.calibrations.lock().unwrap();
+        if !o.up_calibration.is_empty() || c.is_empty() {
+            *c = o.up_calibration.clone();
+        }
     }
     fn wait(&self, d: Duration) -> bool {
         let end = Instant::now() + d;
@@ -75,20 +97,18 @@ static RUNNING: Mutex<Option<Running>> = Mutex::new(None);
 
 /// Starts 3D audio (or updates its options); returns the output device Harp's player should
 /// use (`pulse/harp_spatial`).
-pub fn start(head_tracking: bool, flip: bool) -> Result<String, String> {
+pub fn start(opts: &Options) -> Result<String, String> {
     let mut g = RUNNING.lock().unwrap();
     if let Some(r) = g.as_ref() {
-        r.shared.tracking.store(head_tracking, Relaxed);
-        r.shared.flip.store(flip, Relaxed);
-        return Ok(format!("pulse/{}", route::SINK_NAME));
+        r.shared.apply(opts);
+        return Ok(format!("pulse/{}", route::sink_name()));
     }
     Pulse::load()?; // fail early and clearly if the client library is missing
     route::remove_stale_sinks();
     let output = route::real_output().ok_or("no audio output found")?;
     let module = route::create_sink()?;
     let shared = Arc::new(Shared::default());
-    shared.tracking.store(head_tracking, Relaxed);
-    shared.flip.store(flip, Relaxed);
+    shared.apply(opts);
     *shared.output.lock().unwrap() = output;
     shared.set_head("off", "");
     let threads = vec![
@@ -97,7 +117,15 @@ pub fn start(head_tracking: bool, flip: bool) -> Result<String, String> {
         spawn("harp-3d-head", &shared, head_thread),
     ];
     *g = Some(Running { shared, module, threads });
-    Ok(format!("pulse/{}", route::SINK_NAME))
+    Ok(format!("pulse/{}", route::sink_name()))
+}
+
+/// Starts the up/down calibration on the next motion sample.
+pub fn calibrate_up() {
+    if let Some(r) = RUNNING.lock().unwrap().as_ref() {
+        r.shared.calibrate.store(true, Relaxed);
+        *r.shared.calibrating.lock().unwrap() = "waiting".into();
+    }
 }
 
 /// Stops 3D audio and removes the sink. Harp's player should go back to its usual output first.
@@ -108,7 +136,7 @@ pub fn stop() {
     }
     if let Some(r) = r {
         r.shared.stop.store(true, Relaxed);
-        route::remove_sink(&r.module); // ends a blocked read
+        route::remove_sink(&r.module);
         for t in r.threads {
             let _ = t.join();
         }
@@ -128,12 +156,17 @@ pub fn status() -> Status {
     let (head, head_detail) = s.head_state.lock().unwrap().clone();
     let output = s.output.lock().unwrap().clone();
     let error = s.error.lock().unwrap().clone();
+    let calibrating = s.calibrating.lock().unwrap().clone();
+    let up_calibration = s.calibrations.lock().unwrap().clone();
     Status {
         running: true,
         output,
         head,
         head_detail,
         yaw: s.yaw(),
+        pitch: s.pitch(),
+        calibrating,
+        up_calibration,
         latency_ms: (s.latency_us.load(Relaxed) / 1000) as u32,
         error,
     }
@@ -146,13 +179,14 @@ fn spawn(name: &str, shared: &Arc<Shared>, f: fn(Arc<Shared>)) -> JoinHandle<()>
 
 fn audio_thread(s: Arc<Shared>) {
     let Ok(pa) = Pulse::load() else { return };
-    let monitor = format!("{}.monitor", route::SINK_NAME);
-    let mut r = Binaural::new(true);
+    let mut room = s.room.load(Relaxed);
+    let mut r = Binaural::new(true, room);
     let mut input = vec![0.0f32; BLOCK * 2];
     let mut out = vec![0.0f32; BLOCK * 2];
+    let began = Instant::now();
     while !s.stop.load(Relaxed) {
         let target = s.output.lock().unwrap().clone();
-        let opened = Stream::record(&pa, &monitor, BLOCK as u32).and_then(|rec| Ok((rec, Stream::playback(&pa, &target, BLOCK as u32)?)));
+        let opened = route::FifoReader::open().and_then(|rec| Ok((rec, Stream::playback(&pa, &target, BLOCK as u32)?)));
         let (mut rec, mut play) = match opened {
             Ok(p) => p,
             Err(e) => {
@@ -166,12 +200,28 @@ fn audio_thread(s: Arc<Shared>) {
         *s.error.lock().unwrap() = None;
         let mut n = 0u64;
         while !s.stop.load(Relaxed) {
-            if let Err(e) = rec.read(&mut input) {
-                *s.error.lock().unwrap() = Some(e);
-                break;
+            match rec.read(&mut input, Duration::from_millis(100)) {
+                Ok(true) => {}
+                // Nothing playing: nothing to render (the output stays quiet).
+                Ok(false) => continue,
+                Err(e) => {
+                    *s.error.lock().unwrap() = Some(e);
+                    break;
+                }
             }
-            let yaw = if s.tracking.load(Relaxed) { s.yaw() } else { 0.0 };
-            r.process(yaw, 0.0, &input, &mut out);
+            let want_room = s.room.load(Relaxed);
+            if want_room != room {
+                room = want_room;
+                r = Binaural::new(true, room);
+            }
+            let (mut yaw, mut pitch) = if s.tracking.load(Relaxed) { (s.yaw(), s.pitch()) } else { (0.0, 0.0) };
+            if s.bounce.load(Relaxed) {
+                // The stage moves around you: the same as the head turning the other way.
+                let (az, el) = head::bounce(began.elapsed().as_secs_f64());
+                yaw -= az;
+                pitch -= el;
+            }
+            r.process(yaw, pitch, &input, &mut out);
             if let Err(e) = play.write(&out) {
                 *s.error.lock().unwrap() = Some(e);
                 break;
@@ -179,7 +229,7 @@ fn audio_thread(s: Arc<Shared>) {
             n += 1;
             if n % 94 == 0 {
                 // about twice a second
-                s.latency_us.store(rec.latency_us() + play.latency_us(), Relaxed);
+                s.latency_us.store(play.latency_us(), Relaxed);
                 if *s.output.lock().unwrap() != target {
                     break; // the default output changed: reopen on the new one
                 }
@@ -217,7 +267,7 @@ fn head_thread(s: Arc<Shared>) {
     while !s.stop.load(Relaxed) {
         if !s.tracking.load(Relaxed) {
             backoff = Duration::from_secs(5);
-            s.set_yaw(0.0);
+            s.set_pose(0.0, 0.0);
             s.set_head("off", "");
             if !s.wait(Duration::from_millis(300)) {
                 break;
@@ -252,6 +302,7 @@ fn head_thread(s: Arc<Shared>) {
             continue;
         }
         let mut tracker = Tracker::new(TrackerConfig::default());
+        tracker.calibrations = UpCalibration::decode(&s.calibrations.lock().unwrap());
         let started = Instant::now();
         let mut last_sample: Option<Instant> = None;
         let mut out_of_ears = false;
@@ -260,8 +311,14 @@ fn head_thread(s: Arc<Shared>) {
                 break;
             }
             tracker.cfg.flip = s.flip.load(Relaxed);
+            if let Some(m) = *s.recenter_mode.lock().unwrap() {
+                tracker.cfg.recenter = m;
+            }
             if s.recenter.swap(false, Relaxed) {
                 tracker.recenter();
+            }
+            if s.calibrate.swap(false, Relaxed) {
+                tracker.calibrate_up();
             }
             match ch.recv(&mut buf, Duration::from_millis(200)) {
                 Ok(Some(n)) => {
@@ -269,7 +326,7 @@ fn head_thread(s: Arc<Shared>) {
                     if let Some((l, r)) = aacp::ear_state(pkt) {
                         out_of_ears = l != 0 && r != 0;
                         if out_of_ears {
-                            s.set_yaw(0.0);
+                            s.set_pose(0.0, 0.0);
                             s.set_head("paused", "AirPods out of your ears");
                         }
                     }
@@ -277,9 +334,21 @@ fn head_thread(s: Arc<Shared>) {
                         last_sample = Some(Instant::now());
                         backoff = Duration::from_secs(5);
                         if !out_of_ears {
-                            let (yaw, _) = tracker.update(m.q, m.t);
-                            s.set_yaw(yaw);
+                            let was = tracker.calibrating.clone();
+                            let (yaw, pitch) = tracker.update(m.q, m.t);
+                            s.set_pose(yaw, pitch);
                             s.set_head("tracking", dev.name.clone());
+                            if tracker.calibrating != was {
+                                *s.calibrating.lock().unwrap() = match &tracker.calibrating {
+                                    Calibrating::Idle => String::new(),
+                                    Calibrating::Running(left) => format!("running:{:.0}", left.ceil()),
+                                    Calibrating::Done => {
+                                        *s.calibrations.lock().unwrap() = UpCalibration::encode(&tracker.calibrations);
+                                        "done".into()
+                                    }
+                                    Calibrating::Failed(why) => format!("failed:{why}"),
+                                };
+                            }
                         }
                     }
                 }
@@ -296,13 +365,13 @@ fn head_thread(s: Arc<Shared>) {
                 // stopped offering their sensors after many sessions (seen live; a Bluetooth
                 // reconnect brings them back).
                 s.set_head("in_use", "No motion data from the AirPods. Another app may be using their controls (close it), or the buds need reconnecting: turn Bluetooth off and on.");
-                s.set_yaw(0.0);
+                s.set_pose(0.0, 0.0);
                 break;
             }
         }
         ch.stop_motion();
         drop(ch);
-        s.set_yaw(0.0);
+        s.set_pose(0.0, 0.0);
         let wait = if last_sample.is_some() { Duration::from_secs(3) } else { backoff };
         if last_sample.is_none() {
             backoff = next_backoff(backoff);

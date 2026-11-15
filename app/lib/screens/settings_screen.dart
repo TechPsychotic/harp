@@ -202,8 +202,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   enabled: PlayerController.fxSupported,
                   title: const Text('Spatial audio'),
                   subtitle: Text(
-                    s.spatial == '3d'
-                        ? '${spatialLabel(s.spatial)} · music from two virtual speakers in front of you, for headphones. Not Dolby Atmos.'
+                    AppSettings.is3d(s.spatial)
+                        ? (s.spatial == '3d_bounce'
+                            ? '${spatialLabel(s.spatial)} · the music glides around you, all the way round and up and down. For headphones.'
+                            : '${spatialLabel(s.spatial)} · music from two virtual speakers in front of you, in a small room. For headphones. Not Dolby Atmos.')
                         : '${spatialLabel(s.spatial)} · a virtual stereo effect for headphones and speakers. Not Dolby Atmos.',
                     style: TextStyle(color: tok.textDim),
                   ),
@@ -214,7 +216,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     itemBuilder: (_) => [for (final m in AppSettings.spatialModes) PopupMenuItem(value: m, child: Text(spatialLabel(m)))],
                   ),
                 ),
-                if (s.spatial == '3d') _HeadTrackingTiles(player: widget.player),
+                if (AppSettings.is3d(s.spatial)) _HeadTrackingTiles(player: widget.player),
                 ListTile(
                   enabled: PlayerController.fxSupported,
                   title: const Text('Equalizer'),
@@ -555,6 +557,18 @@ class _HeadTrackingTilesState extends State<_HeadTrackingTiles> {
     final tok = context.tok;
     final st = p.spatialStatus();
     final err = p.spatialError ?? st.error;
+    // A finished up/down calibration is saved, so it survives restarts.
+    if (st.calibrating == 'done' && st.upCalibration.isNotEmpty && st.upCalibration.join(',') != s.upCalibration.map((x) => x.toDouble()).join(',')) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => s.setUpCalibration([for (final x in st.upCalibration) x.toDouble()]));
+    }
+    final cal = st.calibrating;
+    final calText = switch (cal) {
+      'waiting' => 'Face the screen…',
+      final c when c.startsWith('running:') => 'Now look up at the ceiling and hold it (${c.substring(8)} s)',
+      'done' => 'Done: up and down are followed now.',
+      final c when c.startsWith('failed:') => "Didn't work: ${c.substring(7)}. Try again.",
+      _ => s.upCalibration.isEmpty ? 'Not set up yet: only turning left and right is followed.' : 'Set up${st.head == 'tracking' && st.pitch.abs() >= 1 ? ' · ${st.pitch.abs().round()}° ${st.pitch > 0 ? 'up' : 'down'}' : ''}.',
+    };
     return Column(children: [
       if (err != null)
         ListTile(
@@ -562,6 +576,12 @@ class _HeadTrackingTilesState extends State<_HeadTrackingTiles> {
           title: const Text("3D audio isn't playing"),
           subtitle: Text(err, style: TextStyle(color: tok.textDim)),
         ),
+      SwitchListTile(
+        title: const Text('Room'),
+        subtitle: Text('A small virtual room around the speakers, so the music sits outside your head.', style: TextStyle(color: tok.textDim)),
+        value: s.room3d,
+        onChanged: s.setRoom3d,
+      ),
       SwitchListTile(
         title: const Text('Head tracking'),
         subtitle: Text(
@@ -575,8 +595,26 @@ class _HeadTrackingTilesState extends State<_HeadTrackingTiles> {
       ),
       if (s.headTracking) ...[
         ListTile(
-          title: const Text('Recenter'),
-          subtitle: Text('Where you face now becomes the front. The music also drifts back to the front by itself when you hold your head turned.', style: TextStyle(color: tok.textDim)),
+          title: const Text('Up and down'),
+          subtitle: Text(calText, style: TextStyle(color: tok.textDim)),
+          trailing: TextButton(
+            onPressed: st.head != 'tracking' || cal == 'waiting' || cal.startsWith('running:') ? null : p.calibrateUp,
+            child: Text(s.upCalibration.isEmpty ? 'Set up' : 'Again'),
+          ),
+        ),
+        ListTile(
+          title: const Text('Follow where you face'),
+          subtitle: Text('${recenterLabel(s.recenter3d)} · after you hold your head turned for a while, the music comes round to the front again.', style: TextStyle(color: tok.textDim)),
+          trailing: PopupMenuButton<String>(
+            icon: const Icon(Icons.expand_more_rounded),
+            initialValue: s.recenter3d,
+            onSelected: s.setRecenter3d,
+            itemBuilder: (_) => [for (final m in ['dynamic', 'slow', 'off']) PopupMenuItem(value: m, child: Text(recenterLabel(m)))],
+          ),
+        ),
+        ListTile(
+          title: const Text('Recenter now'),
+          subtitle: Text('Where you face now becomes the front.', style: TextStyle(color: tok.textDim)),
           trailing: const Icon(Icons.center_focus_strong_rounded),
           onTap: p.recenterHead,
         ),

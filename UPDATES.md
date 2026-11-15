@@ -8,6 +8,55 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-16: 3D audio, round two (after the first listening test)
+
+**What you heard, and why**
+- **Cracking voices:** a centred voice came out up to **+4.2 dB at 3–4 kHz** (both virtual speakers
+  add up in each ear), so loud songs went over full scale into a soft clipper. Now the HRTFs are
+  **tone-corrected** (a minimum-phase filter makes a centred sound flat: spread over 300 Hz–12 kHz
+  **11.9 dB → 3.1 dB**), a **look-ahead limiter** replaces the clipper (no waveshaping), and the
+  playback buffer is ~64 ms instead of 32. 🧪 loud centred music never passes −1 dBFS.
+- **Duller sound than without 3D:** the same colouring (−7.7 dB at 8 kHz): fixed by the correction.
+- **Head tracking hard to notice:** a dry HRTF sits inside the head, so turning changes little.
+  Now there is a **small virtual room**: 6 first reflections per speaker (walls, floor, ceiling), placed
+  relative to your head with a spherical-head model, plus a light reverb (0.4 s). Settings › 3D audio
+  › Room (on by default). 🧪 the room leaves a tail; turning left still moves a front source right.
+- **Loud noise while nothing played:** caused by my live tests, not by something you did: they used
+  the same output name as your running Harp, removed its "Harp 3D" output and played a test tone
+  into a new one, which your Harp then played on the laptop speakers. Now **each Harp has its own
+  output** (`harp_spatial_<pid>`) and only outputs whose app is gone are removed.
+- **Microphone icon:** Harp recorded its own "Harp 3D" output (not the microphone), and the desktop
+  shows the icon for any recording. Now "Harp 3D" is a **pipe sink**: the sound server writes into a
+  FIFO that Harp reads, so nothing records. ✅ checked silently: a 10 s tone through the new route
+  comes out with **0 gaps and 0 clicks**, at the input's level; the pipe delivers 48,168 frames/s.
+
+**New**
+- **Up and down:** Settings › 3D audio › Up and down › Set up: face the screen, then look up for a few
+  seconds. That teaches Harp which way your face points in the bud's frame; from then on nodding
+  moves the sound too (and turning is read from your face direction). Kept per bud.
+  🧪 a 20° look up reads 20°, left 30° + down 15° reads both, a turn isn't mistaken for looking up,
+  finishing while still looking up doesn't become "level".
+- **Follow where you face:** Dynamic (like Apple devices: after 3 s held still, over ~5 s; default),
+  Slowly, or Off. 🧪
+- **3D Bounce** (Spatial audio menu): the whole stage glides around you, through the full circle and
+  gently up and down, with a small springy overshoot at each stop; head tracking still works on
+  top. 🧪 every direction is visited, no jumps.
+- **Harp and Lyre share the AirPods:** AirPods talk to one connection at a time, so whichever app
+  connects first now shares it through a local socket (`$XDG_RUNTIME_DIR/aap-relay-<address>.sock`)
+  and the other goes through it. Head tracking and Lyre's settings work together, in either order.
+  🧪 end to end with a stand-in for the AirPods (both directions, socket removed on close).
+- CPU: the room's reflections use the cheap head model (the measured HRTFs are for the direct
+  sound); 3D takes about **3 % of one core without the room, 11 % with it** (measured while another
+  build ran).
+
+**Not verified**
+- 🖥️ Listening again: the tone, the room, Bounce, how noticeable head tracking is now.
+- 🖥️ Up/down calibration and sharing with Lyre on the real AirPods (they were disconnected).
+- The in-app check of Harp's player on "Harp 3D" (the engine test) was stopped; the route itself
+  was checked with the system player.
+
+---
+
 ## 2026-11-15: 3D audio (HRTF) with AirPods head tracking (Linux)
 
 **New:** Settings › Playback › Spatial audio › **3D (HRTF)** (Linux only).

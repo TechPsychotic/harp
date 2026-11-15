@@ -11,8 +11,11 @@
 //!   orientation as the vector part of a unit quaternion in Q15 (bytes 20..26).
 
 use crate::head::Quat;
-use std::io;
+use std::io::{self, Read, Write};
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+use std::os::unix::net::{UnixListener, UnixStream};
+use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
+use std::sync::{Arc, Mutex};
 use std::process::Command;
 use std::time::Duration;
 
@@ -99,17 +102,118 @@ fn parse_addr(addr: &str) -> io::Result<[u8; 6]> {
     Ok(b)
 }
 
-/// The open accessory channel.
+/// Where the app that holds a pair of AirPods' control channel shares it with other apps
+/// (Harp and Lyre): AirPods talk to one connection at a time, so the second app goes through
+/// the first instead of getting nothing. Frames are a 16-bit little-endian length and the
+/// packet; the holder forwards every packet from the AirPods to every client, and each
+/// client's packets to the AirPods.
+pub fn relay_path(addr: &str) -> std::path::PathBuf {
+    let dir = std::env::var_os("XDG_RUNTIME_DIR").map(std::path::PathBuf::from).unwrap_or_else(std::env::temp_dir);
+    dir.join(format!("aap-relay-{}.sock", addr.replace(':', "").to_uppercase()))
+}
+
+fn frame(pkt: &[u8]) -> Vec<u8> {
+    let mut f = (pkt.len() as u16).to_le_bytes().to_vec();
+    f.extend_from_slice(pkt);
+    f
+}
+
+/// The holder's side of the relay.
+struct RelayServer {
+    path: std::path::PathBuf,
+    clients: Arc<Mutex<Vec<UnixStream>>>,
+    stop: Arc<AtomicBool>,
+    accept: Option<std::thread::JoinHandle<()>>,
+}
+
+impl RelayServer {
+    fn start(addr: &str, fd: Arc<OwnedFd>) -> Option<RelayServer> {
+        let path = relay_path(addr);
+        let _ = std::fs::remove_file(&path);
+        let listener = UnixListener::bind(&path).ok()?;
+        listener.set_nonblocking(true).ok()?;
+        let clients: Arc<Mutex<Vec<UnixStream>>> = Arc::default();
+        let stop = Arc::new(AtomicBool::new(false));
+        let (c2, s2) = (clients.clone(), stop.clone());
+        let accept = std::thread::Builder::new()
+            .name("aap-relay".into())
+            .spawn(move || {
+                while !s2.load(Relaxed) {
+                    match listener.accept() {
+                        Ok((stream, _)) => {
+                            let _ = stream.set_nonblocking(false);
+                            if let Ok(reader) = stream.try_clone() {
+                                c2.lock().unwrap().push(stream);
+                                let fd = fd.clone();
+                                let _ = std::thread::Builder::new().name("aap-relay-client".into()).spawn(move || relay_client(reader, fd));
+                            }
+                        }
+                        Err(_) => std::thread::sleep(Duration::from_millis(100)),
+                    }
+                }
+            })
+            .ok()?;
+        Some(RelayServer { path, clients, stop, accept: Some(accept) })
+    }
+
+    fn broadcast(&self, pkt: &[u8]) {
+        let f = frame(pkt);
+        self.clients.lock().unwrap().retain_mut(|c| c.write_all(&f).is_ok());
+    }
+}
+
+impl Drop for RelayServer {
+    fn drop(&mut self) {
+        self.stop.store(true, Relaxed);
+        for c in self.clients.lock().unwrap().drain(..) {
+            let _ = c.shutdown(std::net::Shutdown::Both);
+        }
+        if let Some(t) = self.accept.take() {
+            let _ = t.join();
+        }
+        let _ = std::fs::remove_file(&self.path);
+    }
+}
+
+/// Forwards one client's packets to the AirPods (not its handshake: the link is set up).
+fn relay_client(mut s: UnixStream, fd: Arc<OwnedFd>) {
+    let mut len = [0u8; 2];
+    while s.read_exact(&mut len).is_ok() {
+        let mut pkt = vec![0u8; u16::from_le_bytes(len) as usize];
+        if s.read_exact(&mut pkt).is_err() {
+            break;
+        }
+        if pkt.len() >= 4 && pkt[..4] == HEADER {
+            // SAFETY: valid descriptor (kept alive by the Arc) and buffer.
+            unsafe { libc::send(fd.as_raw_fd(), pkt.as_ptr().cast(), pkt.len(), libc::MSG_NOSIGNAL) };
+        }
+    }
+}
+
+enum Link {
+    /// Harp holds the AirPods' channel (and shares it).
+    Direct { fd: Arc<OwnedFd>, relay: Option<RelayServer> },
+    /// Another app holds it; Harp goes through that app.
+    Relay { s: UnixStream, buf: Vec<u8> },
+}
+
+/// The open accessory channel (direct, or through another app's relay).
 pub struct Channel {
-    fd: OwnedFd,
+    link: Link,
     seq: u8,
 }
 
 impl Channel {
+    /// Uses another app's connection to these AirPods if there is one, else opens the channel.
     pub fn open(addr: &str) -> io::Result<Channel> {
+        if let Ok(s) = UnixStream::connect(relay_path(addr)) {
+            let mut ch = Channel { link: Link::Relay { s, buf: vec![] }, seq: 0x40 };
+            ch.send(&NOTIFICATIONS)?;
+            return Ok(ch);
+        }
         let bdaddr = parse_addr(addr)?;
         // SAFETY: plain socket calls on a descriptor owned here; buffers outlive the calls.
-        unsafe {
+        let fd = unsafe {
             let raw = libc::socket(AF_BLUETOOTH, libc::SOCK_SEQPACKET | libc::SOCK_CLOEXEC, BTPROTO_L2CAP);
             if raw < 0 {
                 return Err(io::Error::last_os_error());
@@ -127,22 +231,34 @@ impl Channel {
             if libc::connect(raw, (&sa as *const SockaddrL2).cast(), std::mem::size_of::<SockaddrL2>() as u32) != 0 {
                 return Err(io::Error::last_os_error());
             }
-            let mut ch = Channel { fd, seq: 0x40 };
-            for (p, wait) in [(&HANDSHAKE[..], 200), (&FEATURES[..], 120), (&NOTIFICATIONS[..], 120)] {
-                ch.send(p)?;
-                std::thread::sleep(Duration::from_millis(wait));
-            }
-            Ok(ch)
+            Arc::new(fd)
+        };
+        let relay = RelayServer::start(addr, fd.clone());
+        let mut ch = Channel { link: Link::Direct { fd, relay }, seq: 0x40 };
+        for (p, wait) in [(&HANDSHAKE[..], 200), (&FEATURES[..], 120), (&NOTIFICATIONS[..], 120)] {
+            ch.send(p)?;
+            std::thread::sleep(Duration::from_millis(wait));
         }
+        Ok(ch)
+    }
+
+    /// Whether this goes through another app's connection.
+    pub fn via_relay(&self) -> bool {
+        matches!(self.link, Link::Relay { .. })
     }
 
     pub fn send(&mut self, pkt: &[u8]) -> io::Result<()> {
-        // SAFETY: valid descriptor and buffer.
-        let n = unsafe { libc::send(self.fd.as_raw_fd(), pkt.as_ptr().cast(), pkt.len(), libc::MSG_NOSIGNAL) };
-        if n < 0 {
-            return Err(io::Error::last_os_error());
+        match &mut self.link {
+            Link::Direct { fd, .. } => {
+                // SAFETY: valid descriptor and buffer.
+                let n = unsafe { libc::send(fd.as_raw_fd(), pkt.as_ptr().cast(), pkt.len(), libc::MSG_NOSIGNAL) };
+                if n < 0 {
+                    return Err(io::Error::last_os_error());
+                }
+                Ok(())
+            }
+            Link::Relay { s, .. } => s.write_all(&frame(pkt)),
         }
-        Ok(())
     }
 
     /// Starts (interval > 0) or stops (0) a SensorDataWX service stream.
@@ -169,11 +285,21 @@ impl Channel {
 
     /// Waits up to `timeout` for one packet; `Ok(None)` on timeout.
     pub fn recv(&mut self, buf: &mut [u8], timeout: Duration) -> io::Result<Option<usize>> {
-        let mut p = libc::pollfd { fd: self.fd.as_raw_fd(), events: libc::POLLIN, revents: 0 };
+        let raw = match &mut self.link {
+            Link::Direct { fd, .. } => fd.as_raw_fd(),
+            Link::Relay { s, buf: pending, .. } => {
+                if let Some(n) = take_frame(pending, buf) {
+                    return Ok(Some(n));
+                }
+                s.as_raw_fd()
+            }
+        };
+        let mut p = libc::pollfd { fd: raw, events: libc::POLLIN, revents: 0 };
         // SAFETY: one valid pollfd.
         let r = unsafe { libc::poll(&mut p, 1, timeout.as_millis() as i32) };
         if r < 0 {
-            return Err(io::Error::last_os_error());
+            let e = io::Error::last_os_error();
+            return if e.kind() == io::ErrorKind::Interrupted { Ok(None) } else { Err(e) };
         }
         if r == 0 {
             return Ok(None);
@@ -181,16 +307,47 @@ impl Channel {
         if p.revents & (libc::POLLHUP | libc::POLLERR) != 0 && p.revents & libc::POLLIN == 0 {
             return Err(io::Error::new(io::ErrorKind::ConnectionReset, "AirPods disconnected"));
         }
-        // SAFETY: valid descriptor and buffer.
-        let n = unsafe { libc::recv(self.fd.as_raw_fd(), buf.as_mut_ptr().cast(), buf.len(), 0) };
-        if n < 0 {
-            return Err(io::Error::last_os_error());
+        match &mut self.link {
+            Link::Direct { fd, relay } => {
+                // SAFETY: valid descriptor and buffer.
+                let n = unsafe { libc::recv(fd.as_raw_fd(), buf.as_mut_ptr().cast(), buf.len(), 0) };
+                if n < 0 {
+                    return Err(io::Error::last_os_error());
+                }
+                if n == 0 {
+                    return Err(io::Error::new(io::ErrorKind::ConnectionReset, "AirPods disconnected"));
+                }
+                if let Some(r) = relay {
+                    r.broadcast(&buf[..n as usize]);
+                }
+                Ok(Some(n as usize))
+            }
+            Link::Relay { s, buf: pending } => {
+                let mut tmp = [0u8; 8192];
+                let n = s.read(&mut tmp)?;
+                if n == 0 {
+                    return Err(io::Error::new(io::ErrorKind::ConnectionReset, "the app sharing the AirPods closed"));
+                }
+                pending.extend_from_slice(&tmp[..n]);
+                Ok(take_frame(pending, buf))
+            }
         }
-        if n == 0 {
-            return Err(io::Error::new(io::ErrorKind::ConnectionReset, "AirPods disconnected"));
-        }
-        Ok(Some(n as usize))
     }
+}
+
+/// One complete frame from a relay stream's buffer, copied into `out`.
+fn take_frame(pending: &mut Vec<u8>, out: &mut [u8]) -> Option<usize> {
+    if pending.len() < 2 {
+        return None;
+    }
+    let n = u16::from_le_bytes([pending[0], pending[1]]) as usize;
+    if pending.len() < 2 + n {
+        return None;
+    }
+    let m = n.min(out.len());
+    out[..m].copy_from_slice(&pending[2..2 + m]);
+    pending.drain(..2 + n);
+    Some(m)
 }
 
 fn varint(b: &[u8], i: &mut usize) -> Option<u64> {
@@ -316,6 +473,54 @@ mod tests {
         assert!((m[0].t - 2.5).abs() < 1e-9);
         assert!((m[0].q[0] - 0.7071).abs() < 1e-3 && (m[0].q[3] - 0.7071).abs() < 1e-3);
         assert!(motion_samples(&[4, 0, 4, 0, 6, 0, 0, 0]).is_empty());
+    }
+
+    #[test]
+    fn relay_frames_split_and_join() {
+        let mut pending = frame(&[4, 0, 4, 0, 9]);
+        pending.extend(frame(&[1, 2, 3]));
+        pending.extend(&frame(&[7, 7])[..2]); // half a frame
+        let mut out = [0u8; 16];
+        assert_eq!(take_frame(&mut pending, &mut out), Some(5));
+        assert_eq!(&out[..5], &[4, 0, 4, 0, 9]);
+        assert_eq!(take_frame(&mut pending, &mut out), Some(3));
+        assert_eq!(take_frame(&mut pending, &mut out), None);
+        assert!(relay_path("cc:08:fa:b8:0f:2c").ends_with("aap-relay-CC08FAB80F2C.sock"));
+    }
+
+    #[test]
+    fn a_second_app_shares_the_connection_through_the_relay() {
+        // A socket pair stands in for the AirPods' channel.
+        let dir = std::env::temp_dir().join(format!("harp-relay-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::env::set_var("XDG_RUNTIME_DIR", &dir);
+        let mut fds = [0; 2];
+        // SAFETY: plain socketpair call into a local array.
+        assert_eq!(unsafe { libc::socketpair(libc::AF_UNIX, libc::SOCK_SEQPACKET, 0, fds.as_mut_ptr()) }, 0);
+        // SAFETY: both descriptors are fresh and owned here.
+        let (ours, airpods) = unsafe { (Arc::new(OwnedFd::from_raw_fd(fds[0])), OwnedFd::from_raw_fd(fds[1])) };
+        let addr = "00:11:22:33:44:55";
+        let relay = RelayServer::start(addr, ours.clone());
+        assert!(relay.is_some());
+        let mut holder = Channel { link: Link::Direct { fd: ours, relay }, seq: 0x40 };
+        // The second app finds the relay and asks for notifications through it.
+        let mut guest = Channel::open(addr).unwrap();
+        assert!(guest.via_relay());
+        let mut buf = [0u8; 64];
+        // SAFETY: valid descriptor and buffer.
+        let n = unsafe { libc::recv(airpods.as_raw_fd(), buf.as_mut_ptr().cast(), 64, 0) };
+        assert_eq!(&buf[..n as usize], &NOTIFICATIONS[..], "the guest's packet reached the AirPods");
+        // A packet from the AirPods reaches the holder and the guest.
+        let pkt = [4u8, 0, 4, 0, 6, 0, 0, 0];
+        // SAFETY: valid descriptor and buffer.
+        unsafe { libc::send(airpods.as_raw_fd(), pkt.as_ptr().cast(), pkt.len(), 0) };
+        assert_eq!(holder.recv(&mut buf, Duration::from_secs(1)).unwrap(), Some(8));
+        let got = guest.recv(&mut buf, Duration::from_secs(1)).unwrap();
+        assert_eq!(got, Some(8));
+        assert_eq!(&buf[..8], &pkt);
+        drop(holder);
+        assert!(!relay_path(addr).exists(), "the socket goes away with the holder");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

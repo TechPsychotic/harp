@@ -71,6 +71,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   SourceView dco_decode_box_autoadd_source_view(dynamic raw);
 
   @protected
+  SpatialOptions dco_decode_box_autoadd_spatial_options(dynamic raw);
+
+  @protected
   int dco_decode_box_autoadd_u_32(dynamic raw);
 
   @protected
@@ -168,6 +171,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<PlaylistView> dco_decode_list_playlist_view(dynamic raw);
+
+  @protected
+  Float32List dco_decode_list_prim_f_32_strict(dynamic raw);
 
   @protected
   Float64List dco_decode_list_prim_f_64_strict(dynamic raw);
@@ -278,6 +284,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   SourceView dco_decode_source_view(dynamic raw);
 
   @protected
+  SpatialOptions dco_decode_spatial_options(dynamic raw);
+
+  @protected
   SpatialStatus dco_decode_spatial_status(dynamic raw);
 
   @protected
@@ -363,6 +372,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   SourceView sse_decode_box_autoadd_source_view(SseDeserializer deserializer);
+
+  @protected
+  SpatialOptions sse_decode_box_autoadd_spatial_options(
+    SseDeserializer deserializer,
+  );
 
   @protected
   int sse_decode_box_autoadd_u_32(SseDeserializer deserializer);
@@ -488,6 +502,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<PlaylistView> sse_decode_list_playlist_view(
     SseDeserializer deserializer,
   );
+
+  @protected
+  Float32List sse_decode_list_prim_f_32_strict(SseDeserializer deserializer);
 
   @protected
   Float64List sse_decode_list_prim_f_64_strict(SseDeserializer deserializer);
@@ -618,6 +635,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   SourceView sse_decode_source_view(SseDeserializer deserializer);
 
   @protected
+  SpatialOptions sse_decode_spatial_options(SseDeserializer deserializer);
+
+  @protected
   SpatialStatus sse_decode_spatial_status(SseDeserializer deserializer);
 
   @protected
@@ -727,6 +747,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_box_autoadd_source_view(
     SourceView self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_spatial_options(
+    SpatialOptions self,
     SseSerializer serializer,
   );
 
@@ -886,6 +912,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_playlist_view(
     List<PlaylistView> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_prim_f_32_strict(
+    Float32List self,
     SseSerializer serializer,
   );
 
@@ -1050,6 +1082,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_source_view(SourceView self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_spatial_options(
+    SpatialOptions self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_spatial_status(SpatialStatus self, SseSerializer serializer);

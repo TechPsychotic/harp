@@ -17,10 +17,42 @@ pub struct HrirSet {
 }
 
 impl HrirSet {
-    /// The table bundled with Harp (48 kHz, 256 taps).
-    pub fn builtin() -> &'static HrirSet {
+    /// The table bundled with Harp as measured (48 kHz, 256 taps).
+    pub fn raw() -> &'static HrirSet {
         static SET: OnceLock<HrirSet> = OnceLock::new();
         SET.get_or_init(|| HrirSet::parse(BUILTIN).expect("built-in HRIR table"))
+    }
+
+    /// The table Harp renders with: the measured one with its tone corrected so a centred
+    /// sound comes out flat (see `eq.rs`); 512 taps.
+    pub fn builtin() -> &'static HrirSet {
+        static SET: OnceLock<HrirSet> = OnceLock::new();
+        SET.get_or_init(|| HrirSet::raw().equalized(crate::render::SPEAKER_AZ))
+    }
+
+    /// The left and right ears' response to the same signal from speakers at ±`spk_az`.
+    pub fn centre_response(&self, spk_az: f32) -> (Vec<f32>, Vec<f32>) {
+        let (mut l1, mut r1, mut l2, mut r2) = (vec![0.0; self.taps], vec![0.0; self.taps], vec![0.0; self.taps], vec![0.0; self.taps]);
+        self.lookup(spk_az, 0.0, &mut l1, &mut r1);
+        self.lookup(-spk_az, 0.0, &mut l2, &mut r2);
+        let l: Vec<f32> = l1.iter().zip(&l2).map(|(a, b)| a + b).collect();
+        let r: Vec<f32> = r1.iter().zip(&r2).map(|(a, b)| a + b).collect();
+        (l, r)
+    }
+
+    /// A copy with every response filtered so a centred sound from ±`spk_az` is flat.
+    pub fn equalized(&self, spk_az: f32) -> HrirSet {
+        let (l, r) = self.centre_response(spk_az);
+        let (ml, mr) = (crate::eq::magnitude(&l), crate::eq::magnitude(&r));
+        // Both ears together (the head is nearly symmetric): the power average.
+        let avg: Vec<f32> = ml.iter().zip(&mr).map(|(a, b)| ((a * a + b * b) / 2.0).sqrt()).collect();
+        let fir = crate::eq::flattening_filter(&avg, self.rate as f32, self.taps);
+        let taps = self.taps * 2;
+        let mut data = Vec::with_capacity(self.data.len() * 2);
+        for d in self.data.chunks(self.taps) {
+            data.extend(crate::eq::convolve(d, &fir, taps));
+        }
+        HrirSet { rate: self.rate, taps, n_az: self.n_az, az_step: self.az_step, els: self.els.clone(), data }
     }
 
     pub fn parse(b: &[u8]) -> Result<HrirSet, String> {
@@ -120,9 +152,10 @@ mod tests {
 
     #[test]
     fn builtin_table_loads_and_left_is_left() {
+        assert_eq!((HrirSet::raw().rate, HrirSet::raw().taps), (48000, 256));
         let s = HrirSet::builtin();
-        assert_eq!((s.rate, s.taps), (48000, 256));
-        let (mut l, mut r) = (vec![0.0; 256], vec![0.0; 256]);
+        assert_eq!((s.rate, s.taps), (48000, 512));
+        let (mut l, mut r) = (vec![0.0; 512], vec![0.0; 512]);
         s.lookup(90.0, 0.0, &mut l, &mut r);
         assert!(energy(&l) > 10.0 * energy(&r), "a source at +90° is louder in the left ear");
         s.lookup(-90.0, 0.0, &mut l, &mut r);
@@ -131,7 +164,7 @@ mod tests {
 
     #[test]
     fn lookup_on_a_grid_point_is_exact_and_between_points_blends() {
-        let s = HrirSet::builtin();
+        let s = HrirSet::raw();
         let (mut l, mut r) = (vec![0.0; 256], vec![0.0; 256]);
         s.lookup(30.0, 0.0, &mut l, &mut r);
         let (gl, _) = s.dir(2, 6);
@@ -147,5 +180,33 @@ mod tests {
         s.lookup(390.0, 0.0, &mut l2, &mut r2);
         assert_eq!(l2, l);
         let _ = r;
+    }
+
+    /// Level of a response at `f` Hz, in dB.
+    fn db_at(ir: &[f32], f: f32) -> f32 {
+        let w = 2.0 * std::f32::consts::PI * f / 48000.0;
+        let (mut re, mut im) = (0.0f32, 0.0f32);
+        for (k, &h) in ir.iter().enumerate() {
+            re += h * (w * k as f32).cos();
+            im -= h * (w * k as f32).sin();
+        }
+        10.0 * (re * re + im * im).log10()
+    }
+
+    #[test]
+    fn a_centred_sound_comes_out_flat_after_correction() {
+        // Before: +4 dB at 4 kHz and -7.7 dB at 8 kHz for a centred voice (measured).
+        let (raw, _) = HrirSet::raw().centre_response(30.0);
+        let (eq, _) = HrirSet::builtin().centre_response(30.0);
+        let bands = [300.0f32, 500.0, 1000.0, 2000.0, 3000.0, 4000.0, 6000.0, 8000.0, 10000.0, 12000.0];
+        let spread = |ir: &[f32]| {
+            let v: Vec<f32> = bands.iter().map(|&f| db_at(ir, f)).collect();
+            v.iter().cloned().fold(f32::MIN, f32::max) - v.iter().cloned().fold(f32::MAX, f32::min)
+        };
+        let (before, after) = (spread(&raw), spread(&eq));
+        eprintln!("centre response spread 300 Hz-12 kHz: {before:.1} dB before, {after:.1} dB after");
+        assert!(after < 4.0 && after < before / 2.0, "before {before} after {after}");
+        let peak = bands.iter().map(|&f| db_at(&eq, f)).fold(f32::MIN, f32::max);
+        assert!(peak < 2.5, "a centred voice must not come out louder than it went in: {peak} dB");
     }
 }

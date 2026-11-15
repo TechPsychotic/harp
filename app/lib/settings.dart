@@ -75,7 +75,20 @@ class AppSettings extends ChangeNotifier {
   String spatial = 'off';
 
   /// The spatial modes this platform offers.
-  static List<String> get spatialModes => ['off', 'wide', 'headphone', 'immersive', if (Platform.isLinux) '3d'];
+  static List<String> get spatialModes => ['off', 'wide', 'headphone', 'immersive', if (Platform.isLinux) ...['3d', '3d_bounce']];
+
+  /// Whether a mode is one of the HRTF ones (rendered by the Rust core, Linux).
+  static bool is3d(String mode) => mode == '3d' || mode == '3d_bounce';
+
+  /// 3D audio plays in a small virtual room (reflections and a light reverb): the sound sits
+  /// outside your head and head tracking is easier to hear.
+  bool room3d = true;
+
+  /// How the music comes back to where you face: "dynamic" (like Apple devices), "slow", "off".
+  String recenter3d = 'dynamic';
+
+  /// The up/down calibration (from Settings › 3D audio), as the Rust core gives it.
+  List<double> upCalibration = const [];
 
   /// 3D audio follows the head (AirPods Pro, 4 or Max connected to this computer).
   bool headTracking = true;
@@ -138,6 +151,9 @@ class AppSettings extends ChangeNotifier {
     if (!spatialModes.contains(spatial)) spatial = 'off';
     headTracking = await get('head_tracking') != '0';
     headFlip = await get('head_flip') == '1';
+    room3d = await get('room_3d') != '0';
+    recenter3d = await get('recenter_3d') ?? 'dynamic';
+    upCalibration = (await get('up_calibration') ?? '').split(',').map(double.tryParse).whereType<double>().toList();
     cacheMb = int.tryParse(await get('cache_mb') ?? '') ?? 512;
     prefetchOnMobile = await get('prefetch_mobile') == '1';
     aheadSongs = int.tryParse(await get('ahead_songs') ?? '') ?? 5;
@@ -307,6 +323,24 @@ class AppSettings extends ChangeNotifier {
     await _save('head_tracking', v ? '1' : '0');
   }
 
+  Future<void> setRoom3d(bool v) async {
+    room3d = v;
+    notifyListeners();
+    await _save('room_3d', v ? '1' : '0');
+  }
+
+  Future<void> setRecenter3d(String v) async {
+    recenter3d = v;
+    notifyListeners();
+    await _save('recenter_3d', v);
+  }
+
+  Future<void> setUpCalibration(List<double> v) async {
+    upCalibration = v;
+    notifyListeners();
+    await _save('up_calibration', v.map((x) => x.toStringAsFixed(5)).join(','));
+  }
+
   Future<void> setHeadFlip(bool v) async {
     headFlip = v;
     notifyListeners();
@@ -338,7 +372,14 @@ String spatialLabel(String s) => switch (s) {
       'headphone' => 'Headphone crossfeed',
       'immersive' => 'Immersive (wide + crossfeed)',
       '3d' => '3D (HRTF)',
+      '3d_bounce' => '3D Bounce (moves around you)',
       _ => 'Off',
+    };
+
+String recenterLabel(String s) => switch (s) {
+      'off' => 'Off (Recenter button only)',
+      'slow' => 'Slowly',
+      _ => 'Dynamic, like Apple devices',
     };
 
 String eqLabel(String s) => switch (s) {

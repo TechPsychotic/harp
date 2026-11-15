@@ -9,6 +9,8 @@ description = "Harp's 3D audio: HRTF binaural rendering, AirPods head tracking a
 # Only the convolution part of sofar (uniformly partitioned FFT convolution); the
 # HRIR table is Harp's own compact file, read by hrir.rs.
 sofar = { version = "0.3", default-features = false, features = ["dsp"] }
+# Designing the tone correction (minimum-phase EQ) when the table loads.
+rustfft = "6.4"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "0.2"

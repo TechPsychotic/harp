@@ -7,18 +7,15 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `fmt`, `fmt`
 
 bool spatialSupported() =>
     RustLib.instance.api.crateApiSpatialSpatialSupported();
 
 /// Starts 3D audio, or changes its options while it runs; returns the output device the
 /// player must use.
-Future<String> spatialStart({required bool headTracking, required bool flip}) =>
-    RustLib.instance.api.crateApiSpatialSpatialStart(
-      headTracking: headTracking,
-      flip: flip,
-    );
+Future<String> spatialStart({required SpatialOptions opts}) =>
+    RustLib.instance.api.crateApiSpatialSpatialStart(opts: opts);
 
 /// Stops 3D audio and removes its output. Point the player back at "auto" first.
 Future<void> spatialStop() => RustLib.instance.api.crateApiSpatialSpatialStop();
@@ -26,8 +23,53 @@ Future<void> spatialStop() => RustLib.instance.api.crateApiSpatialSpatialStop();
 /// The current head direction becomes the front.
 void spatialRecenter() => RustLib.instance.api.crateApiSpatialSpatialRecenter();
 
+/// Up/down calibration: face the screen, call this, then look up within 4 seconds.
+void spatialCalibrateUp() =>
+    RustLib.instance.api.crateApiSpatialSpatialCalibrateUp();
+
 SpatialStatus spatialStatus() =>
     RustLib.instance.api.crateApiSpatialSpatialStatus();
+
+class SpatialOptions {
+  final bool headTracking;
+  final bool flip;
+  final bool room;
+  final bool bounce;
+
+  /// "off", "slow" or "dynamic".
+  final String recenter;
+  final Float32List upCalibration;
+
+  const SpatialOptions({
+    required this.headTracking,
+    required this.flip,
+    required this.room,
+    required this.bounce,
+    required this.recenter,
+    required this.upCalibration,
+  });
+
+  @override
+  int get hashCode =>
+      headTracking.hashCode ^
+      flip.hashCode ^
+      room.hashCode ^
+      bounce.hashCode ^
+      recenter.hashCode ^
+      upCalibration.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SpatialOptions &&
+          runtimeType == other.runtimeType &&
+          headTracking == other.headTracking &&
+          flip == other.flip &&
+          room == other.room &&
+          bounce == other.bounce &&
+          recenter == other.recenter &&
+          upCalibration == other.upCalibration;
+}
 
 /// What 3D audio is doing (see `harp_spatial::Status`).
 class SpatialStatus {
@@ -38,6 +80,13 @@ class SpatialStatus {
   final String head;
   final String headDetail;
   final double yaw;
+  final double pitch;
+
+  /// Up/down calibration: `""`, `"waiting"`, `"running:SECONDS"`, `"done"` or `"failed:WHY"`.
+  final String calibrating;
+
+  /// The up/down calibrations to save (pass them back in `SpatialOptions`).
+  final Float32List upCalibration;
   final int latencyMs;
   final String? error;
 
@@ -47,6 +96,9 @@ class SpatialStatus {
     required this.head,
     required this.headDetail,
     required this.yaw,
+    required this.pitch,
+    required this.calibrating,
+    required this.upCalibration,
     required this.latencyMs,
     this.error,
   });
@@ -58,6 +110,9 @@ class SpatialStatus {
       head.hashCode ^
       headDetail.hashCode ^
       yaw.hashCode ^
+      pitch.hashCode ^
+      calibrating.hashCode ^
+      upCalibration.hashCode ^
       latencyMs.hashCode ^
       error.hashCode;
 
@@ -71,6 +126,9 @@ class SpatialStatus {
           head == other.head &&
           headDetail == other.headDetail &&
           yaw == other.yaw &&
+          pitch == other.pitch &&
+          calibrating == other.calibrating &&
+          upCalibration == other.upCalibration &&
           latencyMs == other.latencyMs &&
           error == other.error;
 }

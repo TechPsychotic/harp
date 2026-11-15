@@ -303,7 +303,7 @@ class PlayerController extends ChangeNotifier {
   bool get currentSuperliked => _currentSuperliked;
   String? get currentReason => current == null ? null : reasons[current!.id];
 
-  String _fxKey() => '${settings.spatial}|${settings.eq}|${settings.normalize}|${settings.eq == 'custom' ? settings.customEq.join(',') : ''}|${settings.hpName}|${settings.headTracking}|${settings.headFlip}';
+  String _fxKey() => '${settings.spatial}|${settings.eq}|${settings.normalize}|${settings.eq == 'custom' ? settings.customEq.join(',') : ''}|${settings.hpName}|${settings.headTracking}|${settings.headFlip}|${settings.room3d}|${settings.recenter3d}|${settings.upCalibration.length}';
 
   /// The output device the player plays on: "auto", or Harp's 3D output.
   String _outDevice = 'auto';
@@ -315,11 +315,20 @@ class PlayerController extends ChangeNotifier {
   /// 3D audio (Linux): Harp's own "Harp 3D" output, rendered binaurally (and following the
   /// head with AirPods) by the Rust core, then played on the real output.
   Future<void> _syncSpatial() async {
-    final want = settings.spatial == '3d' && spatial.spatialSupported();
+    final want = AppSettings.is3d(settings.spatial) && spatial.spatialSupported();
     String device = 'auto';
     if (want) {
       try {
-        device = await spatial.spatialStart(headTracking: settings.headTracking, flip: settings.headFlip);
+        device = await spatial.spatialStart(
+          opts: spatial.SpatialOptions(
+            headTracking: settings.headTracking,
+            flip: settings.headFlip,
+            room: settings.room3d,
+            bounce: settings.spatial == '3d_bounce',
+            recenter: settings.recenter3d,
+            upCalibration: Float32List.fromList(settings.upCalibration),
+          ),
+        );
         spatialError = null;
       } catch (e) {
         spatialError = '$e';
@@ -344,6 +353,9 @@ class PlayerController extends ChangeNotifier {
 
   /// The current head direction becomes the front.
   void recenterHead() => spatial.spatialRecenter();
+
+  /// Up/down calibration: face the screen, then look up within 4 seconds.
+  void calibrateUp() => spatial.spatialCalibrateUp();
 
   spatial.SpatialStatus spatialStatus() => spatial.spatialStatus();
 
