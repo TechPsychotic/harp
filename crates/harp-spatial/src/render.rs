@@ -29,6 +29,14 @@ const HISTORY: usize = 2048;
 pub const LOOKAHEAD: usize = 64;
 const CEILING: f32 = 0.891;
 const SOUND_MPS: f32 = 343.0;
+/// How far the virtual speakers stand (metres).
+pub const SPEAKER_DIST: f32 = 1.8;
+/// Height and behind cues: sound from above is brighter around 8 kHz, from below duller, from
+/// behind darker above 4.5 kHz (the "directional bands" of human hearing). Generic HRTFs carry
+/// these only weakly, so they are emphasised.
+const HEIGHT_UP_DB: f32 = 9.0;
+const HEIGHT_DOWN_DB: f32 = 6.0;
+const BEHIND_DB: f32 = 6.0;
 
 /// One sound arriving at the listener: a speaker's direct sound or one of its reflections.
 struct Source {
@@ -93,6 +101,34 @@ impl Biquad {
         let a0 = 1.0 + alpha;
         let b = if high { [(1.0 + c) / 2.0, -(1.0 + c), (1.0 + c) / 2.0] } else { [(1.0 - c) / 2.0, 1.0 - c, (1.0 - c) / 2.0] };
         Biquad { b: [b[0] / a0, b[1] / a0, b[2] / a0], a: [-2.0 * c / a0, (1.0 - alpha) / a0], z: [0.0; 2] }
+    }
+    /// RBJ peaking EQ.
+    fn peak(rate: f32, f0: f32, q: f32, db: f32) -> Self {
+        let a = 10f32.powf(db / 40.0);
+        let w = 2.0 * std::f32::consts::PI * f0 / rate;
+        let (s, c) = w.sin_cos();
+        let alpha = s / (2.0 * q);
+        let a0 = 1.0 + alpha / a;
+        Biquad { b: [(1.0 + alpha * a) / a0, -2.0 * c / a0, (1.0 - alpha * a) / a0], a: [-2.0 * c / a0, (1.0 - alpha / a) / a0], z: [0.0; 2] }
+    }
+    /// RBJ high shelf (slope 1).
+    fn high_shelf(rate: f32, f0: f32, db: f32) -> Self {
+        let a = 10f32.powf(db / 40.0);
+        let w = 2.0 * std::f32::consts::PI * f0 / rate;
+        let (s, c) = w.sin_cos();
+        let alpha = s / 2.0 * 2f32.sqrt();
+        let sa = 2.0 * a.sqrt() * alpha;
+        let a0 = (a + 1.0) - (a - 1.0) * c + sa;
+        Biquad {
+            b: [a * ((a + 1.0) + (a - 1.0) * c + sa) / a0, -2.0 * a * ((a - 1.0) + (a + 1.0) * c) / a0, a * ((a + 1.0) + (a - 1.0) * c - sa) / a0],
+            a: [2.0 * ((a - 1.0) - (a + 1.0) * c) / a0, ((a + 1.0) - (a - 1.0) * c - sa) / a0],
+            z: [0.0; 2],
+        }
+    }
+    /// New coefficients, same state (for gains that move slowly).
+    fn retune(&mut self, to: Biquad) {
+        self.b = to.b;
+        self.a = to.a;
     }
     #[inline]
     fn run(&mut self, x: f32) -> f32 {
@@ -234,6 +270,13 @@ pub struct Binaural {
     limiter: Limiter,
     lo_buf: Vec<[f32; 2]>,
     hi_buf: [Vec<f32>; 2],
+    /// Direction cues on the direct sound, per ear: (8 kHz peak, 4.5 kHz shelf), and their
+    /// current gains in dB.
+    cues: [(Biquad, Biquad); 2],
+    cue_db: (f32, f32),
+    /// Distance of the stage (metres), as applied, and the air's low-pass state per ear.
+    dist: f32,
+    air: [f32; 2],
     /// Tests only: swap filters without the crossfade, to show the fade matters.
     #[cfg(test)]
     hard_swap: bool,
@@ -296,6 +339,10 @@ impl Binaural {
             limiter: Limiter::new(rate),
             lo_buf: vec![[0.0; 2]; BLOCK],
             hi_buf: [vec![0.0; BLOCK], vec![0.0; BLOCK]],
+            cues: [(Biquad::peak(rate, 8000.0, 2.0, 0.0), Biquad::high_shelf(rate, 4500.0, 0.0)); 2],
+            cue_db: (0.0, 0.0),
+            dist: SPEAKER_DIST,
+            air: [0.0; 2],
             #[cfg(test)]
             hard_swap: false,
             yaw: 0.0,
@@ -334,6 +381,13 @@ impl Binaural {
     /// Renders one block: `input` and `out` are interleaved stereo, `BLOCK` frames.
     /// `yaw` is the head's turn to the left in degrees, `pitch` its tilt up.
     pub fn process(&mut self, yaw: f32, pitch: f32, input: &[f32], out: &mut [f32]) {
+        self.process_at(yaw, pitch, SPEAKER_DIST, input, out)
+    }
+
+    /// The same with the stage `distance` metres away (3D Bounce moves it near and far): the
+    /// direct sound gets louder or quieter and duller with distance while the room stays, the
+    /// way distance sounds in a real room.
+    pub fn process_at(&mut self, yaw: f32, pitch: f32, distance: f32, input: &[f32], out: &mut [f32]) {
         assert_eq!(input.len(), BLOCK * 2);
         assert_eq!(out.len(), BLOCK * 2);
         self.yaw = yaw;
@@ -388,8 +442,41 @@ impl Binaural {
                 }
             }
         }
-        // Early reflections, placed relative to the head.
+        // Direction cues and distance on the direct sound.
+        let (az_c, el_c) = ((-yaw).to_radians(), (-pitch).to_radians());
+        let up = el_c.sin();
+        let behind = (-az_c.cos()).max(0.0) * el_c.cos();
+        let target = (if up > 0.0 { HEIGHT_UP_DB * up } else { HEIGHT_DOWN_DB * up }, -BEHIND_DB * behind);
+        let step = |cur: f32, want: f32| cur + (want - cur).clamp(-0.4, 0.4);
+        self.cue_db = (step(self.cue_db.0, target.0), step(self.cue_db.1, target.1));
         let rate = self.rate;
+        for (pk, sh) in self.cues.iter_mut() {
+            pk.retune(Biquad::peak(rate, 8000.0, 2.0, self.cue_db.0));
+            sh.retune(Biquad::high_shelf(rate, 4500.0, self.cue_db.1));
+        }
+        let d0 = self.dist;
+        let d1 = distance.clamp(0.5, 8.0);
+        self.dist = d1;
+        for i in 0..BLOCK {
+            let d = d0 + (d1 - d0) * (i as f32 / BLOCK as f32);
+            let g = (SPEAKER_DIST / d).clamp(0.3, 2.2);
+            // Air dulls only what is farther than the speakers' usual place (the usual tone
+            // stays untouched).
+            let a = if d <= SPEAKER_DIST {
+                0.0
+            } else {
+                let fc = 20_000.0 / (1.0 + 0.5 * (d - SPEAKER_DIST));
+                (-2.0 * std::f32::consts::PI * fc / rate).exp()
+            };
+            for c in 0..2 {
+                let (pk, sh) = &mut self.cues[c];
+                let x = sh.run(pk.run(out[2 * i + c]));
+                self.air[c] = (1.0 - a) * x + a * self.air[c];
+                out[2 * i + c] = g * self.air[c];
+            }
+        }
+        let refl_gain = (SPEAKER_DIST / d1).sqrt().clamp(0.6, 1.5);
+        // Early reflections, placed relative to the head.
         for rf in self.reflections.iter_mut() {
             let (az, el) = ((rf.az - yaw).to_radians(), (rf.el - pitch).to_radians());
             let dir = [el.cos() * az.cos(), el.cos() * az.sin(), el.sin()];
@@ -410,7 +497,7 @@ impl Binaural {
                     let y = c[0] * x + c[1] * x1 - c[2] * y1;
                     x1 = x;
                     y1 = y;
-                    out[2 * i + ear] += rf.gain * y;
+                    out[2 * i + ear] += refl_gain * rf.gain * y;
                 }
                 rf.z[ear] = (x1, y1);
                 rf.ear_delay[ear] = d_target;
@@ -547,6 +634,51 @@ mod tests {
             }
         }
         assert!(tail_wet > 100.0 * tail_dry.max(1e-9), "wet tail {tail_wet} vs dry {tail_dry}");
+    }
+
+    fn energy_in_band(b: &mut Binaural, yaw: f32, pitch: f32, dist: f32, f0: f32) -> f32 {
+        let mut seed = 11u32;
+        let mut bp = [Biquad::peak(48000.0, f0, 4.0, 24.0), Biquad::peak(48000.0, f0, 4.0, 24.0)];
+        let mut e = 0.0;
+        for blk in 0..120 {
+            let mut input = vec![0.0; BLOCK * 2];
+            for i in 0..BLOCK {
+                let x = 0.1 * noise(&mut seed);
+                input[2 * i] = x;
+                input[2 * i + 1] = x;
+            }
+            let mut out = vec![0.0; BLOCK * 2];
+            b.process_at(yaw, pitch, dist, &input, &mut out);
+            if blk > 60 {
+                for i in 0..BLOCK {
+                    let y = bp[0].run(out[2 * i]) + bp[1].run(out[2 * i + 1]);
+                    e += y * y;
+                }
+            }
+        }
+        e
+    }
+
+    #[test]
+    fn sound_from_above_is_brighter_and_from_behind_darker() {
+        // The stage up 45° (head looking down): more 8 kHz than level; behind: less 9 kHz.
+        let level = energy_in_band(&mut Binaural::new(true, false), 0.0, 0.0, SPEAKER_DIST, 8000.0);
+        let above = energy_in_band(&mut Binaural::new(true, false), 0.0, -45.0, SPEAKER_DIST, 8000.0);
+        assert!(above > 1.6 * level, "above {above} vs level {level}");
+        let front = energy_in_band(&mut Binaural::new(true, false), 0.0, 0.0, SPEAKER_DIST, 9000.0);
+        let back = energy_in_band(&mut Binaural::new(true, false), 180.0, 0.0, SPEAKER_DIST, 9000.0);
+        assert!(back < 0.6 * front, "behind {back} vs front {front}");
+    }
+
+    #[test]
+    fn far_away_is_quieter_with_more_room() {
+        // Direct-to-room ratio: compare the dry and room renderers at two distances.
+        let e = |room: bool, d: f32| energy_in_band(&mut Binaural::new(true, room), 0.0, 0.0, d, 1000.0);
+        let (near_dry, far_dry) = (e(false, 0.8), e(false, 4.0));
+        let (near_wet, far_wet) = (e(true, 0.8), e(true, 4.0));
+        assert!(near_dry > 8.0 * far_dry, "direct sound: near {near_dry} vs far {far_dry}");
+        let room_share = |wet: f32, dry: f32| (wet - dry).abs() / wet;
+        assert!(room_share(far_wet, far_dry) > room_share(near_wet, near_dry), "more room when far");
     }
 
     /// Energy above ~6 kHz in the output for a 1 kHz tone while `yaw(block)` moves: the

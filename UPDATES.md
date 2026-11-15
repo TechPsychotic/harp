@@ -8,6 +8,26 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-16 (later): 3D Bounce in three dimensions; height you can hear
+
+After the second listening test (tone fine; Bounce only moved left and right; up/down had no
+audible effect):
+- **3D Bounce now moves near and far and up and down:** the stage glides between spots from 0.7 m to
+  4 m away and from 25° below to 55° above (was ±20°, always at 1.8 m), still all the way round.
+  🧪 the path covers every direction, −25°…+59° and 0.7…4 m, with no jumps.
+- **Distance you can hear:** nearer is louder, farther is quieter and duller (air), while the room
+  stays: the balance of direct sound to room tells the ear how far. At the speakers' usual 1.8 m
+  nothing changes (the tone you liked stays as it is). 🧪 far is quieter, with more room.
+- **Height and behind cues:** generic HRTFs carry height only weakly, so the cues our ears use are
+  emphasised: sound from above gets brighter around 8 kHz (up to +9 dB), from below duller, from
+  behind darker above 4.5 kHz. Nodding (after the up/down setup) and Bounce now change the sound
+  clearly. 🧪 above is brighter, behind darker.
+- CPU unchanged: about 5 % of one core without the room, 10 % with it.
+
+**Not verified:** 🖥️ listening again.
+
+---
+
 ## 2026-11-16: 3D audio, round two (after the first listening test)
 
 **What you heard, and why**

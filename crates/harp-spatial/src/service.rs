@@ -215,13 +215,15 @@ fn audio_thread(s: Arc<Shared>) {
                 r = Binaural::new(true, room);
             }
             let (mut yaw, mut pitch) = if s.tracking.load(Relaxed) { (s.yaw(), s.pitch()) } else { (0.0, 0.0) };
+            let mut dist = crate::render::SPEAKER_DIST;
             if s.bounce.load(Relaxed) {
                 // The stage moves around you: the same as the head turning the other way.
-                let (az, el) = head::bounce(began.elapsed().as_secs_f64());
+                let (az, el, d) = head::bounce(began.elapsed().as_secs_f64());
                 yaw -= az;
                 pitch -= el;
+                dist = d;
             }
-            r.process(yaw, pitch, &input, &mut out);
+            r.process_at(yaw, pitch, dist, &input, &mut out);
             if let Err(e) = play.write(&out) {
                 *s.error.lock().unwrap() = Some(e);
                 break;
