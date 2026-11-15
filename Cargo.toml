@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/harp-core", "crates/harp-ffi", "crates/harp-ytdlp", "crates/harp-party"]
+members = ["crates/harp-core", "crates/harp-ffi", "crates/harp-ytdlp", "crates/harp-party", "crates/harp-spatial"]
 
 [workspace.package]
 version = "0.1.0"

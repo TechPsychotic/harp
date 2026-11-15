@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
@@ -68,8 +70,18 @@ class AppSettings extends ChangeNotifier {
   /// Playback speed (1 = normal). Pitch stays the same.
   double speed = 1;
 
-  /// "off", "wide", "headphone" or "immersive": a virtual spatial effect (not Dolby Atmos).
+  /// "off", "wide", "headphone", "immersive" (virtual stereo effects, not Dolby Atmos), or
+  /// "3d": HRTF binaural rendering, optionally following the head with AirPods (Linux only).
   String spatial = 'off';
+
+  /// The spatial modes this platform offers.
+  static List<String> get spatialModes => ['off', 'wide', 'headphone', 'immersive', if (Platform.isLinux) '3d'];
+
+  /// 3D audio follows the head (AirPods Pro, 4 or Max connected to this computer).
+  bool headTracking = true;
+
+  /// Head tracking turns the other way (if the sound moves with your head instead of staying put).
+  bool headFlip = false;
 
   /// What is actually used now.
   String get effects => effectsPref == 'auto' ? _autoLevel : effectsPref;
@@ -123,6 +135,9 @@ class AppSettings extends ChangeNotifier {
     perfOverlay = await get('perf_overlay') == '1';
     _autoLevel = await get('effects_auto') ?? 'full';
     spatial = await get('spatial') ?? 'off';
+    if (!spatialModes.contains(spatial)) spatial = 'off';
+    headTracking = await get('head_tracking') != '0';
+    headFlip = await get('head_flip') == '1';
     cacheMb = int.tryParse(await get('cache_mb') ?? '') ?? 512;
     prefetchOnMobile = await get('prefetch_mobile') == '1';
     aheadSongs = int.tryParse(await get('ahead_songs') ?? '') ?? 5;
@@ -286,6 +301,18 @@ class AppSettings extends ChangeNotifier {
     await _save('spatial', v);
   }
 
+  Future<void> setHeadTracking(bool v) async {
+    headTracking = v;
+    notifyListeners();
+    await _save('head_tracking', v ? '1' : '0');
+  }
+
+  Future<void> setHeadFlip(bool v) async {
+    headFlip = v;
+    notifyListeners();
+    await _save('head_flip', v ? '1' : '0');
+  }
+
   Future<void> setReactiveBackground(bool v) async {
     reactiveBackground = v;
     notifyListeners();
@@ -310,6 +337,7 @@ String spatialLabel(String s) => switch (s) {
       'wide' => 'Wide stage',
       'headphone' => 'Headphone crossfeed',
       'immersive' => 'Immersive (wide + crossfeed)',
+      '3d' => '3D (HRTF)',
       _ => 'Off',
     };
 

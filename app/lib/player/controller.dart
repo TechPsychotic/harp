@@ -3,7 +3,8 @@ import 'dart:io';
 
 import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
-import 'package:flutter/material.dart' show Color;
+import 'package:flutter/material.dart' show AppLifecycleListener, Color;
+import 'dart:ui' show AppExitResponse;
 import 'package:flutter/foundation.dart';
 import 'package:mpv_audio_kit/mpv_audio_kit.dart' as mak;
 
@@ -14,6 +15,7 @@ import '../theme/art_color.dart';
 import '../theme/glass.dart';
 import '../src/rust/api/engine.dart' as api;
 import '../src/rust/api/party.dart' as net;
+import '../src/rust/api/spatial.dart' as spatial;
 import '../widgets/cover.dart';
 import 'media_session.dart';
 import 'party.dart';
@@ -58,6 +60,14 @@ class PlayerController extends ChangeNotifier {
         lastFx = fx;
         unawaited(_applyAudioFx());
       }
+    });
+    // Closing the app removes the 3D output (a leftover one is also removed at the next start).
+    _exitListener = AppLifecycleListener(onExitRequested: () async {
+      if (spatial.spatialSupported() && spatial.spatialStatus().running) {
+        await _player.setAudioDevice(const mak.Device(name: 'auto', description: 'Default'));
+        await spatial.spatialStop();
+      }
+      return AppExitResponse.exit;
     });
     session.onPlay = () => setPlaying(true);
     session.onPause = () => setPlaying(false);
@@ -174,6 +184,7 @@ class PlayerController extends ChangeNotifier {
   final AppSettings settings;
   final HarpAudioHandler session;
   mak.Player _player = mak.Player();
+  AppLifecycleListener? _exitListener;
 
   /// Listening together (host or join a party).
   late final PartyController party = PartyController(this);
@@ -292,11 +303,54 @@ class PlayerController extends ChangeNotifier {
   bool get currentSuperliked => _currentSuperliked;
   String? get currentReason => current == null ? null : reasons[current!.id];
 
-  String _fxKey() => '${settings.spatial}|${settings.eq}|${settings.normalize}|${settings.eq == 'custom' ? settings.customEq.join(',') : ''}|${settings.hpName}';
+  String _fxKey() => '${settings.spatial}|${settings.eq}|${settings.normalize}|${settings.eq == 'custom' ? settings.customEq.join(',') : ''}|${settings.hpName}|${settings.headTracking}|${settings.headFlip}';
+
+  /// The output device the player plays on: "auto", or Harp's 3D output.
+  String _outDevice = 'auto';
+  bool _spatialCleaned = false;
+
+  /// Why 3D audio couldn't start, if it couldn't.
+  String? spatialError;
+
+  /// 3D audio (Linux): Harp's own "Harp 3D" output, rendered binaurally (and following the
+  /// head with AirPods) by the Rust core, then played on the real output.
+  Future<void> _syncSpatial() async {
+    final want = settings.spatial == '3d' && spatial.spatialSupported();
+    String device = 'auto';
+    if (want) {
+      try {
+        device = await spatial.spatialStart(headTracking: settings.headTracking, flip: settings.headFlip);
+        spatialError = null;
+      } catch (e) {
+        spatialError = '$e';
+      }
+    }
+    if (device != _outDevice) {
+      _outDevice = device;
+      await _routeOutput(_player);
+    }
+    if (!want && (spatial.spatialStatus().running || !_spatialCleaned)) {
+      // Also removes a 3D output a crash or a kill left behind.
+      _spatialCleaned = true;
+      if (spatial.spatialSupported()) await spatial.spatialStop();
+    }
+  }
+
+  Future<void> _routeOutput(mak.Player p) async {
+    try {
+      await p.setAudioDevice(_outDevice == 'auto' ? const mak.Device(name: 'auto', description: 'Default') : mak.Device(name: _outDevice, description: 'Harp 3D'));
+    } catch (_) {}
+  }
+
+  /// The current head direction becomes the front.
+  void recenterHead() => spatial.spatialRecenter();
+
+  spatial.SpatialStatus spatialStatus() => spatial.spatialStatus();
 
   /// The effects chain. The engine updates it live, mid-song, without a gap.
-  Future<void> _applyAudioFx() =>
-      viz.applyEffects(
+  Future<void> _applyAudioFx() async {
+    await _syncSpatial();
+    await viz.applyEffects(
         spatial: settings.spatial,
         eq: settings.eq,
         normalize: settings.normalize,
@@ -305,6 +359,7 @@ class PlayerController extends ChangeNotifier {
         headphone: settings.hpFilters,
         headphonePreamp: settings.hpPreamp,
       );
+  }
 
   Future<void> init() async {
     // The queue comes back as it was; the song waits, paused, where it stopped.
@@ -1012,6 +1067,7 @@ class PlayerController extends ChangeNotifier {
       final st = await api.resolveStream(id: next.id, quality: settings.streamQuality);
       final h = engineHeaders(st.headers, local: st.local);
       b = mak.Player();
+      await _routeOutput(b);
       final ua = h.userAgent ?? _userAgent;
       if (ua != null) await b.setRawProperty('user-agent', ua);
       await b.setVolume(0);
@@ -1535,6 +1591,7 @@ class PlayerController extends ChangeNotifier {
     for (final s in [..._subs, ..._playerSubs]) {
       s.cancel();
     }
+    _exitListener?.dispose();
     _skipChipTimer?.cancel();
     _sleepTimer?.cancel();
     _spotTimer?.cancel();

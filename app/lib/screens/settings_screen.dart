@@ -202,16 +202,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   enabled: PlayerController.fxSupported,
                   title: const Text('Spatial audio'),
                   subtitle: Text(
-                    '${spatialLabel(s.spatial)} · a virtual stereo effect for headphones and speakers. Not Dolby Atmos.',
+                    s.spatial == '3d'
+                        ? '${spatialLabel(s.spatial)} · music from two virtual speakers in front of you, for headphones. Not Dolby Atmos.'
+                        : '${spatialLabel(s.spatial)} · a virtual stereo effect for headphones and speakers. Not Dolby Atmos.',
                     style: TextStyle(color: tok.textDim),
                   ),
                   trailing: !PlayerController.fxSupported ? null : PopupMenuButton<String>(
                     icon: const Icon(Icons.expand_more_rounded),
                     initialValue: s.spatial,
                     onSelected: s.setSpatial,
-                    itemBuilder: (_) => [for (final m in ['off', 'wide', 'headphone', 'immersive']) PopupMenuItem(value: m, child: Text(spatialLabel(m)))],
+                    itemBuilder: (_) => [for (final m in AppSettings.spatialModes) PopupMenuItem(value: m, child: Text(spatialLabel(m)))],
                   ),
                 ),
+                if (s.spatial == '3d') _HeadTrackingTiles(player: widget.player),
                 ListTile(
                   enabled: PlayerController.fxSupported,
                   title: const Text('Equalizer'),
@@ -505,6 +508,86 @@ class _SettingsScreenState extends State<SettingsScreen> {
       player: widget.player,
       child: Scaffold(appBar: AppBar(backgroundColor: Colors.transparent, title: const Text('Settings')), body: list),
     );
+  }
+}
+
+/// 3D audio's head tracking: on/off, what it's doing right now, recenter, flip.
+class _HeadTrackingTiles extends StatefulWidget {
+  const _HeadTrackingTiles({required this.player});
+  final PlayerController player;
+
+  @override
+  State<_HeadTrackingTiles> createState() => _HeadTrackingTilesState();
+}
+
+class _HeadTrackingTilesState extends State<_HeadTrackingTiles> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(milliseconds: 400), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  String _describe(String head, String detail, double yaw) => switch (head) {
+        'tracking' => 'Following your head · ${detail.isEmpty ? 'AirPods' : detail} · ${yaw.abs() < 1 ? 'facing front' : '${yaw.abs().round()}° ${yaw > 0 ? 'left' : 'right'}'}',
+        'searching' => detail.isEmpty ? 'Looking for AirPods…' : detail,
+        'connecting' => 'Connecting to $detail…',
+        'paused' => 'Paused: $detail',
+        'in_use' => detail,
+        'unsupported' => detail,
+        'error' => detail,
+        _ => 'Off',
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final p = widget.player;
+    final s = p.settings;
+    final tok = context.tok;
+    final st = p.spatialStatus();
+    final err = p.spatialError ?? st.error;
+    return Column(children: [
+      if (err != null)
+        ListTile(
+          leading: const Icon(Icons.error_outline_rounded),
+          title: const Text("3D audio isn't playing"),
+          subtitle: Text(err, style: TextStyle(color: tok.textDim)),
+        ),
+      SwitchListTile(
+        title: const Text('Head tracking'),
+        subtitle: Text(
+          s.headTracking
+              ? '${_describe(st.head, st.headDetail, st.yaw)}${st.running && st.latencyMs > 0 ? ' · +${st.latencyMs} ms' : ''}'
+              : 'The music stays put when you turn your head. Needs AirPods Pro, 4 or Max connected to this computer.',
+          style: TextStyle(color: tok.textDim),
+        ),
+        value: s.headTracking,
+        onChanged: s.setHeadTracking,
+      ),
+      if (s.headTracking) ...[
+        ListTile(
+          title: const Text('Recenter'),
+          subtitle: Text('Where you face now becomes the front. The music also drifts back to the front by itself when you hold your head turned.', style: TextStyle(color: tok.textDim)),
+          trailing: const Icon(Icons.center_focus_strong_rounded),
+          onTap: p.recenterHead,
+        ),
+        SwitchListTile(
+          title: const Text('Turn the other way'),
+          subtitle: Text('If the music moves with your head instead of staying in front.', style: TextStyle(color: tok.textDim)),
+          value: s.headFlip,
+          onChanged: s.setHeadFlip,
+        ),
+      ],
+    ]);
   }
 }
 

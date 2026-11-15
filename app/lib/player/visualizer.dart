@@ -46,7 +46,8 @@ class Visualizer {
 
   // --- effects ---
 
-  /// Spatial modes (virtual effects, not Dolby Atmos). Made clearly audible
+  /// Spatial modes (virtual effects, not Dolby Atmos; "3d" runs outside the engine, see
+  /// PlayerController._syncSpatial, so it adds nothing here). Made clearly audible
   /// (the first versions were too subtle): measured on the engine, see
   /// test_engine/effects_measure_test.dart.
   static List<mak.AudioEffect> spatialEffects(String mode) => switch (mode) {

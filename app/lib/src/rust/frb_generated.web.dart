@@ -8,6 +8,7 @@
 
 import 'api/engine.dart';
 import 'api/party.dart';
+import 'api/spatial.dart';
 
 import 'dart:async';
 import 'dart:convert';
@@ -106,6 +107,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ExportFile dco_decode_export_file(dynamic raw);
+
+  @protected
+  double dco_decode_f_32(dynamic raw);
 
   @protected
   double dco_decode_f_64(dynamic raw);
@@ -276,6 +280,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   SourceView dco_decode_source_view(dynamic raw);
 
   @protected
+  SpatialStatus dco_decode_spatial_status(dynamic raw);
+
+  @protected
   SpotifyPlaylistView dco_decode_spotify_playlist_view(dynamic raw);
 
   @protected
@@ -394,6 +401,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ExportFile sse_decode_export_file(SseDeserializer deserializer);
+
+  @protected
+  double sse_decode_f_32(SseDeserializer deserializer);
 
   @protected
   double sse_decode_f_64(SseDeserializer deserializer);
@@ -610,6 +620,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   SourceView sse_decode_source_view(SseDeserializer deserializer);
 
   @protected
+  SpatialStatus sse_decode_spatial_status(SseDeserializer deserializer);
+
+  @protected
   SpotifyPlaylistView sse_decode_spotify_playlist_view(
     SseDeserializer deserializer,
   );
@@ -766,6 +779,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_export_file(ExportFile self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_f_32(double self, SseSerializer serializer);
 
   @protected
   void sse_encode_f_64(double self, SseSerializer serializer);
@@ -1036,6 +1052,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_source_view(SourceView self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_spatial_status(SpatialStatus self, SseSerializer serializer);
 
   @protected
   void sse_encode_spotify_playlist_view(

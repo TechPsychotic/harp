@@ -1,0 +1,20 @@
+[package]
+name = "harp-spatial"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+description = "Harp's 3D audio: HRTF binaural rendering, AirPods head tracking and (on Linux) the audio route"
+
+[dependencies]
+# Only the convolution part of sofar (uniformly partitioned FFT convolution); the
+# HRIR table is Harp's own compact file, read by hrir.rs.
+sofar = { version = "0.3", default-features = false, features = ["dsp"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
+libloading = "0.8"
+
+[dev-dependencies]
+# The example that builds data/sadie_d1_48k.hrir from a SOFA file needs the reader
+# with resampling.
+sofar = { version = "0.3" }

@@ -24,7 +24,8 @@ own files, and builds its recommendations from what you listen to, right on the 
   new releases from artists you follow; your own music files; downloads for offline listening.
 - **Sound:** gapless playback or crossfade, equalizer presets and a 10-band equalizer, headphone
   correction for ~9,000 measured models ([AutoEq](https://github.com/jaakkopasanen/AutoEq)), even
-  volume (EBU R128), spatial modes, playback speed, sleep timer.
+  volume (EBU R128), spatial modes, 3D audio (HRTF) that follows your head with AirPods on Linux,
+  playback speed, sleep timer.
 - **Lyrics:** synced lyrics from several free sources, with Hindi, Urdu, Punjabi and other Indian
   scripts shown in English letters if you like.
 - **Library:** playlists with folders, pins, covers, sorting, Smart Shuffle and recommendations;
@@ -130,7 +131,7 @@ Harp is free software under the **GNU General Public License v3.0 or later** (se
 
 It builds on: yt-dlp (Unlicense), Python (PSF), QuickJS (MIT), mpv_audio_kit (BSD-3-Clause) with libmpv
 (LGPL-2.1+) and FFmpeg (LGPL), iroh (MIT/Apache-2.0), flutter_rust_bridge (MIT/Apache-2.0), AutoEq data
-(MIT), and the Flutter and Rust ecosystems (see each package's license).
+(MIT), SADIE II HRTF data (Apache-2.0, University of York), sofar (MIT/Apache-2.0), and the Flutter and Rust ecosystems (see each package's license).
 
 ## Inspiration and thanks
 
@@ -139,6 +140,10 @@ Projects and work that shaped Harp, beyond the libraries it's built on:
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp): streaming, and its research into how the source's players work.
 - [NewPipe Extractor](https://github.com/TeamNewPipe/NewPipeExtractor): how a music catalogue is read without an account.
 - [AutoEq](https://github.com/jaakkopasanen/AutoEq): the measured headphone corrections behind headphone correction.
+- [SADIE II](https://www.york.ac.uk/sadie-project/database.html) (University of York): the measured
+  head-related impulse responses behind 3D audio.
+- [mousepods](https://github.com/starman-tech/mousepods): its public notes on reading AirPods' motion
+  sensors on Linux, which Harp's head tracking is written from.
 - [iroh](https://github.com/n0-computer/iroh): peer-to-peer connections for listening together, device sync and shared playlists.
 - [LRCLIB](https://github.com/tranxuanthang/lrclib): free synced lyrics.
 - [Better Lyrics](https://github.com/better-lyrics) and [YouLy+](https://github.com/ibratabian17/youlyplus): ideas for word-synced lyrics.

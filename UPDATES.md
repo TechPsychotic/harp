@@ -8,6 +8,51 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-15: 3D audio (HRTF) with AirPods head tracking (Linux)
+
+**New:** Settings › Playback › Spatial audio › **3D (HRTF)** (Linux only).
+- The two stereo channels play from **virtual speakers 30° left and right in front of you**, each
+  filtered with measured head-related impulse responses (SADIE II, KU100 dummy head, Apache-2.0;
+  cut down to a 520 KB table of 5° × 15° steps, see `crates/harp-spatial/data/README.md`).
+  Bass below 150 Hz skips the HRTF (Linkwitz-Riley crossover), lined up in time with it.
+- **Head tracking:** with AirPods Pro, 4 or Max connected to the laptop, the music stays in front of
+  you when you turn your head. Harp opens the AirPods' own control channel through the kernel's
+  Bluetooth sockets (no root, nothing to install), asks for 40 motion samples a second, and follows
+  the turn around the vertical whatever way the buds sit in your ears. The scene drifts back to the
+  front when you hold your head turned; **Recenter** and **Turn the other way** are in Settings.
+  Pauses while the buds are out of your ears. If another app holds the AirPods' controls (LibrePods,
+  mousepods, Lyre), Harp says so: only one app at a time gets the motion data (checked here: a second
+  connection opens but gets nothing).
+- **How the sound gets there:** Harp's player plays into its own "Harp 3D" output (a null sink made
+  with `pactl`), the Rust core records it, renders it, and plays it on your real output, following
+  it if you switch outputs. The PulseAudio client library is loaded at run time, so Harp still starts
+  without it. The 3D output is removed when 3D is turned off or the app closes, and a leftover one
+  (crash) at the next start. New crate `crates/harp-spatial`.
+
+**Tested**
+- 🧪 11 Rust tests: the table (a source at +90° is louder in the left ear, grid lookups blend and
+  wrap), an impulse comes out as exactly the left speaker's HRIRs, turning the head 60° left moves
+  a front source to the right ear, the crossover sums flat (±0.2 dB), a fast human head swing
+  (±80°, ~250°/s) adds **14× less** click noise than swapping filters outright (about what a still
+  head shows), the tracker reads a 40° turn from a bud mounted rolled 120° and pitched 25°, drift
+  back, look-ahead and flip, and the AirPods motion and ear packets parse.
+- ✅ Live AirPods Pro 2 on this laptop: the motion stream runs at 100 samples/s with clean
+  orientation data (probe), and a second connection gets nothing.
+- ✅ Live route, into a test output (nothing played aloud): a left-only signal comes out binaural
+  (left ear 11.4 dB louder, natural spill into the right), bursts intact, **33–39 ms** added
+  delay, the default output untouched, nothing left behind after stopping.
+- ✅ `flutter analyze`, `flutter test`.
+
+**Not verified**
+- 🖥️ **Listening** with the AirPods: how it sounds, and that turning your head left keeps the music
+  in front (the direction is unverified on real buds; flip it if the music turns with you).
+- 🖥️ The whole path inside the app (Harp's player on "Harp 3D", crossfade's second player, switching
+  outputs while playing, closing the app). Bluetooth's own delay (AAC, likely 150–250 ms) comes on top
+  of the 35 ms, so quick head turns lag.
+- Room reflections and timbre matching are not in yet (see Still open).
+
+---
+
 ## 2026-11-13: 0.9.3: yt-dlp on iPhone
 
 - **"Shows song B, plays song C" (again).** Two causes left: when a song ended, both the engine's
@@ -939,7 +984,9 @@ marked 📱 needs your phone; output-change pausing is Android-only for now (Lin
   Bar uses; nothing extra built or confirmed.
 - **Spatial audio on Android** (needs a libmpv build whose filters don't stall, or
   Android's own spatializer).
-- A proper **HRTF binaural** mode (needs a bundled SOFA data file).
+- **3D audio, next steps:** a short room (early reflections) for a more out-of-head sound, timbre
+  matching for the HRTFs, nodding (elevation), your own SOFA file, AirPods 3 (RemoteHID), and 3D on
+  Android, Windows and macOS (needs a processing hook in the engine).
 - **Podcast** extras (episode progress, subscriptions).
 
 **Not verified on a real device**
