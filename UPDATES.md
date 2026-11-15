@@ -30,7 +30,7 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
   (crash) at the next start. New crate `crates/harp-spatial`.
 
 **Tested**
-- 🧪 11 Rust tests: the table (a source at +90° is louder in the left ear, grid lookups blend and
+- 🧪 12 Rust tests: the table (a source at +90° is louder in the left ear, grid lookups blend and
   wrap), an impulse comes out as exactly the left speaker's HRIRs, turning the head 60° left moves
   a front source to the right ear, the crossover sums flat (±0.2 dB), a fast human head swing
   (±80°, ~250°/s) adds **14× less** click noise than swapping filters outright (about what a still
@@ -43,9 +43,16 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
   delay, the default output untouched, nothing left behind after stopping.
 - ✅ `flutter analyze`, `flutter test`.
 
+- ✅ **Live head turn** with the AirPods on this laptop: turning left reads about +50° (the right
+  direction, no flip needed), facing front reads 0. Found live and fixed: after holding the turn
+  4 s, coming back read −38° and crept back, because the drift back to the front started at once;
+  it now waits until the head has stayed still 8 s (🧪 a look to the side and back keeps the front).
+- ✅ Found live: after many sessions in a row the buds **stopped sending motion data** (even to a
+  probe that had worked), until a Bluetooth disconnect + connect. Harp now says so ("No motion data
+  … turn Bluetooth off and on") instead of only blaming another app.
+
 **Not verified**
-- 🖥️ **Listening** with the AirPods: how it sounds, and that turning your head left keeps the music
-  in front (the direction is unverified on real buds; flip it if the music turns with you).
+- 🖥️ **Listening** with the AirPods: how it sounds with music, and the fixed drift-back.
 - 🖥️ The whole path inside the app (Harp's player on "Harp 3D", crossfade's second player, switching
   outputs while playing, closing the app). Bluetooth's own delay (AAC, likely 150–250 ms) comes on top
   of the 35 ms, so quick head turns lag.

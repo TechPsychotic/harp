@@ -36,6 +36,9 @@ pub struct TrackerConfig {
     pub predict_max_deg: f32,
     /// Time constant (s) of the drift back to the front while the head is still.
     pub recenter_tau_s: f32,
+    /// How long (s) the head must stay still before the drift back starts, so a look to the
+    /// side and back doesn't move the front.
+    pub recenter_after_s: f32,
     /// Below this turning speed (°/s) the head counts as still.
     pub still_dps: f32,
     /// Turn the other way (if a model reports its frame mirrored).
@@ -44,7 +47,7 @@ pub struct TrackerConfig {
 
 impl Default for TrackerConfig {
     fn default() -> Self {
-        TrackerConfig { predict_s: 0.06, predict_max_deg: 12.0, recenter_tau_s: 12.0, still_dps: 15.0, flip: false }
+        TrackerConfig { predict_s: 0.05, predict_max_deg: 8.0, recenter_tau_s: 15.0, recenter_after_s: 8.0, still_dps: 15.0, flip: false }
     }
 }
 
@@ -54,13 +57,14 @@ pub struct Tracker {
     reference: f32,
     last: Option<(f32, f64)>,
     rate: f32,
+    still_s: f32,
     yaw: f32,
     pitch: f32,
 }
 
 impl Tracker {
     pub fn new(cfg: TrackerConfig) -> Self {
-        Tracker { cfg, axis: None, reference: 0.0, last: None, rate: 0.0, yaw: 0.0, pitch: 0.0 }
+        Tracker { cfg, axis: None, reference: 0.0, last: None, rate: 0.0, still_s: 0.0, yaw: 0.0, pitch: 0.0 }
     }
 
     /// The next recenter happens on the next sample.
@@ -68,6 +72,7 @@ impl Tracker {
         self.axis = None;
         self.last = None;
         self.rate = 0.0;
+        self.still_s = 0.0;
     }
 
     /// Feeds one orientation sample taken at `t` seconds; returns (yaw, pitch) in degrees,
@@ -93,7 +98,12 @@ impl Tracker {
             if dt > 0.0 && dt < 0.5 {
                 let inst = wrap(yaw - prev) / dt;
                 self.rate += (inst - self.rate) * (dt / 0.05).min(1.0);
-                if self.rate.abs() < self.cfg.still_dps && self.cfg.recenter_tau_s > 0.0 {
+                if self.rate.abs() < self.cfg.still_dps {
+                    self.still_s += dt;
+                } else {
+                    self.still_s = 0.0;
+                }
+                if self.still_s > self.cfg.recenter_after_s && self.cfg.recenter_tau_s > 0.0 {
                     let k = (dt / self.cfg.recenter_tau_s).min(1.0);
                     self.reference = wrap(self.reference + yaw * k);
                     yaw -= yaw * k;
@@ -152,16 +162,46 @@ mod tests {
 
     #[test]
     fn holding_the_head_turned_drifts_back_to_the_front() {
-        let cfg = TrackerConfig { predict_s: 0.0, recenter_tau_s: 2.0, ..Default::default() };
+        let cfg = TrackerConfig { predict_s: 0.0, ..Default::default() };
         let mut t = Tracker::new(cfg);
         let q0 = axis_angle([1.0, 0.0, 0.0], 90.0);
         t.update(q0, 0.0);
         let q = mul(axis_angle([0.0, 0.0, 1.0], 30.0), q0);
         let mut yaw = 0.0;
-        for i in 1..=1000 {
-            yaw = t.update(q, i as f64 * 0.01).0; // 10 s still
+        for i in 1..=6000 {
+            yaw = t.update(q, i as f64 * 0.01).0; // 60 s held
         }
-        assert!(yaw > 0.0 && yaw < 3.0, "after 10 s held, yaw {yaw}");
+        assert!(yaw > 0.0 && yaw < 3.0, "after a minute held, yaw {yaw}");
+    }
+
+    #[test]
+    fn a_look_to_the_side_and_back_keeps_the_front() {
+        // Seen live: a 50° turn held 4 s used to move the front by ~14°.
+        let cfg = TrackerConfig { predict_s: 0.0, ..Default::default() };
+        let mut t = Tracker::new(cfg);
+        let q0 = axis_angle([1.0, 0.0, 0.0], 90.0);
+        let mut time = 0.0;
+        let mut step = |t: &mut Tracker, deg: f32| {
+            time += 0.025;
+            t.update(mul(axis_angle([0.0, 0.0, 1.0], deg), q0), time).0
+        };
+        for _ in 0..200 {
+            step(&mut t, 0.0); // 5 s facing front
+        }
+        for i in 0..20 {
+            step(&mut t, 2.5 * i as f32); // turn left over 0.5 s
+        }
+        for _ in 0..160 {
+            step(&mut t, 50.0); // hold 4 s
+        }
+        for i in 0..20 {
+            step(&mut t, 50.0 - 2.5 * i as f32);
+        }
+        let mut yaw = 0.0;
+        for _ in 0..40 {
+            yaw = step(&mut t, 0.0);
+        }
+        assert!(yaw.abs() < 1.0, "back at the front, yaw {yaw}");
     }
 
     #[test]

@@ -259,8 +259,10 @@ fn head_thread(s: Arc<Shared>) {
             let quiet = last_sample.map_or(started.elapsed(), |t| t.elapsed());
             if quiet > Duration::from_secs(4) && !out_of_ears {
                 // Connected but no data: another app (Lyre, LibrePods, mousepods…) holds the
-                // AirPods' control channel, which only one app can use at a time.
-                s.set_head("in_use", "Another app is using the AirPods' controls; close it to use head tracking");
+                // AirPods' control channel, which only one app can use at a time; or the buds
+                // stopped offering their sensors after many sessions (seen live; a Bluetooth
+                // reconnect brings them back).
+                s.set_head("in_use", "No motion data from the AirPods. Another app may be using their controls (close it), or the buds need reconnecting: turn Bluetooth off and on.");
                 s.set_yaw(0.0);
                 break;
             }
