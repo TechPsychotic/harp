@@ -28,6 +28,9 @@ step() { echo; echo "=== $1"; }
 ok() { SUMMARY+=("ok    $1"); }
 fail() { SUMMARY+=("FAIL  $1"); printf '%s\n' "${SUMMARY[@]}"; exit 1; }
 
+step "Audio engine files"
+bash scripts/fetch-libmpv.sh >/dev/null && ok "audio engine (app/libmpv)" || fail "audio engine download"
+
 step "Rust tests"
 nice -n 10 cargo test -q --workspace >/tmp/harp-ci-rust.log 2>&1 && ok "Rust tests ($(grep -o '[0-9]* passed' /tmp/harp-ci-rust.log | awk '{s+=$1} END {print s}') passed)" || { tail -30 /tmp/harp-ci-rust.log; fail "Rust tests"; }
 

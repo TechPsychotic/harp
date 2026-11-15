@@ -106,3 +106,10 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+# The audio engine (libmpv) comes from app/libmpv/, filled by scripts/fetch-libmpv.sh: Harp's own
+# build on Android arm64 (3D audio runs inside it), mpv_audio_kit's stock r23 everywhere else.
+hooks:
+  user_defines:
+    mpv_audio_kit:
+      libmpv: libmpv

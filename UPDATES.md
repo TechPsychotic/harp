@@ -8,6 +8,37 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-16 (night): 3D audio on Android (Harp's own audio engine build)
+
+- **3D (HRTF), 3D Bounce and Room on Android.** The Android engine has no filter that could do it and
+  no raw audio output, so Harp now ships **its own build of the engine** for Android arm64:
+  mpv_audio_kit's libmpv r23 (what mpv_audio_kit 0.6.4 expects) plus a small patch that hands every
+  chunk of output audio to Harp's Rust renderer right before the speakers (`mak_pcm_set_dsp`). Built
+  on GitHub Actions in Harp's fork (TechPsychotic/libmpv-scripts, branch `harp/r23`, release
+  `harp-libmpv-r23.1`); every other platform keeps the stock r23 engine.
+- `scripts/fetch-libmpv.sh` fetches the engine files (pinned SHA-256s) into `app/libmpv/`, which
+  `pubspec.yaml` points mpv_audio_kit at; `ci-local.sh` and the GitHub build run it first.
+- The renderer now runs at any sample rate (Android outputs often run at 44.1 kHz): the HRIRs are
+  resampled and the tone correction designed again for that rate. Each player (crossfade has two)
+  gets its own renderer state; chunks of any size go through a one-block queue (5.3 ms).
+- **Head tracking isn't on Android yet** (Settings says so): it needs the AirPods connection from
+  Lyre's Android code inside Harp.
+
+**Tested**
+- 🧪 uneven engine chunks come out identical to the block-rendered stream, one block later; mono
+  passes through untouched; the 44.1 kHz table keeps direction and level. 26 Rust tests.
+- ✅ The engine build: exports `mak_pcm_set_dsp` (54 `mpv_*` + 10 `mak_pcm_*`), reads `mpv v0.41.0+r23`;
+  the patch applies to mpv 0.41.0 and a second run changes nothing; the hook's C file compiles
+  against mpv's headers.
+- ✅ The crate compiles for Android; the Linux build takes the stock engine from `app/libmpv/`
+  (same SHA-256 as before).
+
+**Not verified**
+- 📱 Everything on the phone: that the APK plays at all with the new engine, that 3D, Room and Bounce
+  sound right there, crossfades, and the S24's output rate.
+
+---
+
 ## 2026-11-16 (later): 3D Bounce in three dimensions; height you can hear
 
 After the second listening test (tone fine; Bounce only moved left and right; up/down had no
@@ -1062,9 +1093,8 @@ marked 📱 needs your phone; output-change pausing is Android-only for now (Lin
   Bar uses; nothing extra built or confirmed.
 - **Spatial audio on Android** (needs a libmpv build whose filters don't stall, or
   Android's own spatializer).
-- **3D audio, next steps:** a short room (early reflections) for a more out-of-head sound, timbre
-  matching for the HRTFs, nodding (elevation), your own SOFA file, AirPods 3 (RemoteHID), and 3D on
-  Android, Windows and macOS (needs a processing hook in the engine).
+- **3D audio, next steps:** head tracking on Android (Lyre's AirPods connection inside Harp), Harp's
+  engine build for Windows and macOS (the same hook), your own SOFA file, AirPods 3 (RemoteHID).
 - **Podcast** extras (episode progress, subscriptions).
 
 **Not verified on a real device**

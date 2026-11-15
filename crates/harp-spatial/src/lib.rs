@@ -6,6 +6,7 @@
 //! - Linux only: [`aacp`] (AirPods head tracking over Bluetooth, no root), [`route`] (the
 //!   "Harp 3D" output and the PulseAudio/PipeWire streams) and the service that runs them.
 
+pub mod dsp;
 pub mod eq;
 pub mod head;
 pub mod hrir;
@@ -40,8 +41,14 @@ pub struct Status {
     pub error: Option<String>,
 }
 
-/// Whether this build can run 3D audio at all.
-pub const SUPPORTED: bool = cfg!(target_os = "linux");
+/// Whether 3D audio can run here: on Linux always (through Harp's own output), on Android
+/// when the audio engine is Harp's build with the 3D hook.
+pub fn supported() -> bool {
+    cfg!(target_os = "linux") || (cfg!(target_os = "android") && dsp::available())
+}
+
+#[cfg(target_os = "android")]
+static ANDROID_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// How 3D audio should behave.
 #[derive(Clone, Debug, Default)]
@@ -64,10 +71,17 @@ pub fn start(opts: &Options) -> Result<String, String> {
     {
         service::start(opts)
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "android")]
+    {
+        // Inside the engine: no output to switch to (an empty device keeps the usual one).
+        dsp::enable(opts.room, opts.bounce)?;
+        ANDROID_ON.store(true, std::sync::atomic::Ordering::Relaxed);
+        Ok(String::new())
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
     {
         let _ = opts;
-        Err("3D audio is only available on Linux for now".into())
+        Err("3D audio isn't available on this platform yet".into())
     }
 }
 
@@ -80,6 +94,11 @@ pub fn calibrate_up() {
 pub fn stop() {
     #[cfg(target_os = "linux")]
     service::stop();
+    #[cfg(target_os = "android")]
+    {
+        dsp::disable();
+        ANDROID_ON.store(false, std::sync::atomic::Ordering::Relaxed);
+    }
 }
 
 pub fn recenter() {
@@ -92,7 +111,16 @@ pub fn status() -> Status {
     {
         service::status()
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "android")]
+    {
+        Status {
+            running: ANDROID_ON.load(std::sync::atomic::Ordering::Relaxed),
+            head: "unsupported".into(),
+            head_detail: "Head tracking isn't on Android yet".into(),
+            ..Status::default()
+        }
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
     {
         Status::default()
     }

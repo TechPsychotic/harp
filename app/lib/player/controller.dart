@@ -329,6 +329,8 @@ class PlayerController extends ChangeNotifier {
             upCalibration: Float32List.fromList(settings.upCalibration),
           ),
         );
+        // Android: 3D runs inside the engine, on the usual output.
+        if (device.isEmpty) device = 'auto';
         spatialError = null;
       } catch (e) {
         spatialError = '$e';

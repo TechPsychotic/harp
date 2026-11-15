@@ -1,5 +1,6 @@
-//! 3D audio (HRTF, with AirPods head tracking) for Flutter. Linux only for now; elsewhere
-//! [`spatial_supported`] is false and starting fails.
+//! 3D audio (HRTF, with AirPods head tracking) for Flutter: on Linux through Harp's own
+//! output, on Android inside Harp's build of the audio engine (no head tracking there yet);
+//! elsewhere [`spatial_supported`] is false and starting fails.
 
 /// What 3D audio is doing (see `harp_spatial::Status`).
 #[derive(Clone, Debug)]
@@ -32,7 +33,7 @@ pub struct SpatialOptions {
 
 #[flutter_rust_bridge::frb(sync)]
 pub fn spatial_supported() -> bool {
-    harp_spatial::SUPPORTED
+    harp_spatial::supported()
 }
 
 /// Starts 3D audio, or changes its options while it runs; returns the output device the

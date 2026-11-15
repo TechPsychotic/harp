@@ -30,6 +30,50 @@ impl HrirSet {
         SET.get_or_init(|| HrirSet::raw().equalized(crate::render::SPEAKER_AZ))
     }
 
+    /// The built-in table at another sample rate (an Android output often runs at 44.1 kHz):
+    /// every response resampled (windowed-sinc), the tone correction designed again.
+    pub fn builtin_at(rate: u32) -> &'static HrirSet {
+        if rate == HrirSet::raw().rate {
+            return HrirSet::builtin();
+        }
+        static SETS: std::sync::Mutex<Vec<(u32, &'static HrirSet)>> = std::sync::Mutex::new(Vec::new());
+        let mut sets = SETS.lock().unwrap();
+        if let Some(&(_, s)) = sets.iter().find(|(r, _)| *r == rate) {
+            return s;
+        }
+        let s: &'static HrirSet = Box::leak(Box::new(HrirSet::raw().resampled(rate).equalized(crate::render::SPEAKER_AZ)));
+        sets.push((rate, s));
+        s
+    }
+
+    /// A copy at `rate`, each response resampled with a Hann-windowed sinc (cut-off at the
+    /// lower Nyquist, so nothing folds back).
+    pub fn resampled(&self, rate: u32) -> HrirSet {
+        let ratio = rate as f64 / self.rate as f64;
+        let taps = ((self.taps as f64 * ratio).ceil() as usize).max(1);
+        let cutoff = ratio.min(1.0);
+        const HALF: i64 = 16;
+        let mut data = Vec::with_capacity(self.data.len() / self.taps * taps);
+        for ir in self.data.chunks(self.taps) {
+            for n in 0..taps {
+                let t = n as f64 / ratio; // position in the source
+                let c = t.floor() as i64;
+                let mut acc = 0.0f64;
+                for k in (c - HALF + 1)..=(c + HALF) {
+                    if k < 0 || k as usize >= self.taps {
+                        continue;
+                    }
+                    let x = t - k as f64;
+                    let sinc = if x.abs() < 1e-9 { 1.0 } else { (std::f64::consts::PI * x * cutoff).sin() / (std::f64::consts::PI * x) };
+                    let w = 0.5 + 0.5 * (std::f64::consts::PI * x / HALF as f64).cos();
+                    acc += ir[k as usize] as f64 * sinc * w;
+                }
+                data.push(acc as f32);
+            }
+        }
+        HrirSet { rate, taps, n_az: self.n_az, az_step: self.az_step, els: self.els.clone(), data }
+    }
+
     /// The left and right ears' response to the same signal from speakers at ±`spk_az`.
     pub fn centre_response(&self, spk_az: f32) -> (Vec<f32>, Vec<f32>) {
         let (mut l1, mut r1, mut l2, mut r2) = (vec![0.0; self.taps], vec![0.0; self.taps], vec![0.0; self.taps], vec![0.0; self.taps]);
@@ -47,7 +91,8 @@ impl HrirSet {
         // Both ears together (the head is nearly symmetric): the power average.
         let avg: Vec<f32> = ml.iter().zip(&mr).map(|(a, b)| ((a * a + b * b) / 2.0).sqrt()).collect();
         let fir = crate::eq::flattening_filter(&avg, self.rate as f32, self.taps);
-        let taps = self.taps * 2;
+        // Whole partitions for the renderer.
+        let taps = (self.taps * 2).div_ceil(crate::render::BLOCK) * crate::render::BLOCK;
         let mut data = Vec::with_capacity(self.data.len() * 2);
         for d in self.data.chunks(self.taps) {
             data.extend(crate::eq::convolve(d, &fir, taps));
@@ -191,6 +236,21 @@ mod tests {
             im -= h * (w * k as f32).sin();
         }
         10.0 * (re * re + im * im).log10()
+    }
+
+    #[test]
+    fn the_table_at_44_1_khz_keeps_direction_and_level() {
+        let s = HrirSet::builtin_at(44100);
+        assert_eq!(s.rate, 44100);
+        assert_eq!(s.taps % crate::render::BLOCK, 0);
+        let (mut l, mut r) = (vec![0.0; s.taps], vec![0.0; s.taps]);
+        s.lookup(90.0, 0.0, &mut l, &mut r);
+        assert!(energy(&l) > 10.0 * energy(&r));
+        // About the same centred level as at 48 kHz (energy scales with the rate).
+        let (c44, _) = s.centre_response(30.0);
+        let (c48, _) = HrirSet::builtin().centre_response(30.0);
+        let ratio = energy(&c44) / energy(&c48) * 48000.0 / 44100.0;
+        assert!((0.7..1.4).contains(&ratio), "level ratio {ratio}");
     }
 
     #[test]

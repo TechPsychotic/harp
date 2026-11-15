@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
 import 'src/rust/api/engine.dart' as api;
+import 'src/rust/api/spatial.dart' as spatial_api;
 
 /// App settings, saved on the device through the Rust core.
 class AppSettings extends ChangeNotifier {
@@ -75,7 +76,16 @@ class AppSettings extends ChangeNotifier {
   String spatial = 'off';
 
   /// The spatial modes this platform offers.
-  static List<String> get spatialModes => ['off', 'wide', 'headphone', 'immersive', if (Platform.isLinux) ...['3d', '3d_bounce']];
+  /// The spatial modes this platform offers (3D: Linux, and Android with Harp's engine build).
+  static List<String> get spatialModes => ['off', 'wide', 'headphone', 'immersive', if (_threeD) ...['3d', '3d_bounce']];
+
+  static bool get _threeD {
+    try {
+      return spatial_api.spatialSupported();
+    } catch (_) {
+      return false;
+    }
+  }
 
   /// Whether a mode is one of the HRTF ones (rendered by the Rust core, Linux).
   static bool is3d(String mode) => mode == '3d' || mode == '3d_bounce';
@@ -148,7 +158,8 @@ class AppSettings extends ChangeNotifier {
     perfOverlay = await get('perf_overlay') == '1';
     _autoLevel = await get('effects_auto') ?? 'full';
     spatial = await get('spatial') ?? 'off';
-    if (!spatialModes.contains(spatial)) spatial = 'off';
+    // The engine may not be loaded yet on Android: a saved 3D mode is checked when it applies.
+    if (!(Platform.isLinux || Platform.isAndroid) && is3d(spatial)) spatial = 'off';
     headTracking = await get('head_tracking') != '0';
     headFlip = await get('head_flip') == '1';
     room3d = await get('room_3d') != '0';

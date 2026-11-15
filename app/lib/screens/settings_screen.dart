@@ -582,6 +582,12 @@ class _HeadTrackingTilesState extends State<_HeadTrackingTiles> {
         value: s.room3d,
         onChanged: s.setRoom3d,
       ),
+      if (Platform.isAndroid)
+        ListTile(
+          title: const Text('Head tracking'),
+          subtitle: Text("Not on Android yet: the music stays in front of you, Bounce moves it around.", style: TextStyle(color: tok.textDim)),
+        ),
+      if (!Platform.isAndroid)
       SwitchListTile(
         title: const Text('Head tracking'),
         subtitle: Text(
@@ -593,7 +599,7 @@ class _HeadTrackingTilesState extends State<_HeadTrackingTiles> {
         value: s.headTracking,
         onChanged: s.setHeadTracking,
       ),
-      if (s.headTracking) ...[
+      if (s.headTracking && !Platform.isAndroid) ...[
         ListTile(
           title: const Text('Up and down'),
           subtitle: Text(calText, style: TextStyle(color: tok.textDim)),

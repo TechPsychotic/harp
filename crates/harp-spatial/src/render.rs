@@ -288,7 +288,12 @@ impl Binaural {
     /// A renderer at the built-in table's rate (48 kHz). `room` adds the virtual room's
     /// reflections and reverb.
     pub fn new(bass_bypass: bool, room: bool) -> Self {
-        let set = HrirSet::builtin();
+        Binaural::new_at(48000, bass_bypass, room)
+    }
+
+    /// A renderer for audio at `rate` Hz.
+    pub fn new_at(rate: u32, bass_bypass: bool, room: bool) -> Self {
+        let set = HrirSet::builtin_at(rate);
         let rate = set.rate as f32;
         let mk = || Renderer::builder(set.taps).with_sample_rate(rate).with_partition_len(BLOCK).build().expect("renderer");
         let source = |ch: usize, az: f32, el: f32, delay: usize, gain: f32, step: f32| Source {
