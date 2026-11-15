@@ -39,6 +39,8 @@ pub struct Status {
     /// Added delay of the 3D route (recording + playback buffers), milliseconds.
     pub latency_ms: u32,
     pub error: Option<String>,
+    /// Android: what the audio engine's 3D hook is doing (found, chunks, output format).
+    pub engine: String,
 }
 
 /// Whether 3D audio can run here: on Linux always (through Harp's own output), on Android
@@ -117,6 +119,7 @@ pub fn status() -> Status {
             running: ANDROID_ON.load(std::sync::atomic::Ordering::Relaxed),
             head: "unsupported".into(),
             head_detail: "Head tracking isn't on Android yet".into(),
+            engine: dsp::diagnostics(),
             ..Status::default()
         }
     }

@@ -169,6 +169,7 @@ pub fn status() -> Status {
         up_calibration,
         latency_ms: (s.latency_us.load(Relaxed) / 1000) as u32,
         error,
+        engine: String::new(),
     }
 }
 

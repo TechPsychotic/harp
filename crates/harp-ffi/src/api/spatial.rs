@@ -18,6 +18,8 @@ pub struct SpatialStatus {
     pub up_calibration: Vec<f32>,
     pub latency_ms: u32,
     pub error: Option<String>,
+    /// Android: the audio engine's 3D hook (found, chunks rendered, output rate).
+    pub engine: String,
 }
 
 #[derive(Clone, Debug)]
@@ -80,5 +82,6 @@ pub fn spatial_status() -> SpatialStatus {
         up_calibration: s.up_calibration,
         latency_ms: s.latency_ms,
         error: s.error,
+        engine: s.engine,
     }
 }

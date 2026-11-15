@@ -90,6 +90,9 @@ class SpatialStatus {
   final int latencyMs;
   final String? error;
 
+  /// Android: the audio engine's 3D hook (found, chunks rendered, output rate).
+  final String engine;
+
   const SpatialStatus({
     required this.running,
     required this.output,
@@ -101,6 +104,7 @@ class SpatialStatus {
     required this.upCalibration,
     required this.latencyMs,
     this.error,
+    required this.engine,
   });
 
   @override
@@ -114,7 +118,8 @@ class SpatialStatus {
       calibrating.hashCode ^
       upCalibration.hashCode ^
       latencyMs.hashCode ^
-      error.hashCode;
+      error.hashCode ^
+      engine.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -130,5 +135,6 @@ class SpatialStatus {
           calibrating == other.calibrating &&
           upCalibration == other.upCalibration &&
           latencyMs == other.latencyMs &&
-          error == other.error;
+          error == other.error &&
+          engine == other.engine;
 }

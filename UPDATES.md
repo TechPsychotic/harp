@@ -33,9 +33,20 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 - ✅ The crate compiles for Android; the Linux build takes the stock engine from `app/libmpv/`
   (same SHA-256 as before).
 
+- Fixed before it shipped (review): with two players (a crossfade) one could leave a chunk
+  unrendered while the other held the lock (a click), and a renderer was built on the audio thread
+  (a dropout on first play or a new sample rate). Now each player has its own lock and renderers are
+  built aside (the audio plays as it is for that moment). 🧪 two players on two threads, both
+  rendered sample for sample.
+- **Settings › Spatial audio › Audio engine** (Android, with 3D on) shows whether the 3D hook was
+  found, how many chunks it rendered and the output's rate and channels: send that line if 3D doesn't
+  work on the phone.
+- Note: Wide stage, Headphone crossfeed and Immersive already run on Android (since mpv_audio_kit).
+
 **Not verified**
 - 📱 Everything on the phone: that the APK plays at all with the new engine, that 3D, Room and Bounce
-  sound right there, crossfades, and the S24's output rate.
+  sound right there, crossfades, and the S24's output rate. Turn off Samsung's Dolby Atmos and Adapt
+  Sound while trying it, so effects don't stack.
 
 ---
 

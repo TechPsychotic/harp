@@ -5614,8 +5614,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   SpatialStatus dco_decode_spatial_status(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 10)
-      throw Exception('unexpected arr length: expect 10 but see ${arr.length}');
+    if (arr.length != 11)
+      throw Exception('unexpected arr length: expect 11 but see ${arr.length}');
     return SpatialStatus(
       running: dco_decode_bool(arr[0]),
       output: dco_decode_String(arr[1]),
@@ -5627,6 +5627,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       upCalibration: dco_decode_list_prim_f_32_strict(arr[7]),
       latencyMs: dco_decode_u_32(arr[8]),
       error: dco_decode_opt_String(arr[9]),
+      engine: dco_decode_String(arr[10]),
     );
   }
 
@@ -6758,6 +6759,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_upCalibration = sse_decode_list_prim_f_32_strict(deserializer);
     var var_latencyMs = sse_decode_u_32(deserializer);
     var var_error = sse_decode_opt_String(deserializer);
+    var var_engine = sse_decode_String(deserializer);
     return SpatialStatus(
       running: var_running,
       output: var_output,
@@ -6769,6 +6771,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       upCalibration: var_upCalibration,
       latencyMs: var_latencyMs,
       error: var_error,
+      engine: var_engine,
     );
   }
 
@@ -7800,6 +7803,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_list_prim_f_32_strict(self.upCalibration, serializer);
     sse_encode_u_32(self.latencyMs, serializer);
     sse_encode_opt_String(self.error, serializer);
+    sse_encode_String(self.engine, serializer);
   }
 
   @protected

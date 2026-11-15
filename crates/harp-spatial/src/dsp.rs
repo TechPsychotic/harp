@@ -10,8 +10,8 @@ use crate::head;
 use crate::render::{Binaural, BLOCK};
 use std::collections::VecDeque;
 use std::ffi::c_void;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering::Relaxed};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering::Relaxed};
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 type DspFn = unsafe extern "C" fn(*mut c_void, *const c_void, *mut f32, i32, i32, i32);
@@ -28,62 +28,117 @@ struct Settings {
 static SETTINGS: Settings = Settings { room: AtomicBool::new(true), bounce: AtomicBool::new(false), yaw: AtomicU32::new(0), pitch: AtomicU32::new(0) };
 
 struct Output {
-    stream: usize,
     rate: i32,
     room: bool,
-    r: Binaural,
+    /// Built off the audio thread; until then the audio plays as it is.
+    r: Option<Binaural>,
     inq: VecDeque<f32>,
     outq: VecDeque<f32>,
     block_in: Vec<f32>,
     block_out: Vec<f32>,
-    last: Instant,
 }
 
 impl Output {
-    fn new(stream: usize, rate: i32, room: bool) -> Output {
+    fn new(rate: i32, room: bool) -> Output {
         Output {
-            stream,
             rate,
             room,
-            r: Binaural::new_at(rate as u32, true, room),
+            r: None,
             inq: VecDeque::with_capacity(8192),
-            // One block of silence first: the output is always a block behind the input.
-            outq: std::iter::repeat_n(0.0, BLOCK * 2).collect(),
+            outq: VecDeque::with_capacity(8192),
             block_in: vec![0.0; BLOCK * 2],
             block_out: vec![0.0; BLOCK * 2],
-            last: Instant::now(),
         }
+    }
+
+    /// The renderer is ready: start its queues (one block of silence first: the output is
+    /// always a block behind the input).
+    fn install(&mut self, r: Binaural) {
+        self.r = Some(r);
+        self.inq.clear();
+        self.outq.clear();
+        self.outq.extend(std::iter::repeat_n(0.0, BLOCK * 2));
     }
 }
 
-static OUTPUTS: Mutex<Vec<Output>> = Mutex::new(Vec::new());
+type Slot = Arc<Mutex<Output>>;
+
+/// An output's key and when it was last heard, kept outside its lock so finding a slot never
+/// waits on another player's processing.
+struct Entry {
+    stream: usize,
+    last_ms: AtomicU64,
+    slot: Slot,
+}
+
+/// One slot per engine output (per player). The list is locked only to find or add a slot;
+/// each output's own lock is only taken by its audio thread (and once by the thread that
+/// builds its renderer), so two players never wait on each other.
+static OUTPUTS: Mutex<Vec<Arc<Entry>>> = Mutex::new(Vec::new());
 static STARTED: Mutex<Option<Instant>> = Mutex::new(None);
+static EPOCH: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+
+fn now_ms() -> u64 {
+    EPOCH.get_or_init(Instant::now).elapsed().as_millis() as u64
+}
+
+/// Diagnostics for the settings screen.
+static CHUNKS: AtomicU64 = AtomicU64::new(0);
+static LAST_RATE: AtomicU32 = AtomicU32::new(0);
+static LAST_CHANNELS: AtomicU32 = AtomicU32::new(0);
+
+fn slot_for(stream: usize, rate: i32, room: bool) -> Slot {
+    let now = now_ms();
+    let mut outs = OUTPUTS.lock().unwrap();
+    // Players that went away (nothing for 30 s).
+    outs.retain(|e| now.saturating_sub(e.last_ms.load(Relaxed)) < 30_000);
+    if let Some(e) = outs.iter().find(|e| e.stream == stream) {
+        e.last_ms.store(now, Relaxed);
+        return e.slot.clone();
+    }
+    let slot: Slot = Arc::new(Mutex::new(Output::new(rate, room)));
+    outs.push(Arc::new(Entry { stream, last_ms: AtomicU64::new(now), slot: slot.clone() }));
+    build_later(&slot, rate, room);
+    slot
+}
+
+/// Builds a renderer on its own thread (it can take a moment: a new sample rate resamples the
+/// whole table) and hands it to the output.
+fn build_later(slot: &Slot, rate: i32, room: bool) {
+    let slot = slot.clone();
+    let _ = std::thread::Builder::new().name("harp-3d-build".into()).spawn(move || {
+        let r = Binaural::new_at(rate as u32, true, room);
+        if let Ok(mut o) = slot.lock() {
+            if o.rate == rate && o.room == room {
+                o.install(r);
+            }
+        }
+    });
+}
 
 /// The renderer as the engine calls it, on its audio thread.
 unsafe extern "C" fn process(_ud: *mut c_void, stream: *const c_void, samples: *mut f32, frames: i32, channels: i32, rate: i32) {
+    LAST_RATE.store(rate.max(0) as u32, Relaxed);
+    LAST_CHANNELS.store(channels.max(0) as u32, Relaxed);
     if samples.is_null() || frames <= 0 || channels != 2 || !(8000..=192_000).contains(&rate) {
         return; // only stereo is rendered; anything else plays as it is
     }
     // SAFETY: the engine passes a buffer of frames * channels floats, valid for this call.
     let buf = unsafe { std::slice::from_raw_parts_mut(samples, frames as usize * 2) };
-    let Ok(mut outs) = OUTPUTS.try_lock() else { return }; // never wait on the audio thread
-    let now = Instant::now();
-    outs.retain(|o| now.duration_since(o.last).as_secs() < 30); // players that went away
     let room = SETTINGS.room.load(Relaxed);
-    let key = stream as usize;
-    let i = match outs.iter().position(|o| o.stream == key) {
-        Some(i) if outs[i].rate == rate && outs[i].room == room => i,
-        Some(i) => {
-            outs[i] = Output::new(key, rate, room);
-            i
-        }
-        None => {
-            outs.push(Output::new(key, rate, room));
-            outs.len() - 1
-        }
-    };
-    let o = &mut outs[i];
-    o.last = now;
+    let slot = slot_for(stream as usize, rate, room);
+    let Ok(mut o) = slot.lock() else { return };
+    let now = Instant::now();
+    if o.rate != rate || o.room != room {
+        // The output changed rate (another song) or the room was switched: rebuild aside.
+        o.rate = rate;
+        o.room = room;
+        o.r = None;
+        build_later(&slot, rate, room);
+    }
+    if o.r.is_none() {
+        return; // the renderer is still being built: plays as it is for a moment
+    }
     let (mut yaw, mut pitch, mut dist) = (f32::from_bits(SETTINGS.yaw.load(Relaxed)), f32::from_bits(SETTINGS.pitch.load(Relaxed)), crate::render::SPEAKER_DIST);
     if SETTINGS.bounce.load(Relaxed) {
         let t0 = *STARTED.lock().unwrap().get_or_insert(now);
@@ -92,16 +147,36 @@ unsafe extern "C" fn process(_ud: *mut c_void, stream: *const c_void, samples: *
         pitch -= el;
         dist = d;
     }
+    let o = &mut *o;
     o.inq.extend(buf.iter().copied());
     while o.inq.len() >= BLOCK * 2 {
         for (k, x) in o.inq.drain(..BLOCK * 2).enumerate() {
             o.block_in[k] = x;
         }
-        o.r.process_at(yaw, pitch, dist, &o.block_in, &mut o.block_out);
+        if let Some(r) = o.r.as_mut() {
+            r.process_at(yaw, pitch, dist, &o.block_in, &mut o.block_out);
+        }
         o.outq.extend(o.block_out.iter().copied());
     }
     for s in buf.iter_mut() {
         *s = o.outq.pop_front().unwrap_or(0.0);
+    }
+    CHUNKS.fetch_add(1, Relaxed);
+}
+
+/// What the engine side is doing, for the settings screen: whether the hook was found, how
+/// many chunks were rendered, and the output's rate and channels.
+pub fn diagnostics() -> String {
+    if set_dsp().is_none() {
+        return "Audio engine: no 3D hook found".into();
+    }
+    let rate = LAST_RATE.load(Relaxed);
+    let ch = LAST_CHANNELS.load(Relaxed);
+    let n = CHUNKS.load(Relaxed);
+    if rate == 0 {
+        "Audio engine: 3D hook found, no audio through it yet".into()
+    } else {
+        format!("Audio engine: 3D hook found · {n} chunks rendered · output {rate} Hz, {ch} ch")
     }
 }
 
@@ -138,6 +213,9 @@ pub fn available() -> bool {
 /// Turns 3D on in the engine (or updates its options).
 pub fn enable(room: bool, bounce: bool) -> Result<(), String> {
     let set = set_dsp().ok_or("this build of the audio engine has no 3D hook")?;
+    // The tables for the usual output rates, ready before any audio asks for them.
+    crate::hrir::HrirSet::builtin_at(48000);
+    crate::hrir::HrirSet::builtin_at(44100);
     SETTINGS.room.store(room, Relaxed);
     if bounce && !SETTINGS.bounce.load(Relaxed) {
         *STARTED.lock().unwrap() = None;
@@ -169,40 +247,60 @@ pub fn set_pose(yaw: f32, pitch: f32) {
 mod tests {
     use super::*;
 
-    #[test]
-    fn odd_chunk_sizes_come_out_as_one_continuous_stream() {
-        // Feed a tone in uneven chunks (as an audio device asks) and compare with the same tone
-        // rendered in whole blocks: identical, one block later.
-        SETTINGS.room.store(false, Relaxed);
-        SETTINGS.bounce.store(false, Relaxed);
-        let tone: Vec<f32> = (0..48000).flat_map(|t| {
-            let x = 0.3 * (2.0 * std::f32::consts::PI * 440.0 * t as f32 / 48000.0).sin();
+    /// Feeds a 440 Hz tone (offset per stream) through `process` for `stream`, in uneven chunks,
+    /// once its renderer is ready; returns what came out and the reference rendering.
+    fn run_stream(key: usize, seconds: usize) -> (Vec<f32>, Vec<f32>) {
+        let stream = key as *const c_void;
+        // The first chunk starts building the renderer (it plays as it is); then wait for it
+        // without feeding more, so the stream below starts exactly at the installed queue.
+        let mut z = vec![0.0f32; 512];
+        unsafe { process(std::ptr::null_mut(), stream, z.as_mut_ptr(), 256, 2, 48000) };
+        while !OUTPUTS.lock().unwrap().iter().find(|e| e.stream == key).map(|e| e.slot.lock().unwrap().r.is_some()).unwrap_or(false) {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        let f = 220.0 + key as f32;
+        let tone: Vec<f32> = (0..48000 * seconds).flat_map(|t| {
+            let x = 0.3 * (2.0 * std::f32::consts::PI * f * t as f32 / 48000.0).sin();
             [x, x]
         }).collect();
         let mut got = tone.clone();
-        let stream = 0x1234usize as *const c_void;
         let mut at = 0;
-        for (k, n) in [480usize, 17, 1024, 333, 256, 4096].iter().cycle().enumerate() {
+        for n in [480usize, 17, 1024, 333, 256, 4096].iter().cycle() {
             let n = (*n).min((got.len() - at) / 2);
-            if n == 0 || k > 10_000 {
+            if n == 0 {
                 break;
             }
             unsafe { process(std::ptr::null_mut(), stream, got[at..].as_mut_ptr(), n as i32, 2, 48000) };
             at += n * 2;
         }
         let mut reference = Binaural::new_at(48000, true, false);
-        let mut want = vec![0.0f32; BLOCK * 2];
+        let mut want = vec![0.0f32; BLOCK * 2]; // the queue's first block of silence
         let mut out = vec![0.0f32; BLOCK * 2];
         for b in 0..(tone.len() / (BLOCK * 2)) - 1 {
             reference.process_at(0.0, 0.0, crate::render::SPEAKER_DIST, &tone[b * BLOCK * 2..(b + 1) * BLOCK * 2], &mut out);
             want.extend_from_slice(&out);
         }
-        for k in 0..want.len().min(got.len()) {
-            assert!((got[k] - want[k]).abs() < 1e-5, "sample {k}: {} vs {}", got[k], want[k]);
+        (got, want)
+    }
+
+    #[test]
+    fn two_players_at_once_are_both_fully_rendered() {
+        // A crossfade: two outputs on two threads. Every chunk of both must be rendered (a
+        // chunk left as it is would click), and each stream must match its own reference.
+        SETTINGS.room.store(false, Relaxed);
+        SETTINGS.bounce.store(false, Relaxed);
+        let a = std::thread::spawn(|| run_stream(0xA0, 2));
+        let b = std::thread::spawn(|| run_stream(0xB0, 2));
+        for (got, want) in [a.join().unwrap(), b.join().unwrap()] {
+            let n = want.len().min(got.len());
+            assert!(n > 48000 * 3);
+            for k in 0..n {
+                assert!((got[k] - want[k]).abs() < 1e-5, "sample {k}: {} vs {}", got[k], want[k]);
+            }
         }
         // Mono and odd formats pass through untouched.
         let mut mono = vec![0.5f32; 100];
-        unsafe { process(std::ptr::null_mut(), stream, mono.as_mut_ptr(), 100, 1, 48000) };
+        unsafe { process(std::ptr::null_mut(), 0x1234usize as *const c_void, mono.as_mut_ptr(), 100, 1, 48000) };
         assert!(mono.iter().all(|&x| x == 0.5));
     }
 }

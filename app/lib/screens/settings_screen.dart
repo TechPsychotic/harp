@@ -582,6 +582,12 @@ class _HeadTrackingTilesState extends State<_HeadTrackingTiles> {
         value: s.room3d,
         onChanged: s.setRoom3d,
       ),
+      if (Platform.isAndroid && st.engine.isNotEmpty)
+        ListTile(
+          dense: true,
+          title: const Text('Audio engine'),
+          subtitle: Text(st.engine.replaceFirst('Audio engine: ', ''), style: TextStyle(color: tok.textDim)),
+        ),
       if (Platform.isAndroid)
         ListTile(
           title: const Text('Head tracking'),

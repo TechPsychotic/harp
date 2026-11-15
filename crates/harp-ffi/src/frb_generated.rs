@@ -5829,6 +5829,7 @@ impl SseDecode for crate::api::spatial::SpatialStatus {
         let mut var_upCalibration = <Vec<f32>>::sse_decode(deserializer);
         let mut var_latencyMs = <u32>::sse_decode(deserializer);
         let mut var_error = <Option<String>>::sse_decode(deserializer);
+        let mut var_engine = <String>::sse_decode(deserializer);
         return crate::api::spatial::SpatialStatus {
             running: var_running,
             output: var_output,
@@ -5840,6 +5841,7 @@ impl SseDecode for crate::api::spatial::SpatialStatus {
             up_calibration: var_upCalibration,
             latency_ms: var_latencyMs,
             error: var_error,
+            engine: var_engine,
         };
     }
 }
@@ -6884,6 +6886,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::spatial::SpatialStatus {
             self.up_calibration.into_into_dart().into_dart(),
             self.latency_ms.into_into_dart().into_dart(),
             self.error.into_into_dart().into_dart(),
+            self.engine.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -7740,6 +7743,7 @@ impl SseEncode for crate::api::spatial::SpatialStatus {
         <Vec<f32>>::sse_encode(self.up_calibration, serializer);
         <u32>::sse_encode(self.latency_ms, serializer);
         <Option<String>>::sse_encode(self.error, serializer);
+        <String>::sse_encode(self.engine, serializer);
     }
 }
 

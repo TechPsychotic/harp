@@ -131,7 +131,9 @@ Harp is free software under the **GNU General Public License v3.0 or later** (se
 
 It builds on: yt-dlp (Unlicense), Python (PSF), QuickJS (MIT), mpv_audio_kit (BSD-3-Clause) with libmpv
 (LGPL-2.1+) and FFmpeg (LGPL), iroh (MIT/Apache-2.0), flutter_rust_bridge (MIT/Apache-2.0), AutoEq data
-(MIT), SADIE II HRTF data (Apache-2.0, University of York), sofar (MIT/Apache-2.0), and the Flutter and Rust ecosystems (see each package's license).
+(MIT), SADIE II HRTF data (Apache-2.0, University of York), sofar (MIT/Apache-2.0), and the Flutter and Rust ecosystems (see each package's license). On Android arm64 the audio engine
+is a modified libmpv (LGPL; mpv_audio_kit's r23 build plus a processing hook for 3D audio), built from
+[TechPsychotic/libmpv-scripts](https://github.com/TechPsychotic/libmpv-scripts) branch `harp/r23`.
 
 ## Inspiration and thanks
 
