@@ -14,6 +14,22 @@ use std::time::{Duration, Instant};
 /// Sensor interval asked of the AirPods (40 per second: plenty for audio, gentle on battery).
 const MOTION_INTERVAL_US: u32 = 25_000;
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn retries_back_off_to_a_minute() {
+        let mut d = Duration::from_secs(5);
+        let mut seen = vec![];
+        for _ in 0..5 {
+            d = next_backoff(d);
+            seen.push(d.as_secs());
+        }
+        assert_eq!(seen, [15, 30, 60, 60, 60]);
+    }
+}
+
 #[derive(Default)]
 struct Shared {
     stop: AtomicBool,
@@ -183,10 +199,24 @@ fn output_thread(s: Arc<Shared>) {
     }
 }
 
+/// Waits between attempts to open the AirPods' channel when they don't give motion data:
+/// 5 s, then 15, 30, then every 60 s. Every attempt is a new session with the buds, and after
+/// many sessions in a row they stop offering their sensors (seen live), so retrying fast would
+/// cause the very problem it waits out.
+fn next_backoff(cur: Duration) -> Duration {
+    match cur.as_secs() {
+        0..=5 => Duration::from_secs(15),
+        6..=15 => Duration::from_secs(30),
+        _ => Duration::from_secs(60),
+    }
+}
+
 fn head_thread(s: Arc<Shared>) {
     let mut buf = vec![0u8; 4096];
+    let mut backoff = Duration::from_secs(5);
     while !s.stop.load(Relaxed) {
         if !s.tracking.load(Relaxed) {
+            backoff = Duration::from_secs(5);
             s.set_yaw(0.0);
             s.set_head("off", "");
             if !s.wait(Duration::from_millis(300)) {
@@ -209,7 +239,9 @@ fn head_thread(s: Arc<Shared>) {
             Ok(c) => c,
             Err(e) => {
                 s.set_head("error", format!("Couldn't open the AirPods' control channel: {e}"));
-                if !s.wait(Duration::from_secs(4)) {
+                let wait = backoff;
+                backoff = next_backoff(backoff);
+                if !s.wait(wait) {
                     break;
                 }
                 continue;
@@ -243,6 +275,7 @@ fn head_thread(s: Arc<Shared>) {
                     }
                     for m in aacp::motion_samples(pkt) {
                         last_sample = Some(Instant::now());
+                        backoff = Duration::from_secs(5);
                         if !out_of_ears {
                             let (yaw, _) = tracker.update(m.q, m.t);
                             s.set_yaw(yaw);
@@ -270,7 +303,11 @@ fn head_thread(s: Arc<Shared>) {
         ch.stop_motion();
         drop(ch);
         s.set_yaw(0.0);
-        if !s.stop.load(Relaxed) && s.tracking.load(Relaxed) && !s.wait(Duration::from_secs(3)) {
+        let wait = if last_sample.is_some() { Duration::from_secs(3) } else { backoff };
+        if last_sample.is_none() {
+            backoff = next_backoff(backoff);
+        }
+        if !s.stop.load(Relaxed) && s.tracking.load(Relaxed) && !s.wait(wait) {
             break;
         }
     }

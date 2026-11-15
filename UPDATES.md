@@ -49,7 +49,9 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
   it now waits until the head has stayed still 8 s (🧪 a look to the side and back keeps the front).
 - ✅ Found live: after many sessions in a row the buds **stopped sending motion data** (even to a
   probe that had worked), until a Bluetooth disconnect + connect. Harp now says so ("No motion data
-  … turn Bluetooth off and on") instead of only blaming another app.
+  … turn Bluetooth off and on") instead of only blaming another app, and **backs off** when no
+  data comes (retries after 5 s, 15, 30, then every minute, instead of every few seconds), since
+  each retry is another session with the buds. 🧪
 
 **Not verified**
 - 🖥️ **Listening** with the AirPods: how it sounds with music, and the fixed drift-back.
