@@ -173,6 +173,30 @@ unsafe extern "C" fn process(_ud: *mut c_void, stream: *const c_void, samples: *
     CHUNKS.fetch_add(1, Relaxed);
 }
 
+/// Renders a buffer of interleaved stereo in place, outside the engine (Lyre's system-wide
+/// spatial audio). `stream` keeps separate state per caller stream.
+pub fn process_interleaved(stream: usize, buf: &mut [f32], rate: i32) {
+    if buf.len() < 2 {
+        return;
+    }
+    // SAFETY: buf is valid for frames * 2 floats for the duration of the call.
+    unsafe { process(std::ptr::null_mut(), stream as *const c_void, buf.as_mut_ptr(), (buf.len() / 2) as i32, 2, rate) };
+}
+
+/// Options without the engine hook (Lyre's system-wide spatial audio).
+pub fn set_options(room: bool, bounce: bool) {
+    SETTINGS.room.store(room, Relaxed);
+    if bounce && !SETTINGS.bounce.load(Relaxed) {
+        *MOTION.lock().unwrap() = None;
+    }
+    SETTINGS.bounce.store(bounce, Relaxed);
+}
+
+/// Chunks rendered so far.
+pub fn chunks_rendered() -> u64 {
+    CHUNKS.load(Relaxed)
+}
+
 /// What the engine side is doing, for the settings screen: whether the hook was found, how
 /// many chunks were rendered, and the output's rate and channels.
 pub fn diagnostics() -> String {
