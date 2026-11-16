@@ -7,11 +7,19 @@ import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.BluetoothSocket
+import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
+import android.content.ServiceConnection
 import android.os.Build
+import android.os.Bundle
 import android.os.Handler
+import android.os.IBinder
 import android.os.Looper
+import android.os.Message
+import android.os.Messenger
 import android.os.ParcelUuid
+import android.os.RemoteException
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 import org.lsposed.hiddenapibypass.HiddenApiBypass
@@ -25,7 +33,9 @@ import java.util.concurrent.Executors
  *
  * The connection is opened the way Lyre does it: Android 17's public BluetoothSocketSettings
  * first (One UI 9, Android 17+), then Android's hidden L2CAP socket methods and constructors
- * (through HiddenApiBypass). No root. AirPods talk to one app at a time.
+ * (through HiddenApiBypass). No root. AirPods talk to one app at a time, so when Lyre is
+ * installed Harp goes through Lyre's AirPods hub instead (its background service shares the one
+ * connection with apps signed with the same key).
  */
 @SuppressLint("MissingPermission")
 class AirPodsLink(private val context: Context) : EventChannel.StreamHandler {
@@ -40,6 +50,72 @@ class AirPodsLink(private val context: Context) : EventChannel.StreamHandler {
     private var sink: EventChannel.EventSink? = null
     private var socket: BluetoothSocket? = null
     private var a2dp: BluetoothA2dp? = null
+
+    // --- through Lyre's hub ---
+    private var hub: Messenger? = null
+    private var hubConn: ServiceConnection? = null
+    private var hubName = "AirPods"
+    private var pendingOpen: MethodChannel.Result? = null
+    private val incoming = Messenger(Handler(Looper.getMainLooper()) { msg -> onHub(msg); true })
+
+    private fun onHub(msg: Message) {
+        when (msg.what) {
+            11 -> { // state
+                val connected = msg.data?.getBoolean("connected") ?: false
+                msg.data?.getString("name")?.let { hubName = it }
+                if (connected) {
+                    pendingOpen?.success("$hubName (through Lyre)")
+                    pendingOpen = null
+                } else if (pendingOpen == null && hub != null) {
+                    emit(mapOf("type" to "closed", "reason" to (msg.data?.getString("reason") ?: "Lyre lost the AirPods")))
+                }
+            }
+            10 -> msg.data?.getByteArray("data")?.let { emit(mapOf("type" to "packet", "data" to it)) }
+        }
+    }
+
+    /** Tries Lyre's hub; calls [fallback] if Lyre isn't there (or doesn't answer). */
+    private fun openViaHub(result: MethodChannel.Result, fallback: () -> Unit) {
+        val i = Intent("dev.techpsychotic.lyre.AIRPODS_HUB").setPackage("dev.techpsychotic.lyre")
+        val conn = object : ServiceConnection {
+            override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
+                val m = Messenger(binder)
+                hub = m
+                try {
+                    m.send(Message.obtain(null, 1).apply { replyTo = incoming })
+                } catch (_: RemoteException) {
+                }
+            }
+            override fun onServiceDisconnected(name: ComponentName?) {
+                hub = null
+                emit(mapOf("type" to "closed", "reason" to "Lyre's AirPods service stopped"))
+            }
+        }
+        val bound = try { context.bindService(i, conn, Context.BIND_AUTO_CREATE) } catch (_: Exception) { false }
+        if (!bound) {
+            try { context.unbindService(conn) } catch (_: Exception) {}
+            return fallback()
+        }
+        hubConn = conn
+        pendingOpen = result
+        // Lyre answers at once when it has the AirPods; give it a moment to connect otherwise.
+        main.postDelayed({
+            pendingOpen?.let {
+                pendingOpen = null
+                closeHub()
+                it.error("open_failed", "Lyre isn't connected to your AirPods yet: open Lyre once", null)
+            }
+        }, 10_000)
+    }
+
+    private fun closeHub() {
+        hub?.let { m ->
+            try { m.send(Message.obtain(null, 2).apply { replyTo = incoming }) } catch (_: RemoteException) {}
+        }
+        hub = null
+        hubConn?.let { try { context.unbindService(it) } catch (_: Exception) {} }
+        hubConn = null
+    }
 
     private val adapter: BluetoothAdapter?
         get() = (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
@@ -78,6 +154,11 @@ class AirPodsLink(private val context: Context) : EventChannel.StreamHandler {
     }
 
     fun open(result: MethodChannel.Result) {
+        close()
+        openViaHub(result) { openOwn(result) }
+    }
+
+    private fun openOwn(result: MethodChannel.Result) {
         io.execute {
             close()
             val device = airpods()
@@ -200,6 +281,15 @@ class AirPodsLink(private val context: Context) : EventChannel.StreamHandler {
     }
 
     fun send(data: ByteArray, result: MethodChannel.Result) {
+        hub?.let { m ->
+            try {
+                m.send(Message.obtain(null, 3).apply { this.data = Bundle().apply { putByteArray("data", data) } })
+                result.success(null)
+            } catch (e: RemoteException) {
+                result.error("send_failed", e.message, null)
+            }
+            return
+        }
         val s = socket ?: return result.error("closed", "Not connected", null)
         io.execute {
             try {
@@ -213,6 +303,7 @@ class AirPodsLink(private val context: Context) : EventChannel.StreamHandler {
     }
 
     fun close() {
+        closeHub()
         val s = socket ?: return
         socket = null
         try { s.close() } catch (_: IOException) {}
