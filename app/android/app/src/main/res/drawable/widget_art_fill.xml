@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A stand-in cover filling the cover widget. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt" android:width="96dp" android:height="96dp" android:viewportWidth="96" android:viewportHeight="96">
+    <path android:pathData="M0,0h96v96H0z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="0" android:startY="0" android:endX="96" android:endY="96"
+                android:startColor="#FFFA2D48" android:centerColor="#FF8E2DE2" android:endColor="#FF2B1055" />
+        </aapt:attr>
+    </path>
+    <group android:translateX="30" android:translateY="30" android:scaleX="1.5" android:scaleY="1.5">
+        <path android:fillColor="#E6FFFFFF" android:pathData="M9,18.5a2.5,2.5 0 1,1 -2.5,-2.5c0.55,0 1.05,0.17 1.5,0.46V6.2a1,1 0 0,1 0.76,-0.97l8,-2A1,1 0 0,1 18,4.2v11.3a2.5,2.5 0 1,1 -2.5,-2.5c0.55,0 1.05,0.17 1.5,0.46V7.5l-7,1.75V18.5z" />
+    </group>
+</vector>

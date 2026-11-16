@@ -13,7 +13,6 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Shader
-import android.util.TypedValue
 import android.view.KeyEvent
 import android.view.View
 import android.widget.RemoteViews
@@ -23,7 +22,8 @@ import android.widget.RemoteViews
  *  - [HarpWidget]: cover, song and previous / play-pause / next in one row (4×1).
  *  - [HarpMiniWidget]: song with play-pause and next (2×1).
  *  - [HarpCoverWidget]: the cover with the song and a play-pause button on it (2×2).
- *  - [HarpLargeWidget]: big cover, song (or its live lyrics) and the three buttons (4×2 and up).
+ *  - [HarpLargeWidget]: big cover, song and the three buttons; or, with live lyrics (on by default),
+ *    the line being sung large under the song (4×2 and up).
  * Each widget has its own settings (background opacity; live lyrics for the large one), see
  * [WidgetSettingsActivity]. The app tells them what's playing (MainActivity "widget",
  * "widgetLyric"); the buttons send media-button presses to Harp's media service, like
@@ -53,7 +53,8 @@ open class HarpWidget : AppWidgetProvider() {
         /** Background opacity, percent. */
         fun alphaOf(context: Context, id: Int) = prefs(context).getInt("alpha_$id", DEFAULT_ALPHA)
 
-        fun lyricsOn(context: Context, id: Int) = prefs(context).getBoolean("lyrics_$id", false)
+        /** Live lyrics on "Now playing": on unless turned off in its settings. */
+        fun lyricsOn(context: Context, id: Int) = prefs(context).getBoolean("lyrics_$id", true)
 
         private val kinds = listOf(
             HarpWidget::class.java to R.layout.harp_widget,
@@ -107,9 +108,6 @@ open class HarpWidget : AppWidgetProvider() {
             return PendingIntent.getBroadcast(context, request, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         }
 
-        private fun dp(context: Context, v: Float) =
-            TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v, context.resources.displayMetrics)
-
         /** One widget's views. */
         fun views(context: Context, layout: Int, id: Int): RemoteViews {
             val p = prefs(context)
@@ -121,52 +119,51 @@ open class HarpWidget : AppWidgetProvider() {
             val playing = p.getBoolean("playing", false)
             views.setImageViewResource(R.id.widget_play, if (playing) R.drawable.ic_w_pause else R.drawable.ic_w_play)
 
+            val large = layout == R.layout.harp_widget_large
             val lyric = p.getString("lyric", "") ?: ""
-            if (layout == R.layout.harp_widget_large && lyricsOn(context, id) && lyric.isNotEmpty() && title != null) {
-                // Live lyrics: the song small on top, the line being sung large, the next one dim.
-                views.setTextViewText(R.id.widget_title, if (artist.isEmpty()) title else "$title · $artist")
-                views.setTextViewTextSize(R.id.widget_title, TypedValue.COMPLEX_UNIT_SP, 12f)
-                views.setTextColor(R.id.widget_title, 0xFFA1A1A6.toInt())
-                views.setViewVisibility(R.id.widget_artist, View.GONE)
-                views.setViewVisibility(R.id.widget_lyric, View.VISIBLE)
+            val showLyrics = large && lyricsOn(context, id) && lyric.isNotEmpty() && title != null
+            views.setTextViewText(R.id.widget_title, title ?: "Harp")
+            views.setTextViewText(R.id.widget_artist, artist)
+            if (large) {
+                // Two arrangements: the song with a big cover, or (live lyrics) the line being sung.
+                views.setViewVisibility(R.id.widget_plain, if (showLyrics) View.GONE else View.VISIBLE)
+                views.setViewVisibility(R.id.widget_lyrics, if (showLyrics) View.VISIBLE else View.GONE)
+                views.setTextViewText(R.id.widget_title_l, title ?: "Harp")
+                views.setTextViewText(R.id.widget_artist_l, artist)
                 views.setTextViewText(R.id.widget_lyric, lyric)
                 val next = p.getString("lyric_next", "") ?: ""
                 views.setViewVisibility(R.id.widget_lyric_next, if (next.isEmpty()) View.GONE else View.VISIBLE)
                 views.setTextViewText(R.id.widget_lyric_next, next)
-            } else {
-                views.setTextViewText(R.id.widget_title, title ?: "Harp")
-                views.setTextViewText(R.id.widget_artist, artist)
-                if (layout == R.layout.harp_widget_large) {
-                    views.setTextViewTextSize(R.id.widget_title, TypedValue.COMPLEX_UNIT_SP, 17f)
-                    views.setTextColor(R.id.widget_title, 0xFFF5F5F7.toInt())
-                    views.setViewVisibility(R.id.widget_artist, View.VISIBLE)
-                    views.setViewVisibility(R.id.widget_lyric, View.GONE)
-                    views.setViewVisibility(R.id.widget_lyric_next, View.GONE)
-                }
+                views.setImageViewResource(R.id.widget_play_l, if (playing) R.drawable.ic_w_pause else R.drawable.ic_w_play)
             }
 
             if (layout != R.layout.harp_widget_mini) {
                 val art = p.getString("art", null)
                 val cover = layout == R.layout.harp_widget_cover
-                val big = cover || layout == R.layout.harp_widget_large
                 val bitmap = try {
-                    if (art.isNullOrEmpty()) null else decodeArt(art, if (big) 600 else 200)
+                    if (art.isNullOrEmpty()) null else decodeArt(art, if (cover || large) 400 else 200)
                 } catch (_: Exception) { null }
-                if (bitmap != null) {
-                    // The cover widget is all cover (the widget clips its corners); the others round theirs.
-                    views.setImageViewBitmap(R.id.widget_art, if (cover) bitmap else rounded(bitmap, dp(context, 12f) * bitmap.width / dp(context, if (big) 160f else 52f)))
-                } else {
-                    views.setImageViewResource(R.id.widget_art, R.drawable.widget_preview_art)
+                // The cover widget is all cover (the widget clips its corners); the others round theirs.
+                val shown = if (bitmap == null || cover) bitmap else rounded(bitmap, bitmap.width * 0.12f)
+                val artIds = if (large) listOf(R.id.widget_art, R.id.widget_art_l) else listOf(R.id.widget_art)
+                for (artId in artIds) {
+                    if (shown != null) views.setImageViewBitmap(artId, shown)
+                    else views.setImageViewResource(artId, if (cover) R.drawable.widget_art_fill else R.drawable.widget_preview_art)
                 }
                 // On the cover widget the cover is the background: it follows the opacity too.
                 if (cover) views.setInt(R.id.widget_art, "setImageAlpha", maxOf(alpha, 60))
             }
-            if (layout == R.layout.harp_widget || layout == R.layout.harp_widget_large) {
+            if (layout == R.layout.harp_widget || large) {
                 views.setOnClickPendingIntent(R.id.widget_prev, mediaKey(context, KeyEvent.KEYCODE_MEDIA_PREVIOUS, 1))
             }
             views.setOnClickPendingIntent(R.id.widget_play, mediaKey(context, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, 2))
             if (layout != R.layout.harp_widget_cover) {
                 views.setOnClickPendingIntent(R.id.widget_next, mediaKey(context, KeyEvent.KEYCODE_MEDIA_NEXT, 3))
+            }
+            if (large) {
+                views.setOnClickPendingIntent(R.id.widget_prev_l, mediaKey(context, KeyEvent.KEYCODE_MEDIA_PREVIOUS, 1))
+                views.setOnClickPendingIntent(R.id.widget_play_l, mediaKey(context, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, 2))
+                views.setOnClickPendingIntent(R.id.widget_next_l, mediaKey(context, KeyEvent.KEYCODE_MEDIA_NEXT, 3))
             }
             val open = PendingIntent.getActivity(
                 context, 0, Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),

@@ -8,6 +8,25 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-16 (later): widgets fit their size, live lyrics on by default
+
+From the phone screenshots: the widgets were laid out for more room than the widget menu (and a
+2-cell placement) gives, so names were cut to "…" and the "now playing" cover filled half the
+widget. Re-laid out to the smallest sizes (2 cells ≈ 117dp wide, 4 ≈ 250dp):
+- **Mini:** the song across the top, the artist with play-pause and next under it.
+- **Strip:** smaller cover and buttons, so the song gets ~85dp instead of ~40dp.
+- **Cover:** play-pause moved to the top corner; the song and artist get the full width at the
+  bottom. The stand-in cover no longer blows its note up to fill the widget.
+- **Now playing:** a fixed 96dp cover with the song and buttons beside it; with live lyrics, a
+  small cover, the song and the buttons on top and the line being sung large underneath.
+- **Live lyrics are now on by default** (they were off and the settings screen was skipped when
+  placing, so there was no way to find them). The widget settings now open when a widget is
+  placed. Songs without synced lyrics show the normal layout.
+
+✅ builds, layouts parse, only views a widget may use. 📱 not verified on a home screen.
+
+---
+
 ## 2026-11-16 (late night): widgets redesigned, live lyrics
 
 All four widgets redrawn (new play/pause/skip icons, rounded covers, the red play button), each

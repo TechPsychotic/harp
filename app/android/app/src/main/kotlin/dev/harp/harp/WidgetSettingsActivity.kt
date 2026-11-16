@@ -57,15 +57,15 @@ class WidgetSettingsActivity : Activity() {
         }
         val previewHeight = when (layout) {
             R.layout.harp_widget_mini -> 72f
-            R.layout.harp_widget -> 80f
-            R.layout.harp_widget_cover -> 160f
+            R.layout.harp_widget -> 72f
+            R.layout.harp_widget_cover -> 180f
             else -> 170f
         }
         fun preview() {
             p.edit().putInt("alpha_$id", alpha).putBoolean("lyrics_$id", lyrics).apply()
             stage.removeAllViews()
             val v = HarpWidget.views(this, layout, id).apply(this, stage)
-            val w = if (layout == R.layout.harp_widget_cover || layout == R.layout.harp_widget_mini) dp(180f) else ViewGroup.LayoutParams.MATCH_PARENT
+            val w = if (layout == R.layout.harp_widget_cover || layout == R.layout.harp_widget_mini) dp(150f) else ViewGroup.LayoutParams.MATCH_PARENT
             stage.addView(v, FrameLayout.LayoutParams(w, dp(previewHeight), Gravity.CENTER))
         }
         root.addView(stage, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(16f) })
@@ -96,7 +96,7 @@ class WidgetSettingsActivity : Activity() {
                 isChecked = lyrics
                 setOnCheckedChangeListener { _, on -> lyrics = on; preview() }
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(20f) })
-            root.addView(label("Shows the line being sung, when the song has synced lyrics.", 13f, dim))
+            root.addView(label("The line being sung, when the song has synced lyrics. Off: the song with a bigger cover.", 13f, dim))
         }
 
         root.addView(Button(this).apply {
