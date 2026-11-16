@@ -8,6 +8,16 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-16 (night): more home screen widgets
+
+Next to the 4×1 strip there are now three more Harp widgets (long-press the home screen ›
+Widgets › Harp): **Harp mini** (2×1: the song, play-pause and next), **Harp cover** (2×2: the album
+art with a play-pause button and the song over it) and **Harp now playing** (4×2 and up: a big
+cover, the song, the artist and previous / play-pause / next). All resize, and all follow the song
+the same way the strip does. ✅ the APK builds. 📱 not verified on a home screen.
+
+---
+
 ## 2026-11-16 (evening): head tracking no longer snaps back
 
 "It recenters as soon as I turn my head": the dynamic drift back to where you face started after
