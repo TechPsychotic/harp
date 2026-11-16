@@ -15,6 +15,7 @@ class AndroidHead {
   bool _want = false;
   bool _open = false;
   Timer? _retry;
+  Timer? _watch;
   int _backoff = 5;
 
   void _link(String state, [String detail = '']) => spatial.spatialHeadLink(state: state, detail: detail);
@@ -45,11 +46,8 @@ class AndroidHead {
       final name = await _m.invokeMethod<String>('open') ?? 'AirPods';
       _open = true;
       _link('connected', name);
-      for (final p in spatial.spatialHeadStartPackets()) {
-        await _m.invokeMethod('send', {'data': Uint8List.fromList(p.data)});
-        if (p.waitMs > 0) await Future<void>.delayed(Duration(milliseconds: p.waitMs));
-      }
-      _backoff = 5;
+      await _sendStart(all: true);
+      _watchMotion();
     } on PlatformException catch (e) {
       _open = false;
       final why = e.code == 'no_airpods' ? 'No AirPods connected' : '${e.message ?? 'Couldn\'t connect'}${e.details != null ? '\n${e.details}' : ''}';
@@ -60,6 +58,56 @@ class AndroidHead {
       _link('error', '$e');
       _scheduleRetry();
     }
+  }
+
+  Future<void> _sendStart({required bool all}) async {
+    final packets = spatial.spatialHeadStartPackets();
+    // Without `all`: only the motion-stream requests (the last three), asked again.
+    for (final p in all ? packets : packets.skip(packets.length - 3)) {
+      await _m.invokeMethod('send', {'data': Uint8List.fromList(p.data)});
+      if (p.waitMs > 0) await Future<void>.delayed(Duration(milliseconds: p.waitMs));
+    }
+  }
+
+  bool get _moving => spatial.spatialStatus().head == 'tracking' || spatial.spatialStatus().head == 'paused';
+
+  /// The AirPods sometimes don't start their motion stream (after many sessions in a row, or
+  /// while another app holds them): ask again after 6 s; after 15 s give up for a while and
+  /// say what to do.
+  void _watchMotion() {
+    _watch?.cancel();
+    var asked = 1;
+    _watch = Timer.periodic(const Duration(seconds: 6), (t) async {
+      if (!_want || !_open) return t.cancel();
+      if (_moving) {
+        _backoff = 5;
+        return;
+      }
+      if (asked < 3) {
+        asked++;
+        try {
+          await _sendStart(all: asked == 3);
+        } catch (_) {}
+        return;
+      }
+      t.cancel();
+      final why = spatial.spatialStatus().headDetail;
+      await _closeLink();
+      _link('error', "The AirPods aren't sending motion data ($why). Close Lyre (swipe it away), or turn Bluetooth off and on, or put the AirPods in the case for 10 s.");
+      _scheduleRetry();
+    });
+  }
+
+  Future<void> _closeLink() async {
+    if (_open) {
+      try {
+        for (final p in spatial.spatialHeadStopPackets()) {
+          await _m.invokeMethod('send', {'data': Uint8List.fromList(p)});
+        }
+        await _m.invokeMethod('close');
+      } catch (_) {}
+    }
+    _open = false;
   }
 
   /// Every attempt is a new session with the buds: 5 s, then 15, 30, then every minute.
@@ -76,6 +124,7 @@ class AndroidHead {
       case 'packet':
         spatial.spatialHeadFeed(data: m['data'] as Uint8List);
       case 'closed':
+        _watch?.cancel();
         _open = false;
         _link('searching', (m['reason'] as String?) ?? 'The AirPods disconnected');
         _scheduleRetry();
@@ -84,15 +133,8 @@ class AndroidHead {
 
   Future<void> _stop() async {
     _retry?.cancel();
-    if (_open) {
-      try {
-        for (final p in spatial.spatialHeadStopPackets()) {
-          await _m.invokeMethod('send', {'data': Uint8List.fromList(p)});
-        }
-        await _m.invokeMethod('close');
-      } catch (_) {}
-    }
-    _open = false;
+    _watch?.cancel();
+    await _closeLink();
     _link('off');
   }
 }

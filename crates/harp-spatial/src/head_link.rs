@@ -19,6 +19,9 @@ struct State {
     out_of_ears: bool,
     yaw: f32,
     pitch: f32,
+    /// Since the link last connected: packets from the AirPods, and those with sensor data.
+    packets: u32,
+    sensor_packets: u32,
 }
 
 static STATE: Mutex<Option<State>> = Mutex::new(None);
@@ -35,6 +38,8 @@ fn with<R>(f: impl FnOnce(&mut State) -> R) -> R {
         out_of_ears: false,
         yaw: 0.0,
         pitch: 0.0,
+        packets: 0,
+        sensor_packets: 0,
     });
     f(s)
 }
@@ -87,6 +92,10 @@ pub fn stop_packets() -> Vec<Vec<u8>> {
 pub fn set_link(state: &str, detail: &str) {
     with(|s| {
         s.link = (state.to_string(), detail.to_string());
+        if state == "connected" {
+            s.packets = 0;
+            s.sensor_packets = 0;
+        }
         if state != "tracking" {
             s.last_sample = None;
             s.yaw = 0.0;
@@ -101,6 +110,10 @@ pub fn feed(pkt: &[u8]) {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         let (yaw, pitch) = with(|s| {
+            s.packets += 1;
+            if pkt.len() > 4 && pkt[4] == 0x17 {
+                s.sensor_packets += 1;
+            }
             if let Some((l, r)) = crate::aacp::ear_state(pkt) {
                 s.out_of_ears = l != 0 && r != 0;
             }
@@ -138,7 +151,7 @@ pub fn status() -> (String, String, f32, f32, String, Vec<f32>) {
         } else if fresh {
             ("tracking".to_string(), s.link.1.clone())
         } else if s.link.0 == "connected" {
-            ("connecting".to_string(), "Waiting for motion data…".to_string())
+            ("connecting".to_string(), format!("Waiting for motion data · {} packets from the AirPods, {} with sensor data", s.packets, s.sensor_packets))
         } else {
             s.link.clone()
         };
