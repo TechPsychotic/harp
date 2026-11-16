@@ -6,7 +6,7 @@
 //! (one per player: crossfades have two) keeps a small queue in and out. That adds one block
 //! of delay (5.3 ms at 48 kHz).
 
-use crate::head;
+use crate::bounce::{BeatDetector, Bounce};
 use crate::render::{Binaural, BLOCK};
 use std::collections::VecDeque;
 use std::ffi::c_void;
@@ -75,7 +75,9 @@ struct Entry {
 /// each output's own lock is only taken by its audio thread (and once by the thread that
 /// builds its renderer), so two players never wait on each other.
 static OUTPUTS: Mutex<Vec<Arc<Entry>>> = Mutex::new(Vec::new());
-static STARTED: Mutex<Option<Instant>> = Mutex::new(None);
+/// Bounce is one motion for every output (two players in a crossfade move together), advanced
+/// by the clock, with beats from whichever output is playing.
+static MOTION: Mutex<Option<(Bounce, BeatDetector, Instant)>> = Mutex::new(None);
 static EPOCH: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
 
 fn now_ms() -> u64 {
@@ -141,8 +143,15 @@ unsafe extern "C" fn process(_ud: *mut c_void, stream: *const c_void, samples: *
     }
     let (mut yaw, mut pitch, mut dist) = (f32::from_bits(SETTINGS.yaw.load(Relaxed)), f32::from_bits(SETTINGS.pitch.load(Relaxed)), crate::render::SPEAKER_DIST);
     if SETTINGS.bounce.load(Relaxed) {
-        let t0 = *STARTED.lock().unwrap().get_or_insert(now);
-        let (az, el, d) = head::bounce(now.duration_since(t0).as_secs_f64());
+        let mut m = MOTION.lock().unwrap();
+        let (motion, beats, last) = m.get_or_insert_with(|| {
+            let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(1);
+            (Bounce::new(seed), BeatDetector::new(rate as f32), now)
+        });
+        let beat = beats.feed(buf);
+        let dt = now.duration_since(*last).as_secs_f32();
+        *last = now;
+        let (az, el, d) = motion.step(dt, beat);
         yaw -= az;
         pitch -= el;
         dist = d;
@@ -218,7 +227,7 @@ pub fn enable(room: bool, bounce: bool) -> Result<(), String> {
     crate::hrir::HrirSet::builtin_at(44100);
     SETTINGS.room.store(room, Relaxed);
     if bounce && !SETTINGS.bounce.load(Relaxed) {
-        *STARTED.lock().unwrap() = None;
+        *MOTION.lock().unwrap() = None; // a new Bounce each time it's turned on
     }
     SETTINGS.bounce.store(bounce, Relaxed);
     // SAFETY: `process` lives for the whole program; no user data is used.

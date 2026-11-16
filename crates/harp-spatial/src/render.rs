@@ -36,7 +36,9 @@ pub const SPEAKER_DIST: f32 = 1.8;
 /// these only weakly, so they are emphasised.
 const HEIGHT_UP_DB: f32 = 9.0;
 const HEIGHT_DOWN_DB: f32 = 6.0;
-const BEHIND_DB: f32 = 6.0;
+const BEHIND_DB: f32 = 8.0;
+/// Behind also gets a little more around 1 kHz (the "behind" band); the front keeps its tone.
+const BEHIND_MID_DB: f32 = 3.0;
 
 /// One sound arriving at the listener: a speaker's direct sound or one of its reflections.
 struct Source {
@@ -272,8 +274,8 @@ pub struct Binaural {
     hi_buf: [Vec<f32>; 2],
     /// Direction cues on the direct sound, per ear: (8 kHz peak, 4.5 kHz shelf), and their
     /// current gains in dB.
-    cues: [(Biquad, Biquad); 2],
-    cue_db: (f32, f32),
+    cues: [(Biquad, Biquad, Biquad); 2],
+    cue_db: (f32, f32, f32),
     /// Distance of the stage (metres), as applied, and the air's low-pass state per ear.
     dist: f32,
     air: [f32; 2],
@@ -344,8 +346,8 @@ impl Binaural {
             limiter: Limiter::new(rate),
             lo_buf: vec![[0.0; 2]; BLOCK],
             hi_buf: [vec![0.0; BLOCK], vec![0.0; BLOCK]],
-            cues: [(Biquad::peak(rate, 8000.0, 2.0, 0.0), Biquad::high_shelf(rate, 4500.0, 0.0)); 2],
-            cue_db: (0.0, 0.0),
+            cues: [(Biquad::peak(rate, 8000.0, 2.0, 0.0), Biquad::high_shelf(rate, 4500.0, 0.0), Biquad::peak(rate, 1000.0, 1.0, 0.0)); 2],
+            cue_db: (0.0, 0.0, 0.0),
             dist: SPEAKER_DIST,
             air: [0.0; 2],
             #[cfg(test)]
@@ -451,13 +453,14 @@ impl Binaural {
         let (az_c, el_c) = ((-yaw).to_radians(), (-pitch).to_radians());
         let up = el_c.sin();
         let behind = (-az_c.cos()).max(0.0) * el_c.cos();
-        let target = (if up > 0.0 { HEIGHT_UP_DB * up } else { HEIGHT_DOWN_DB * up }, -BEHIND_DB * behind);
+        let target = (if up > 0.0 { HEIGHT_UP_DB * up } else { HEIGHT_DOWN_DB * up }, -BEHIND_DB * behind, BEHIND_MID_DB * behind);
         let step = |cur: f32, want: f32| cur + (want - cur).clamp(-0.4, 0.4);
-        self.cue_db = (step(self.cue_db.0, target.0), step(self.cue_db.1, target.1));
+        self.cue_db = (step(self.cue_db.0, target.0), step(self.cue_db.1, target.1), step(self.cue_db.2, target.2));
         let rate = self.rate;
-        for (pk, sh) in self.cues.iter_mut() {
+        for (pk, sh, mid) in self.cues.iter_mut() {
             pk.retune(Biquad::peak(rate, 8000.0, 2.0, self.cue_db.0));
             sh.retune(Biquad::high_shelf(rate, 4500.0, self.cue_db.1));
+            mid.retune(Biquad::peak(rate, 1000.0, 1.0, self.cue_db.2));
         }
         let d0 = self.dist;
         let d1 = distance.clamp(0.5, 8.0);
@@ -474,8 +477,8 @@ impl Binaural {
                 (-2.0 * std::f32::consts::PI * fc / rate).exp()
             };
             for c in 0..2 {
-                let (pk, sh) = &mut self.cues[c];
-                let x = sh.run(pk.run(out[2 * i + c]));
+                let (pk, sh, mid) = &mut self.cues[c];
+                let x = mid.run(sh.run(pk.run(out[2 * i + c])));
                 self.air[c] = (1.0 - a) * x + a * self.air[c];
                 out[2 * i + c] = g * self.air[c];
             }

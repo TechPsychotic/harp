@@ -333,42 +333,6 @@ impl Tracker {
     }
 }
 
-/// "3D Bounce": where the whole stage is at `t` seconds: (degrees left of front, degrees up,
-/// metres away). It glides around you through the full circle, up over your head and down
-/// below, near and far, from one spot to the next with a small springy overshoot, rests a
-/// moment, and bobs gently.
-pub fn bounce(t: f64) -> (f32, f32, f32) {
-    const SPOTS: [(f32, f32, f32); 8] = [
-        (0.0, 0.0, 1.8),
-        (100.0, 45.0, 0.8),
-        (200.0, -20.0, 3.5),
-        (285.0, 55.0, 1.2),
-        (160.0, 10.0, 4.0),
-        (40.0, -25.0, 0.7),
-        (250.0, 35.0, 2.5),
-        (330.0, 5.0, 1.4),
-    ];
-    const SEG: f64 = 4.5;
-    const GLIDE: f64 = 2.4;
-    let k = (t / SEG).floor() as usize;
-    let into = t - k as f64 * SEG;
-    let (a0, e0, d0) = SPOTS[k % SPOTS.len()];
-    let (a1, e1, d1) = SPOTS[(k + 1) % SPOTS.len()];
-    let x = (into / GLIDE).min(1.0) as f32;
-    // ease-in-out-back: starts gently, overshoots a little, then settles (the "bounce")
-    let c2 = 1.0f32;
-    let e = if x < 0.5 {
-        (2.0 * x).powi(2) * ((c2 + 1.0) * 2.0 * x - c2) / 2.0
-    } else {
-        ((2.0 * x - 2.0).powi(2) * ((c2 + 1.0) * (2.0 * x - 2.0) + c2) + 2.0) / 2.0
-    };
-    let az = wrap(a0 + wrap(a1 - a0) * e);
-    let bob = 5.0 * (2.0 * std::f64::consts::PI * t / 2.7).sin() as f32;
-    // Distance eases without overshoot (it can't go below the closest spot).
-    let ed = x * x * (3.0 - 2.0 * x);
-    ((az), e0 + (e1 - e0) * e + bob, d0 + (d1 - d0) * ed)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -527,25 +491,4 @@ mod tests {
         assert!(t.calibrations.is_empty());
     }
 
-    #[test]
-    fn bounce_goes_all_the_way_round_smoothly() {
-        let mut seen = [false; 8];
-        let (a, e, _) = bounce(0.0);
-        let mut prev = (a, e);
-        let mut max_step = 0.0f32;
-        let (mut hi, mut lo, mut near, mut far) = (0.0f32, 0.0f32, 9.0f32, 0.0f32);
-        for i in 1..(45 * 100) {
-            let t = i as f64 * 0.01;
-            let (az, el, d) = bounce(t);
-            seen[(az.rem_euclid(360.0) / 45.0) as usize % 8] = true;
-            max_step = max_step.max(wrap(az - prev.0).abs()).max((el - prev.1).abs());
-            assert!(el.abs() < 75.0 && (0.5..=4.5).contains(&d));
-            (hi, lo, near, far) = (hi.max(el), lo.min(el), near.min(d), far.max(d));
-            prev = (az, el);
-        }
-        assert!(hi > 45.0 && lo < -20.0, "up and down: {lo}..{hi}");
-        assert!(near < 0.9 && far > 3.5, "near and far: {near}..{far}");
-        assert!(seen.iter().all(|&s| s), "every direction is visited: {seen:?}");
-        assert!(max_step < 3.0, "no jumps (largest step in 10 ms: {max_step}°)");
-    }
 }

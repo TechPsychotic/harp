@@ -2,7 +2,7 @@
 //! default output, and (when wanted) the AirPods head tracker.
 
 use crate::aacp::{self, Channel};
-use crate::head::{self, Calibrating, Recenter, Tracker, TrackerConfig, UpCalibration};
+use crate::head::{Calibrating, Recenter, Tracker, TrackerConfig, UpCalibration};
 use crate::render::{Binaural, BLOCK};
 use crate::route::{self, Pulse, Stream};
 use crate::{Options, Status};
@@ -184,7 +184,8 @@ fn audio_thread(s: Arc<Shared>) {
     let mut r = Binaural::new(true, room);
     let mut input = vec![0.0f32; BLOCK * 2];
     let mut out = vec![0.0f32; BLOCK * 2];
-    let began = Instant::now();
+    let mut motion = crate::bounce::Bounce::new(began_seed());
+    let mut beats = crate::bounce::BeatDetector::new(48000.0);
     while !s.stop.load(Relaxed) {
         let target = s.output.lock().unwrap().clone();
         let opened = route::FifoReader::open().and_then(|rec| Ok((rec, Stream::playback(&pa, &target, BLOCK as u32)?)));
@@ -217,9 +218,10 @@ fn audio_thread(s: Arc<Shared>) {
             }
             let (mut yaw, mut pitch) = if s.tracking.load(Relaxed) { (s.yaw(), s.pitch()) } else { (0.0, 0.0) };
             let mut dist = crate::render::SPEAKER_DIST;
+            let beat = beats.feed(&input);
             if s.bounce.load(Relaxed) {
                 // The stage moves around you: the same as the head turning the other way.
-                let (az, el, d) = head::bounce(began.elapsed().as_secs_f64());
+                let (az, el, d) = motion.step(BLOCK as f32 / 48000.0, beat);
                 yaw -= az;
                 pitch -= el;
                 dist = d;
@@ -239,6 +241,11 @@ fn audio_thread(s: Arc<Shared>) {
             }
         }
     }
+}
+
+/// A different Bounce every time.
+fn began_seed() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(1)
 }
 
 fn output_thread(s: Arc<Shared>) {

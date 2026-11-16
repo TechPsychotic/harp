@@ -6,6 +6,7 @@
 //! - Linux only: [`aacp`] (AirPods head tracking over Bluetooth, no root), [`route`] (the
 //!   "Harp 3D" output and the PulseAudio/PipeWire streams) and the service that runs them.
 
+pub mod bounce;
 pub mod dsp;
 pub mod eq;
 pub mod head;
