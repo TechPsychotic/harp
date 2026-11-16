@@ -55,7 +55,7 @@ void main() {
       final m = await measure(Visualizer.eqEffects(eq), Visualizer.eqHeadroomDb(eq));
       print('$eq: lows ${(m.$1 - flat.$1).toStringAsFixed(1)} dB, highs ${(m.$2 - flat.$2).toStringAsFixed(1)} dB (vs flat)');
     }
-    for (final sp in ['wide', 'headphone', 'immersive']) {
+    for (final sp in ['wide', 'headphone']) {
       final m = await measure(Visualizer.spatialEffects(sp), 0);
       print('$sp: stereo width ${(m.$3 - flat.$3).toStringAsFixed(1)} dB (side vs mid, vs flat)');
     }

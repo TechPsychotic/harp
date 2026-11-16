@@ -46,7 +46,7 @@ class Visualizer {
 
   // --- effects ---
 
-  /// Spatial modes (virtual effects, not Dolby Atmos; "3d" runs outside the engine, see
+  /// Spatial modes (virtual effects; "3d" runs outside the engine, see
   /// PlayerController._syncSpatial, so it adds nothing here). Made clearly audible
   /// (the first versions were too subtle): measured on the engine, see
   /// test_engine/effects_measure_test.dart.
@@ -58,12 +58,6 @@ class Visualizer {
           ],
         // Headphones: the sound in front of you instead of inside your head.
         'headphone' => const [mak.CrossfeedEffect(strength: 0.6, range: 0.6, levelIn: 0.9, levelOut: 1)],
-        // A room around you: wide, plus two short early reflections.
-        'immersive' => const [
-            mak.ExtrastereoEffect(m: 1.6),
-            mak.StereowidenEffect(delay: 24, feedback: 0.35, crossfeed: 0.35, drymix: 0.75),
-            mak.AechoEffect(inGain: 0.85, outGain: 0.9, delays: '37|53', decays: '0.28|0.2'),
-          ],
         _ => const [],
       };
 

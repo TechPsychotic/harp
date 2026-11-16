@@ -23,7 +23,7 @@ void main() {
     }
     final bad = <String>[];
     for (final eq in ['flat', 'bass', 'vocal', 'treble', 'loudness']) {
-      for (final sp in ['off', 'wide', 'headphone', 'immersive']) {
+      for (final sp in ['off', 'wide', 'headphone']) {
         for (final norm in [false, true]) {
           final name = '$eq/$sp/${norm ? 'norm' : '-'}';
           if (pos > const Duration(seconds: 20)) {

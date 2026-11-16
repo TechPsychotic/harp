@@ -71,13 +71,13 @@ class AppSettings extends ChangeNotifier {
   /// Playback speed (1 = normal). Pitch stays the same.
   double speed = 1;
 
-  /// "off", "wide", "headphone", "immersive" (virtual stereo effects, not Dolby Atmos), or
+  /// "off", "wide", "headphone" (virtual stereo effects), or
   /// "3d": HRTF binaural rendering, optionally following the head with AirPods (Linux only).
   String spatial = 'off';
 
   /// The spatial modes this platform offers.
   /// The spatial modes this platform offers (3D: Linux, and Android with Harp's engine build).
-  static List<String> get spatialModes => ['off', 'wide', 'headphone', 'immersive', if (_threeD) ...['3d', '3d_bounce']];
+  static List<String> get spatialModes => ['off', 'wide', 'headphone', if (_threeD) ...['3d', '3d_bounce']];
 
   static bool get _threeD {
     try {
@@ -158,6 +158,7 @@ class AppSettings extends ChangeNotifier {
     perfOverlay = await get('perf_overlay') == '1';
     _autoLevel = await get('effects_auto') ?? 'full';
     spatial = await get('spatial') ?? 'off';
+    if (spatial == 'immersive') spatial = 'wide'; // Immersive was removed: the closest is Wide stage
     // The engine may not be loaded yet on Android: a saved 3D mode is checked when it applies.
     if (!(Platform.isLinux || Platform.isAndroid) && is3d(spatial)) spatial = 'off';
     headTracking = await get('head_tracking') != '0';
@@ -381,7 +382,6 @@ String effectsLabel(String e) => switch (e) {
 String spatialLabel(String s) => switch (s) {
       'wide' => 'Wide stage',
       'headphone' => 'Headphone crossfeed',
-      'immersive' => 'Immersive (wide + crossfeed)',
       '3d' => '3D (HRTF)',
       '3d_bounce' => '3D Bounce (moves around you)',
       _ => 'Off',

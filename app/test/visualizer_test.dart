@@ -37,7 +37,7 @@ void audioChainTests() {
     expect(kinds.last, 'StereowidenEffect');
     expect(Visualizer.spatialEffects('headphone').single.runtimeType.toString(), 'CrossfeedEffect');
     expect(Visualizer.spatialEffects('nonsense'), isEmpty);
-    for (final m in ['wide', 'headphone', 'immersive']) {
+    for (final m in ['wide', 'headphone']) {
       expect(Visualizer.spatialEffects(m), isNotEmpty);
     }
     for (final p in ['bass', 'vocal', 'treble', 'loudness']) {
