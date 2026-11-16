@@ -3,13 +3,15 @@ package dev.harp.harp
 import android.app.Activity
 import android.appwidget.AppWidgetManager
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.graphics.Color
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.SeekBar
@@ -33,7 +35,8 @@ class WidgetSettingsActivity : Activity() {
         setResult(RESULT_OK, Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id))
         if (id == AppWidgetManager.INVALID_APPWIDGET_ID) { finish(); return }
         val manager = AppWidgetManager.getInstance(this)
-        val cls = manager.getAppWidgetInfo(id)?.provider?.className ?: ""
+        val info = manager.getAppWidgetInfo(id)
+        val cls = info?.provider?.className ?: ""
         val layout = HarpWidget.layoutFor(cls)
         val p = HarpWidget.prefs(this)
         var alpha = HarpWidget.alphaOf(this, id)
@@ -41,73 +44,102 @@ class WidgetSettingsActivity : Activity() {
 
         val text = Color.parseColor("#F5F5F7")
         val dim = Color.parseColor("#A1A1A6")
+        val accent = Color.parseColor("#FA2D48")
+        fun round(color: Int, r: Float) = GradientDrawable().apply { setColor(color); cornerRadius = dp(r).toFloat() }
+        fun label(s: CharSequence, size: Float, color: Int, bold: Boolean = false) = TextView(this).apply {
+            this.text = s; textSize = size; setTextColor(color)
+            if (bold) typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        }
+        fun full(top: Float = 0f) = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(top) }
+
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(24f), dp(24f), dp(24f), dp(20f))
-            background = GradientDrawable().apply { setColor(Color.parseColor("#1C1C1F")); cornerRadius = dp(28f).toFloat() }
+            setPadding(dp(22f), dp(22f), dp(22f), dp(18f))
+            background = round(Color.parseColor("#1C1C1F"), 28f)
         }
-        fun label(s: String, size: Float, color: Int, top: Int = 0) = TextView(this).apply {
-            this.text = s; textSize = size; setTextColor(color); setPadding(0, dp(top.toFloat()), 0, 0)
-        }
-        root.addView(label("Widget", 22f, text))
+        root.addView(label("Widget settings", 20f, text, true))
+        root.addView(label(info?.loadLabel(packageManager) ?: "Harp", 14f, dim), full(2f))
+
         // The preview: the real widget drawn over a stand-in wallpaper, so opacity shows.
         val stage = FrameLayout(this).apply {
             background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(Color.parseColor("#3A6073"), Color.parseColor("#16222A"), Color.parseColor("#734B6D"))).apply { cornerRadius = dp(20f).toFloat() }
-            setPadding(dp(14f), dp(14f), dp(14f), dp(14f))
+            setPadding(dp(14f), dp(18f), dp(14f), dp(18f))
         }
-        val previewHeight = when (layout) {
-            R.layout.harp_widget_mini -> 72f
-            R.layout.harp_widget -> 72f
-            R.layout.harp_widget_cover -> 180f
-            else -> 170f
+        val (pw, ph) = when (layout) {
+            R.layout.harp_widget_mini -> dp(170f) to dp(76f)
+            R.layout.harp_widget_cover -> dp(170f) to dp(170f)
+            R.layout.harp_widget -> ViewGroup.LayoutParams.MATCH_PARENT to dp(76f)
+            else -> ViewGroup.LayoutParams.MATCH_PARENT to dp(180f)
         }
         fun preview() {
             p.edit().putInt("alpha_$id", alpha).putBoolean("lyrics_$id", lyrics).apply()
             stage.removeAllViews()
             val v = HarpWidget.views(this, layout, id).apply(this, stage)
-            val w = if (layout == R.layout.harp_widget_cover || layout == R.layout.harp_widget_mini) dp(150f) else ViewGroup.LayoutParams.MATCH_PARENT
-            stage.addView(v, FrameLayout.LayoutParams(w, dp(previewHeight), Gravity.CENTER))
+            stage.addView(v, FrameLayout.LayoutParams(pw, ph, Gravity.CENTER))
         }
-        root.addView(stage, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(16f) })
+        root.addView(stage, full(16f))
 
-        val opacityLabel = label("Background: $alpha%", 15f, text, 20)
-        root.addView(opacityLabel)
-        root.addView(label("Lower is more see-through.", 13f, dim))
+        // Background opacity: the name and the value on one line, the slider under it.
+        val opacityRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        opacityRow.addView(label("Background", 16f, text), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        val value = label("$alpha%", 16f, dim)
+        opacityRow.addView(value)
+        root.addView(opacityRow, full(20f))
+        root.addView(label("Lower lets more of the wallpaper through.", 13f, dim), full(2f))
         root.addView(SeekBar(this).apply {
             max = 100
             progress = alpha
+            progressTintList = ColorStateList.valueOf(accent)
+            thumbTintList = ColorStateList.valueOf(accent)
+            progressBackgroundTintList = ColorStateList.valueOf(Color.parseColor("#48484A"))
+            setPadding(0, dp(8f), 0, dp(8f))
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(s: SeekBar?, v: Int, fromUser: Boolean) {
                     alpha = v
-                    opacityLabel.text = "Background: $alpha%"
+                    value.text = "$alpha%"
                     preview()
                 }
                 override fun onStartTrackingTouch(s: SeekBar?) {}
                 override fun onStopTrackingTouch(s: SeekBar?) {}
             })
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8f) })
+        }, full(6f))
 
         if (layout == R.layout.harp_widget_large) {
             @Suppress("DEPRECATION")
-            root.addView(Switch(this).apply {
-                this.text = "Live lyrics"
-                textSize = 15f
-                setTextColor(text)
+            val sw = Switch(this).apply {
                 isChecked = lyrics
+                thumbTintList = ColorStateList(arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()), intArrayOf(Color.WHITE, Color.parseColor("#D1D1D6")))
+                trackTintList = ColorStateList(arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()), intArrayOf(accent, Color.parseColor("#48484A")))
                 setOnCheckedChangeListener { _, on -> lyrics = on; preview() }
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(20f) })
-            root.addView(label("The line being sung, when the song has synced lyrics. Off: the song with a bigger cover.", 13f, dim))
+            }
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setOnClickListener { sw.isChecked = !sw.isChecked }
+            }
+            val words = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            words.addView(label("Live lyrics", 16f, text))
+            words.addView(label("The line being sung, for songs with synced lyrics.", 13f, dim), full(2f))
+            row.addView(words, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(12f) })
+            row.addView(sw)
+            root.addView(View(this).apply { setBackgroundColor(Color.parseColor("#2C2C2E")) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1f)).apply { topMargin = dp(14f) })
+            root.addView(row, full(14f))
         }
 
-        root.addView(Button(this).apply {
+        root.addView(TextView(this).apply {
             this.text = "Done"
+            textSize = 16f
+            setTextColor(Color.WHITE)
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            gravity = Gravity.CENTER
+            background = round(accent, 24f)
             setOnClickListener { finish() }
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(20f); gravity = Gravity.END })
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48f)).apply { topMargin = dp(22f) })
 
-        setContentView(FrameLayout(this).apply {
-            setPadding(dp(16f), dp(16f), dp(16f), dp(16f))
-            addView(root, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
-        })
+        setContentView(root)
+        // A set width: the dialog otherwise shrinks to its content and squeezes everything.
+        val screen = resources.displayMetrics.widthPixels
+        window.setLayout(minOf(screen - dp(32f), dp(420f)), ViewGroup.LayoutParams.WRAP_CONTENT)
         preview()
     }
 

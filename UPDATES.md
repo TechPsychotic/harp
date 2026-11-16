@@ -8,6 +8,15 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-16 (late evening): widget settings look right
+
+The widget settings screen was shrink-wrapped to its content, so the preview, the slider and the
+live-lyrics switch were squeezed into a narrow column. It now has a set width, the opacity value
+sits beside its name, the slider and switch use Harp's red, and Done is a full-width button.
+✅ builds. 📱 not verified on the phone.
+
+---
+
 ## 2026-11-16 (later): widgets fit their size, live lyrics on by default
 
 From the phone screenshots: the widgets were laid out for more room than the widget menu (and a
