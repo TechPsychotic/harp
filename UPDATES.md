@@ -8,6 +8,17 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-16 (late night): widgets redesigned, live lyrics
+
+All four widgets redrawn (new play/pause/skip icons, rounded covers, the red play button), each
+with its own settings (long-press › Settings, or when placed): background opacity with a live
+preview, and **live lyrics** for "Harp now playing" (the line being sung and the next one, for
+songs with synced lyrics; Harp follows them only while such a widget exists). Widget-menu previews
+now show a sample song instead of an empty widget. ✅ builds, all layouts parse. 📱 not verified on
+a home screen.
+
+---
+
 ## 2026-11-16 (night): more home screen widgets
 
 Next to the 4×1 strip there are now three more Harp widgets (long-press the home screen ›

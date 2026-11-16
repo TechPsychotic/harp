@@ -3,5 +3,5 @@
     <string name="widget_description">What\'s playing, with play, pause and skip</string>
     <string name="widget_mini_description">The song, with play, pause and next</string>
     <string name="widget_cover_description">The cover, with play and pause</string>
-    <string name="widget_large_description">Big cover, the song and the controls</string>
+    <string name="widget_large_description">Big cover, the song (or its live lyrics) and the controls</string>
 </resources>

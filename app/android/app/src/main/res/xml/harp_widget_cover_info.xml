@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:configure="dev.harp.harp.WidgetSettingsActivity"
     android:description="@string/widget_cover_description"
     android:initialLayout="@layout/harp_widget_cover"
-    android:previewLayout="@layout/harp_widget_cover"
+    android:previewLayout="@layout/harp_widget_cover_preview"
+    android:previewImage="@mipmap/ic_launcher"
     android:minWidth="110dp"
     android:minHeight="110dp"
     android:minResizeWidth="110dp"
@@ -11,4 +13,5 @@
     android:targetCellHeight="2"
     android:resizeMode="horizontal|vertical"
     android:updatePeriodMillis="0"
+    android:widgetFeatures="reconfigurable|configuration_optional"
     android:widgetCategory="home_screen" />

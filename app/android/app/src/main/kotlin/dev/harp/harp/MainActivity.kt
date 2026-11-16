@@ -198,6 +198,11 @@ class MainActivity : AudioServiceActivity() {
                         )
                         result.success(null)
                     }
+                    "widgetLyricsWanted" -> result.success(HarpWidget.lyricsWanted(applicationContext))
+                    "widgetLyric" -> {
+                        HarpWidget.lyric(applicationContext, call.argument<String>("line") ?: "", call.argument<String>("next") ?: "")
+                        result.success(null)
+                    }
                     // Updates: hand a downloaded, checked APK to Android's installer.
                     // Returns "permission" when Harp first needs "Install unknown apps".
                     "installApk" -> {

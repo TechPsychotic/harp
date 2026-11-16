@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- The widget's card (its opacity is set per widget). -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <solid android:color="#E61B1B24" />
-    <corners android:radius="18dp" />
+    <solid android:color="#FF1C1C1F" />
+    <corners android:radius="24dp" />
 </shape>

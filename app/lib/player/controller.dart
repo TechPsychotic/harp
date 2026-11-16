@@ -18,6 +18,7 @@ import '../src/rust/api/party.dart' as net;
 import '../src/rust/api/spatial.dart' as spatial;
 import '../widgets/cover.dart';
 import 'media_session.dart';
+import 'widget_lyrics.dart';
 import 'party.dart';
 import 'stream_headers.dart';
 import 'head_android.dart';
@@ -46,6 +47,7 @@ class PlayerController extends ChangeNotifier {
       ..enabled = settings.reactiveBackground && settings.fullEffects;
     unawaited(viz.attach(_player).then((_) => _applyAudioFx()));
     _bind(_player);
+    WidgetLyrics(this).start();
     String lastFx = _fxKey();
     var lastSpeed = settings.speed;
     if (lastSpeed != 1) unawaited(_player.setRate(lastSpeed));

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Now playing (4×2 and up): big cover, the song (or its live lyrics) and the controls. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/widget_root" android:layout_width="match_parent" android:layout_height="match_parent"
+    android:background="@drawable/widget_clip" android:clipToOutline="true">
+    <ImageView android:id="@+id/widget_bg" android:layout_width="match_parent" android:layout_height="match_parent"
+        android:importantForAccessibility="no" android:scaleType="fitXY" android:src="@drawable/widget_bg" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center_vertical"
+        android:orientation="horizontal" android:padding="14dp">
+        <ImageView android:id="@+id/widget_art" android:layout_width="wrap_content" android:layout_height="match_parent"
+            android:adjustViewBounds="true" android:maxWidth="180dp" android:contentDescription="Cover" android:scaleType="centerCrop" android:src="@drawable/widget_preview_art" />
+        <LinearLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_marginStart="16dp"
+            android:layout_weight="1" android:gravity="center_vertical" android:orientation="vertical">
+            <TextView android:id="@+id/widget_title" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:ellipsize="end" android:maxLines="1" android:text="Song title · Artist" android:textColor="#FFA1A1A6" android:textSize="12sp"
+            android:fontFamily="sans-serif"   />
+            <TextView android:id="@+id/widget_artist" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:ellipsize="end" android:maxLines="1" android:text="Artist" android:textColor="#FFA1A1A6" android:textSize="14sp"
+            android:fontFamily="sans-serif" android:visibility="gone"  />
+            <TextView android:id="@+id/widget_lyric" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:ellipsize="end" android:maxLines="2" android:text="The line being sung right now" android:textColor="#FFF5F5F7" android:textSize="17sp"
+            android:fontFamily="sans-serif-medium"  android:layout_marginTop="6dp" />
+            <TextView android:id="@+id/widget_lyric_next" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:ellipsize="end" android:maxLines="1" android:text="and the one after it" android:textColor="#FF6E6E73" android:textSize="13sp"
+            android:fontFamily="sans-serif"  android:layout_marginTop="2dp" />
+            <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="12dp"
+                android:layout_marginStart="-8dp" android:gravity="center_vertical" android:orientation="horizontal">
+                <ImageButton android:id="@+id/widget_prev" android:layout_width="42dp" android:layout_height="42dp"
+            android:background="@android:color/transparent" android:contentDescription="Previous" android:padding="10dp"
+            android:scaleType="fitCenter" android:src="@drawable/ic_w_prev" />
+                <ImageButton android:id="@+id/widget_play" android:layout_width="48dp" android:layout_height="48dp"
+            android:layout_marginStart="4dp" android:layout_marginEnd="4dp" android:background="@drawable/widget_play_bg"
+            android:contentDescription="Play or pause" android:padding="12dp" android:scaleType="fitCenter" android:src="@drawable/ic_w_pause" />
+                <ImageButton android:id="@+id/widget_next" android:layout_width="42dp" android:layout_height="42dp"
+            android:background="@android:color/transparent" android:contentDescription="Next" android:padding="10dp"
+            android:scaleType="fitCenter" android:src="@drawable/ic_w_next" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>

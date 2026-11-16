@@ -6,56 +6,54 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.BitmapShader
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.RectF
+import android.graphics.Shader
+import android.util.TypedValue
 import android.view.KeyEvent
+import android.view.View
 import android.widget.RemoteViews
 
 /**
  * Harp's home-screen widgets, all showing what's playing:
  *  - [HarpWidget]: cover, song and previous / play-pause / next in one row (4×1).
  *  - [HarpMiniWidget]: song with play-pause and next (2×1).
- *  - [HarpCoverWidget]: the cover with a play-pause button on it (2×2).
- *  - [HarpLargeWidget]: big cover, song, artist and the three buttons (4×2 and up).
- * The app tells them what's playing (see MainActivity "widget"); the buttons send
- * media-button presses to Harp's media service, like headphone buttons, so they work
- * without the app's screen.
+ *  - [HarpCoverWidget]: the cover with the song and a play-pause button on it (2×2).
+ *  - [HarpLargeWidget]: big cover, song (or its live lyrics) and the three buttons (4×2 and up).
+ * Each widget has its own settings (background opacity; live lyrics for the large one), see
+ * [WidgetSettingsActivity]. The app tells them what's playing (MainActivity "widget",
+ * "widgetLyric"); the buttons send media-button presses to Harp's media service, like
+ * headphone buttons, so they work without the app's screen.
  */
-class HarpWidget : AppWidgetProvider() {
+open class HarpWidget : AppWidgetProvider() {
+    open val layout = R.layout.harp_widget
+
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
-        manager.updateAppWidget(ids, views(context, R.layout.harp_widget))
+        for (id in ids) {
+            try { manager.updateAppWidget(id, views(context, layout, id)) } catch (_: Exception) {}
+        }
+    }
+
+    override fun onDeleted(context: Context, ids: IntArray) {
+        val e = prefs(context).edit()
+        for (id in ids) e.remove("alpha_$id").remove("lyrics_$id")
+        e.apply()
     }
 
     companion object {
         private const val PREFS = "harp_widget"
+        private const val DEFAULT_ALPHA = 92
 
-        /** The app calls this when the song or play state changes. */
-        fun update(context: Context, title: String, artist: String, art: String, playing: Boolean) {
-            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-                .putString("title", title).putString("artist", artist).putString("art", art)
-                .putBoolean("playing", playing).apply()
-            val manager = AppWidgetManager.getInstance(context)
-            for ((cls, layout) in kinds) {
-                // Each on its own: one failing (a cover too big, say) doesn't stop the others.
-                try {
-                    val ids = manager.getAppWidgetIds(ComponentName(context, cls))
-                    if (ids.isNotEmpty()) manager.updateAppWidget(ids, views(context, layout))
-                } catch (_: Exception) {
-                }
-            }
-        }
+        fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-        /** The cover scaled down to about [max] px: widgets have a small memory limit. */
-        private fun decodeArt(path: String, max: Int): android.graphics.Bitmap? {
-            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            BitmapFactory.decodeFile(path, bounds)
-            var sample = 1
-            while (bounds.outWidth / (sample * 2) >= max && bounds.outHeight / (sample * 2) >= max) sample *= 2
-            val b = BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = sample }) ?: return null
-            val side = maxOf(b.width, b.height)
-            if (side <= max) return b
-            val k = max.toFloat() / side
-            return android.graphics.Bitmap.createScaledBitmap(b, (b.width * k).toInt().coerceAtLeast(1), (b.height * k).toInt().coerceAtLeast(1), true)
-        }
+        /** Background opacity, percent. */
+        fun alphaOf(context: Context, id: Int) = prefs(context).getInt("alpha_$id", DEFAULT_ALPHA)
+
+        fun lyricsOn(context: Context, id: Int) = prefs(context).getBoolean("lyrics_$id", false)
 
         private val kinds = listOf(
             HarpWidget::class.java to R.layout.harp_widget,
@@ -63,6 +61,43 @@ class HarpWidget : AppWidgetProvider() {
             HarpCoverWidget::class.java to R.layout.harp_widget_cover,
             HarpLargeWidget::class.java to R.layout.harp_widget_large,
         )
+
+        fun layoutFor(className: String) = kinds.firstOrNull { it.first.name == className }?.second ?: R.layout.harp_widget
+
+        /** The app calls this when the song or play state changes. */
+        fun update(context: Context, title: String, artist: String, art: String, playing: Boolean) {
+            prefs(context).edit()
+                .putString("title", title).putString("artist", artist).putString("art", art)
+                .putBoolean("playing", playing).apply()
+            refreshAll(context)
+        }
+
+        /** The lyric line being sung and the next ("" when there are none). */
+        fun lyric(context: Context, line: String, next: String) {
+            val p = prefs(context)
+            if (p.getString("lyric", "") == line && p.getString("lyric_next", "") == next) return
+            p.edit().putString("lyric", line).putString("lyric_next", next).apply()
+            val manager = AppWidgetManager.getInstance(context)
+            for (id in manager.getAppWidgetIds(ComponentName(context, HarpLargeWidget::class.java))) {
+                if (lyricsOn(context, id)) try { manager.updateAppWidget(id, views(context, R.layout.harp_widget_large, id)) } catch (_: Exception) {}
+            }
+        }
+
+        /** Whether any widget shows live lyrics (the app follows them only then). */
+        fun lyricsWanted(context: Context): Boolean {
+            val ids = AppWidgetManager.getInstance(context).getAppWidgetIds(ComponentName(context, HarpLargeWidget::class.java))
+            return ids.any { lyricsOn(context, it) }
+        }
+
+        fun refreshAll(context: Context) {
+            val manager = AppWidgetManager.getInstance(context)
+            for ((cls, layout) in kinds) {
+                for (id in manager.getAppWidgetIds(ComponentName(context, cls))) {
+                    // Each on its own: one failing (a cover too big, say) doesn't stop the others.
+                    try { manager.updateAppWidget(id, views(context, layout, id)) } catch (_: Exception) {}
+                }
+            }
+        }
 
         private fun mediaKey(context: Context, code: Int, request: Int): PendingIntent {
             val intent = Intent(Intent.ACTION_MEDIA_BUTTON).apply {
@@ -72,26 +107,61 @@ class HarpWidget : AppWidgetProvider() {
             return PendingIntent.getBroadcast(context, request, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         }
 
-        /** One widget's views; layouts without a view simply don't have that id. */
-        fun views(context: Context, layout: Int): RemoteViews {
-            val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        private fun dp(context: Context, v: Float) =
+            TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v, context.resources.displayMetrics)
+
+        /** One widget's views. */
+        fun views(context: Context, layout: Int, id: Int): RemoteViews {
+            val p = prefs(context)
             val views = RemoteViews(context.packageName, layout)
+            val alpha = alphaOf(context, id) * 255 / 100
+            views.setInt(R.id.widget_bg, "setImageAlpha", alpha)
             val title = p.getString("title", null)
-            views.setTextViewText(R.id.widget_title, title ?: "Harp")
-            views.setTextViewText(R.id.widget_artist, if (title == null) "Tap to open" else p.getString("artist", null) ?: "")
-            views.setImageViewResource(
-                R.id.widget_play,
-                if (p.getBoolean("playing", false)) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
-            )
+            val artist = if (title == null) "Tap to open" else p.getString("artist", null) ?: ""
+            val playing = p.getBoolean("playing", false)
+            views.setImageViewResource(R.id.widget_play, if (playing) R.drawable.ic_w_pause else R.drawable.ic_w_play)
+
+            val lyric = p.getString("lyric", "") ?: ""
+            if (layout == R.layout.harp_widget_large && lyricsOn(context, id) && lyric.isNotEmpty() && title != null) {
+                // Live lyrics: the song small on top, the line being sung large, the next one dim.
+                views.setTextViewText(R.id.widget_title, if (artist.isEmpty()) title else "$title · $artist")
+                views.setTextViewTextSize(R.id.widget_title, TypedValue.COMPLEX_UNIT_SP, 12f)
+                views.setTextColor(R.id.widget_title, 0xFFA1A1A6.toInt())
+                views.setViewVisibility(R.id.widget_artist, View.GONE)
+                views.setViewVisibility(R.id.widget_lyric, View.VISIBLE)
+                views.setTextViewText(R.id.widget_lyric, lyric)
+                val next = p.getString("lyric_next", "") ?: ""
+                views.setViewVisibility(R.id.widget_lyric_next, if (next.isEmpty()) View.GONE else View.VISIBLE)
+                views.setTextViewText(R.id.widget_lyric_next, next)
+            } else {
+                views.setTextViewText(R.id.widget_title, title ?: "Harp")
+                views.setTextViewText(R.id.widget_artist, artist)
+                if (layout == R.layout.harp_widget_large) {
+                    views.setTextViewTextSize(R.id.widget_title, TypedValue.COMPLEX_UNIT_SP, 17f)
+                    views.setTextColor(R.id.widget_title, 0xFFF5F5F7.toInt())
+                    views.setViewVisibility(R.id.widget_artist, View.VISIBLE)
+                    views.setViewVisibility(R.id.widget_lyric, View.GONE)
+                    views.setViewVisibility(R.id.widget_lyric_next, View.GONE)
+                }
+            }
+
             if (layout != R.layout.harp_widget_mini) {
                 val art = p.getString("art", null)
-                val big = layout == R.layout.harp_widget_cover || layout == R.layout.harp_widget_large
+                val cover = layout == R.layout.harp_widget_cover
+                val big = cover || layout == R.layout.harp_widget_large
                 val bitmap = try {
                     if (art.isNullOrEmpty()) null else decodeArt(art, if (big) 600 else 200)
                 } catch (_: Exception) { null }
-                if (bitmap != null) views.setImageViewBitmap(R.id.widget_art, bitmap) else views.setImageViewResource(R.id.widget_art, R.mipmap.ic_launcher)
+                if (bitmap != null) {
+                    // The cover widget is all cover (the widget clips its corners); the others round theirs.
+                    views.setImageViewBitmap(R.id.widget_art, if (cover) bitmap else rounded(bitmap, dp(context, 12f) * bitmap.width / dp(context, if (big) 160f else 52f)))
+                } else {
+                    views.setImageViewResource(R.id.widget_art, R.drawable.widget_preview_art)
+                }
+                // On the cover widget the cover is the background: it follows the opacity too.
+                if (cover) views.setInt(R.id.widget_art, "setImageAlpha", maxOf(alpha, 60))
             }
-            if (layout != R.layout.harp_widget_mini && layout != R.layout.harp_widget_cover) {
+            if (layout == R.layout.harp_widget || layout == R.layout.harp_widget_large) {
                 views.setOnClickPendingIntent(R.id.widget_prev, mediaKey(context, KeyEvent.KEYCODE_MEDIA_PREVIOUS, 1))
             }
             views.setOnClickPendingIntent(R.id.widget_play, mediaKey(context, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, 2))
@@ -105,23 +175,38 @@ class HarpWidget : AppWidgetProvider() {
             views.setOnClickPendingIntent(R.id.widget_root, open)
             return views
         }
+
+        /** The cover scaled down to about [max] px: widgets have a small memory limit. */
+        private fun decodeArt(path: String, max: Int): Bitmap? {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(path, bounds)
+            var sample = 1
+            while (bounds.outWidth / (sample * 2) >= max && bounds.outHeight / (sample * 2) >= max) sample *= 2
+            val b = BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = sample }) ?: return null
+            val side = maxOf(b.width, b.height)
+            if (side <= max) return b
+            val k = max.toFloat() / side
+            return Bitmap.createScaledBitmap(b, (b.width * k).toInt().coerceAtLeast(1), (b.height * k).toInt().coerceAtLeast(1), true)
+        }
+
+        /** The cover with rounded corners (widgets can't clip an image themselves everywhere). */
+        private fun rounded(b: Bitmap, radius: Float): Bitmap {
+            val out = Bitmap.createBitmap(b.width, b.height, Bitmap.Config.ARGB_8888)
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = BitmapShader(b, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP) }
+            Canvas(out).drawRoundRect(RectF(0f, 0f, b.width.toFloat(), b.height.toFloat()), radius, radius, paint)
+            return out
+        }
     }
 }
 
-class HarpMiniWidget : AppWidgetProvider() {
-    override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
-        manager.updateAppWidget(ids, HarpWidget.views(context, R.layout.harp_widget_mini))
-    }
+class HarpMiniWidget : HarpWidget() {
+    override val layout = R.layout.harp_widget_mini
 }
 
-class HarpCoverWidget : AppWidgetProvider() {
-    override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
-        manager.updateAppWidget(ids, HarpWidget.views(context, R.layout.harp_widget_cover))
-    }
+class HarpCoverWidget : HarpWidget() {
+    override val layout = R.layout.harp_widget_cover
 }
 
-class HarpLargeWidget : AppWidgetProvider() {
-    override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
-        manager.updateAppWidget(ids, HarpWidget.views(context, R.layout.harp_widget_large))
-    }
+class HarpLargeWidget : HarpWidget() {
+    override val layout = R.layout.harp_widget_large
 }

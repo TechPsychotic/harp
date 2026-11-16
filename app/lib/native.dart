@@ -65,6 +65,24 @@ class Native {
     } catch (_) {}
   }
 
+  /// Android: whether a "now playing" widget is set to show live lyrics.
+  static Future<bool> widgetLyricsWanted() async {
+    if (!Platform.isAndroid) return false;
+    try {
+      return await _c.invokeMethod<bool>('widgetLyricsWanted') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Android: the lyric line being sung and the next one, for the widget ('' for none).
+  static Future<void> widgetLyric({required String line, required String next}) async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _c.invokeMethod('widgetLyric', {'line': line, 'next': next});
+    } catch (_) {}
+  }
+
   /// Android: asks to read your music files (true elsewhere).
   static Future<bool> requestAudioAccess() async {
     if (!Platform.isAndroid) return true;

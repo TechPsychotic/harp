@@ -136,6 +136,17 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/harp_widget_large_info" />
         </receiver>
+        <!-- A widget's settings (opacity, live lyrics): when placed and from its long-press menu. -->
+        <activity
+            android:name=".WidgetSettingsActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.DeviceDefault.Dialog.NoActionBar">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
         <!-- Android Auto: Harp is a media app there (browse the library, play). -->
         <meta-data
             android:name="com.google.android.gms.car.application"
