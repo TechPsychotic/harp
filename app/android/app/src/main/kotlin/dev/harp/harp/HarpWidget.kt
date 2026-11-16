@@ -35,9 +35,26 @@ class HarpWidget : AppWidgetProvider() {
                 .putBoolean("playing", playing).apply()
             val manager = AppWidgetManager.getInstance(context)
             for ((cls, layout) in kinds) {
-                val ids = manager.getAppWidgetIds(ComponentName(context, cls))
-                if (ids.isNotEmpty()) manager.updateAppWidget(ids, views(context, layout))
+                // Each on its own: one failing (a cover too big, say) doesn't stop the others.
+                try {
+                    val ids = manager.getAppWidgetIds(ComponentName(context, cls))
+                    if (ids.isNotEmpty()) manager.updateAppWidget(ids, views(context, layout))
+                } catch (_: Exception) {
+                }
             }
+        }
+
+        /** The cover scaled down to about [max] px: widgets have a small memory limit. */
+        private fun decodeArt(path: String, max: Int): android.graphics.Bitmap? {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(path, bounds)
+            var sample = 1
+            while (bounds.outWidth / (sample * 2) >= max && bounds.outHeight / (sample * 2) >= max) sample *= 2
+            val b = BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = sample }) ?: return null
+            val side = maxOf(b.width, b.height)
+            if (side <= max) return b
+            val k = max.toFloat() / side
+            return android.graphics.Bitmap.createScaledBitmap(b, (b.width * k).toInt().coerceAtLeast(1), (b.height * k).toInt().coerceAtLeast(1), true)
         }
 
         private val kinds = listOf(
@@ -70,7 +87,7 @@ class HarpWidget : AppWidgetProvider() {
                 val art = p.getString("art", null)
                 val big = layout == R.layout.harp_widget_cover || layout == R.layout.harp_widget_large
                 val bitmap = try {
-                    if (art.isNullOrEmpty()) null else BitmapFactory.decodeFile(art, BitmapFactory.Options().apply { inSampleSize = if (big) 1 else 2 })
+                    if (art.isNullOrEmpty()) null else decodeArt(art, if (big) 600 else 200)
                 } catch (_: Exception) { null }
                 if (bitmap != null) views.setImageViewBitmap(R.id.widget_art, bitmap) else views.setImageViewResource(R.id.widget_art, R.mipmap.ic_launcher)
             }

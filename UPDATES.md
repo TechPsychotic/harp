@@ -14,7 +14,9 @@ Next to the 4×1 strip there are now three more Harp widgets (long-press the hom
 Widgets › Harp): **Harp mini** (2×1: the song, play-pause and next), **Harp cover** (2×2: the album
 art with a play-pause button and the song over it) and **Harp now playing** (4×2 and up: a big
 cover, the song, the artist and previous / play-pause / next). All resize, and all follow the song
-the same way the strip does. ✅ the APK builds. 📱 not verified on a home screen.
+the same way the strip does. Covers are scaled to at most 600 px for the widgets (a
+widget's memory is small), and one widget failing doesn't stop the others updating. ✅ the APK
+builds. 📱 not verified on a home screen.
 
 ---
 
