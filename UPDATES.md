@@ -8,6 +8,82 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-16 (afternoon, later): the 3D renderer for other apps
+
+- `harp-spatial` gains `dsp::process_interleaved`, `dsp::set_options` and `dsp::chunks_rendered`, so
+  the renderer also runs outside the audio engine: Lyre uses it (pinned to commit `eed0e05`) for
+  spatial audio for every app on Android. Nothing changes in Harp itself. 🧪 29 tests.
+
+---
+
+## 2026-11-16 (afternoon): head tracking through Lyre's AirPods hub (Android)
+
+AirPods talk to one connection at a time, and Android apps can't share a Bluetooth socket. So Lyre
+now runs an **AirPods hub** (a background service with a notification) that keeps the connection and
+shares it with apps signed with the same key. Harp's head tracking binds to it first, and only opens
+its own connection when Lyre isn't installed (or doesn't answer within 10 s). When Harp lets go, the
+hub stops the motion stream Harp started. Harp lists Lyre under `<queries>` (Android 11+ hides other
+apps otherwise). Lyre is now signed with Harp's release key, which the hub checks.
+
+**Not verified:** 📱 everything (it builds). Lyre must be reinstalled once (uninstall the debug-signed
+one first).
+
+---
+
+## 2026-11-16 (midday): head tracking on Android waits better
+
+"Connecting · waiting for motion data" with Lyre closed: the AirPods' channel opened but no motion
+came. Harp now asks for the motion stream again after 6 s, and once more with the whole start
+sequence after 12 s. After ~18 s it closes, says what to try (swipe Lyre away, turn Bluetooth off and
+on, or put the AirPods in the case for 10 s) and retries later (5 s, 15, 30, then every minute). The
+status line also counts what the AirPods sent ("N packets, M with sensor data"): 0 packets means
+another app still holds them; packets but no sensor data means the buds' sensors need that reconnect
+(seen on the laptop too). 📱 not verified.
+
+---
+
+## 2026-11-16 (morning, later): tidying Settings
+
+- **Removed:** the Immersive spatial mode (a saved Immersive becomes Wide stage), the "Not Dolby
+  Atmos" line in the spatial descriptions, and Settings › About › Test the audio engine (the old
+  engine self-check, `engine_probe.dart`). 🧪 analyze, 28 Flutter tests.
+
+---
+
+## 2026-11-16 (morning): head tracking on Android
+
+The S24 test: 3D Bounce plays on the phone (Harp's engine build works there), and Lyre opens the
+AirPods' controls on One UI 9 without root. So head tracking comes to Android the same way:
+- Harp's Android side opens the AirPods' control channel like Lyre does (Android 17's public
+  `BluetoothSocketSettings` first, then Android's hidden L2CAP socket; no root) and passes every packet
+  to the same Rust head tracker as on Linux (turning, up/down after Set up, dynamic recentring, flip),
+  which steers the 3D engine. Settings › 3D audio shows the same head-tracking controls as on Linux.
+  Asks for the Nearby devices permission the first time.
+- 🧪 motion packets fed in turn the head (30° in, 30° out); start and stop packets; 29 Rust tests.
+
+**Not verified:** 📱 on the S24 (it builds; the connection code is Lyre's, which works there).
+
+---
+
+## 2026-11-16 (late night): 3D Bounce made up as it goes, more in front
+
+After "the bounce path is fixed and repetitive" and "make it move to the front, not just back":
+- **Bounce is generated and never repeats.** It uses five kinds of move: hops with a springy
+  overshoot, orbits (¾ to 1½ turns, rising and falling), swoops over your head to the other side,
+  whispers in close to one ear, and slow drifts. Each move's destination, height, distance and length
+  are random within limits; a new Bounce starts each time it's turned on.
+- **In time with the music:** a beat (a jump in the bass) ends a pause, so moves start on the beat.
+- **More in front:** about two stops in three are in front of you, orbits mostly end in front, and
+  drifts lean back toward the front. The "behind" cue is stronger (−8 dB above 4.5 kHz, +3 dB around
+  1 kHz), so front and back differ more. The front's tone is unchanged.
+- No move is faster than ~550°/s at its quickest. 🧪 ten minutes of Bounce: every direction, 15°
+  below to 50° above, 0.8 to 3.5 m, no jumps, more than half the time in front, every kind of move,
+  and no repeating pattern; a beat starts the next move; kicks every 0.5 s are found.
+
+**Not verified:** 🖥️📱 listening.
+
+---
+
 ## 2026-11-16 (night): 3D audio on Android (Harp's own audio engine build)
 
 - **3D (HRTF), 3D Bounce and Room on Android.** The Android engine has no filter that could do it and
