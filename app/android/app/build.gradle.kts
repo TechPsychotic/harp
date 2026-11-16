@@ -74,3 +74,8 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // Reaches Android's hidden classic-L2CAP socket for the AirPods (no root). Apache-2.0.
+    implementation("org.lsposed.hiddenapibypass:hiddenapibypass:6.1")
+}

@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1551203027;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -154458262;
 
 // Section: executor
 
@@ -3855,6 +3855,129 @@ fn wire__crate__api__spatial__spatial_calibrate_up_impl(
         },
     )
 }
+fn wire__crate__api__spatial__spatial_head_feed_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "spatial_head_feed",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_data = <Vec<u8>>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Ok::<_, ()>({
+                    crate::api::spatial::spatial_head_feed(api_data);
+                })?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__spatial__spatial_head_link_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "spatial_head_link",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_state = <String>::sse_decode(&mut deserializer);
+            let api_detail = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Ok::<_, ()>({
+                    crate::api::spatial::spatial_head_link(api_state, api_detail);
+                })?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__spatial__spatial_head_start_packets_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "spatial_head_start_packets",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Ok::<_, ()>(crate::api::spatial::spatial_head_start_packets())?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__spatial__spatial_head_stop_packets_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "spatial_head_stop_packets",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Ok::<_, ()>(crate::api::spatial::spatial_head_stop_packets())?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
 fn wire__crate__api__spatial__spatial_recenter_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -5033,6 +5156,18 @@ impl SseDecode for f64 {
     }
 }
 
+impl SseDecode for crate::api::spatial::HeadPacket {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_data = <Vec<u8>>::sse_decode(deserializer);
+        let mut var_waitMs = <u32>::sse_decode(deserializer);
+        return crate::api::spatial::HeadPacket {
+            data: var_data,
+            wait_ms: var_waitMs,
+        };
+    }
+}
+
 impl SseDecode for crate::api::engine::HomeFeed {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -5230,6 +5365,18 @@ impl SseDecode for Vec<crate::api::engine::EqFilterView> {
     }
 }
 
+impl SseDecode for Vec<crate::api::spatial::HeadPacket> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::spatial::HeadPacket>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
 impl SseDecode for Vec<crate::api::engine::ImportPlaylistView> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -5253,6 +5400,18 @@ impl SseDecode for Vec<crate::api::engine::ImportTrackView> {
             ans_.push(<crate::api::engine::ImportTrackView>::sse_decode(
                 deserializer,
             ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<Vec<u8>> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<Vec<u8>>::sse_decode(deserializer));
         }
         return ans_;
     }
@@ -6094,34 +6253,34 @@ fn pde_ffi_dispatcher_primary_impl(
         110 => wire__crate__api__engine__setting_get_impl(port, ptr, rust_vec_len, data_len),
         111 => wire__crate__api__engine__setting_set_impl(port, ptr, rust_vec_len, data_len),
         112 => wire__crate__api__engine__skip_reason_impl(port, ptr, rust_vec_len, data_len),
-        116 => wire__crate__api__spatial__spatial_start_impl(port, ptr, rust_vec_len, data_len),
-        118 => wire__crate__api__spatial__spatial_stop_impl(port, ptr, rust_vec_len, data_len),
-        120 => wire__crate__api__engine__spotify_cancel_impl(port, ptr, rust_vec_len, data_len),
-        121 => wire__crate__api__engine__spotify_client_id_impl(port, ptr, rust_vec_len, data_len),
-        122 => wire__crate__api__engine__spotify_connect_impl(port, ptr, rust_vec_len, data_len),
-        123 => wire__crate__api__engine__spotify_connected_impl(port, ptr, rust_vec_len, data_len),
-        124 => wire__crate__api__engine__spotify_disconnect_impl(port, ptr, rust_vec_len, data_len),
-        125 => wire__crate__api__engine__spotify_fetch_impl(port, ptr, rust_vec_len, data_len),
-        126 => wire__crate__api__engine__spotify_playlists_impl(port, ptr, rust_vec_len, data_len),
-        127 => {
+        120 => wire__crate__api__spatial__spatial_start_impl(port, ptr, rust_vec_len, data_len),
+        122 => wire__crate__api__spatial__spatial_stop_impl(port, ptr, rust_vec_len, data_len),
+        124 => wire__crate__api__engine__spotify_cancel_impl(port, ptr, rust_vec_len, data_len),
+        125 => wire__crate__api__engine__spotify_client_id_impl(port, ptr, rust_vec_len, data_len),
+        126 => wire__crate__api__engine__spotify_connect_impl(port, ptr, rust_vec_len, data_len),
+        127 => wire__crate__api__engine__spotify_connected_impl(port, ptr, rust_vec_len, data_len),
+        128 => wire__crate__api__engine__spotify_disconnect_impl(port, ptr, rust_vec_len, data_len),
+        129 => wire__crate__api__engine__spotify_fetch_impl(port, ptr, rust_vec_len, data_len),
+        130 => wire__crate__api__engine__spotify_playlists_impl(port, ptr, rust_vec_len, data_len),
+        131 => {
             wire__crate__api__engine__spotify_redirect_uri_impl(port, ptr, rust_vec_len, data_len)
         }
-        128 => wire__crate__api__engine__spotify_wait_impl(port, ptr, rust_vec_len, data_len),
-        129 => wire__crate__api__engine__start_engine_impl(port, ptr, rust_vec_len, data_len),
-        130 => wire__crate__api__party__sync_cancel_impl(port, ptr, rust_vec_len, data_len),
-        131 => wire__crate__api__party__sync_devices_impl(port, ptr, rust_vec_len, data_len),
-        132 => wire__crate__api__party__sync_join_impl(port, ptr, rust_vec_len, data_len),
-        133 => wire__crate__api__party__sync_now_impl(port, ptr, rust_vec_len, data_len),
-        134 => wire__crate__api__party__sync_offer_impl(port, ptr, rust_vec_len, data_len),
-        135 => wire__crate__api__party__sync_unpair_impl(port, ptr, rust_vec_len, data_len),
-        136 => wire__crate__api__party__sync_wait_impl(port, ptr, rust_vec_len, data_len),
-        137 => wire__crate__api__engine__taste_stats_impl(port, ptr, rust_vec_len, data_len),
-        138 => {
+        132 => wire__crate__api__engine__spotify_wait_impl(port, ptr, rust_vec_len, data_len),
+        133 => wire__crate__api__engine__start_engine_impl(port, ptr, rust_vec_len, data_len),
+        134 => wire__crate__api__party__sync_cancel_impl(port, ptr, rust_vec_len, data_len),
+        135 => wire__crate__api__party__sync_devices_impl(port, ptr, rust_vec_len, data_len),
+        136 => wire__crate__api__party__sync_join_impl(port, ptr, rust_vec_len, data_len),
+        137 => wire__crate__api__party__sync_now_impl(port, ptr, rust_vec_len, data_len),
+        138 => wire__crate__api__party__sync_offer_impl(port, ptr, rust_vec_len, data_len),
+        139 => wire__crate__api__party__sync_unpair_impl(port, ptr, rust_vec_len, data_len),
+        140 => wire__crate__api__party__sync_wait_impl(port, ptr, rust_vec_len, data_len),
+        141 => wire__crate__api__engine__taste_stats_impl(port, ptr, rust_vec_len, data_len),
+        142 => {
             wire__crate__api__engine__thumbnail_cache_bytes_impl(port, ptr, rust_vec_len, data_len)
         }
-        139 => wire__crate__api__engine__toggle_like_impl(port, ptr, rust_vec_len, data_len),
-        142 => wire__crate__api__engine__ytdlp_version_impl(port, ptr, rust_vec_len, data_len),
-        143 => wire__crate__api__engine__ytdlp_zipapp_impl(port, ptr, rust_vec_len, data_len),
+        143 => wire__crate__api__engine__toggle_like_impl(port, ptr, rust_vec_len, data_len),
+        146 => wire__crate__api__engine__ytdlp_version_impl(port, ptr, rust_vec_len, data_len),
+        147 => wire__crate__api__engine__ytdlp_zipapp_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -6140,11 +6299,19 @@ fn pde_ffi_dispatcher_sync_impl(
         100 => wire__crate__api__engine__romanize_lines_impl(ptr, rust_vec_len, data_len),
         113 => wire__crate__api__engine__song_on_device_impl(ptr, rust_vec_len, data_len),
         114 => wire__crate__api__spatial__spatial_calibrate_up_impl(ptr, rust_vec_len, data_len),
-        115 => wire__crate__api__spatial__spatial_recenter_impl(ptr, rust_vec_len, data_len),
-        117 => wire__crate__api__spatial__spatial_status_impl(ptr, rust_vec_len, data_len),
-        119 => wire__crate__api__spatial__spatial_supported_impl(ptr, rust_vec_len, data_len),
-        140 => wire__crate__api__engine__youtube_backing_off_impl(ptr, rust_vec_len, data_len),
-        141 => wire__crate__api__engine__ytdlp_server_impl(ptr, rust_vec_len, data_len),
+        115 => wire__crate__api__spatial__spatial_head_feed_impl(ptr, rust_vec_len, data_len),
+        116 => wire__crate__api__spatial__spatial_head_link_impl(ptr, rust_vec_len, data_len),
+        117 => {
+            wire__crate__api__spatial__spatial_head_start_packets_impl(ptr, rust_vec_len, data_len)
+        }
+        118 => {
+            wire__crate__api__spatial__spatial_head_stop_packets_impl(ptr, rust_vec_len, data_len)
+        }
+        119 => wire__crate__api__spatial__spatial_recenter_impl(ptr, rust_vec_len, data_len),
+        121 => wire__crate__api__spatial__spatial_status_impl(ptr, rust_vec_len, data_len),
+        123 => wire__crate__api__spatial__spatial_supported_impl(ptr, rust_vec_len, data_len),
+        144 => wire__crate__api__engine__youtube_backing_off_impl(ptr, rust_vec_len, data_len),
+        145 => wire__crate__api__engine__ytdlp_server_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -6435,6 +6602,27 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::engine::ExportFile>
     for crate::api::engine::ExportFile
 {
     fn into_into_dart(self) -> crate::api::engine::ExportFile {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::spatial::HeadPacket {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.data.into_into_dart().into_dart(),
+            self.wait_ms.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::spatial::HeadPacket
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::spatial::HeadPacket>
+    for crate::api::spatial::HeadPacket
+{
+    fn into_into_dart(self) -> crate::api::spatial::HeadPacket {
         self
     }
 }
@@ -7163,6 +7351,14 @@ impl SseEncode for f64 {
     }
 }
 
+impl SseEncode for crate::api::spatial::HeadPacket {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <Vec<u8>>::sse_encode(self.data, serializer);
+        <u32>::sse_encode(self.wait_ms, serializer);
+    }
+}
+
 impl SseEncode for crate::api::engine::HomeFeed {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -7306,6 +7502,16 @@ impl SseEncode for Vec<crate::api::engine::EqFilterView> {
     }
 }
 
+impl SseEncode for Vec<crate::api::spatial::HeadPacket> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::spatial::HeadPacket>::sse_encode(item, serializer);
+        }
+    }
+}
+
 impl SseEncode for Vec<crate::api::engine::ImportPlaylistView> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -7322,6 +7528,16 @@ impl SseEncode for Vec<crate::api::engine::ImportTrackView> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <crate::api::engine::ImportTrackView>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<Vec<u8>> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <Vec<u8>>::sse_encode(item, serializer);
         }
     }
 }

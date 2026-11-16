@@ -20,6 +20,7 @@ import '../widgets/cover.dart';
 import 'media_session.dart';
 import 'party.dart';
 import 'stream_headers.dart';
+import 'head_android.dart';
 import 'visualizer.dart';
 
 /// Owns playback: the audio engine (mpv_audio_kit: libmpv with FFmpeg's audio
@@ -312,6 +313,9 @@ class PlayerController extends ChangeNotifier {
   /// Why 3D audio couldn't start, if it couldn't.
   String? spatialError;
 
+  /// Android: head tracking's AirPods connection.
+  final AndroidHead _androidHead = AndroidHead();
+
   /// 3D audio (Linux): Harp's own "Harp 3D" output, rendered binaurally (and following the
   /// head with AirPods) by the Rust core, then played on the real output.
   Future<void> _syncSpatial() async {
@@ -340,6 +344,7 @@ class PlayerController extends ChangeNotifier {
       _outDevice = device;
       await _routeOutput(_player);
     }
+    if (Platform.isAndroid) unawaited(_androidHead.sync(want && spatialError == null && settings.headTracking));
     if (!want && (spatial.spatialStatus().running || !_spatialCleaned)) {
       // Also removes a 3D output a crash or a kill left behind.
       _spatialCleaned = true;

@@ -29,14 +29,14 @@ const L2CAP_OPTIONS: i32 = 1;
 const PSM_AACP: u16 = 0x1001;
 const RECEIVE_MTU: u16 = 2582;
 
-const HEADER: [u8; 4] = [0x04, 0x00, 0x04, 0x00];
-const HANDSHAKE: [u8; 16] = [0, 0, 4, 0, 1, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-const FEATURES: [u8; 14] = [4, 0, 4, 0, 0x4d, 0, 0xd7, 0, 0, 0, 0, 0, 0, 0];
-const NOTIFICATIONS: [u8; 10] = [4, 0, 4, 0, 0x0f, 0, 0xff, 0xff, 0xff, 0xff];
+pub const HEADER: [u8; 4] = [0x04, 0x00, 0x04, 0x00];
+pub const HANDSHAKE: [u8; 16] = [0, 0, 4, 0, 1, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+pub const FEATURES: [u8; 14] = [4, 0, 4, 0, 0x4d, 0, 0xd7, 0, 0, 0, 0, 0, 0, 0];
+pub const NOTIFICATIONS: [u8; 10] = [4, 0, 4, 0, 0x0f, 0, 0xff, 0xff, 0xff, 0xff];
 /// SensorDataWX messages: header, opcode 0x17, then the RTBuddy service 0x100000.
-const WX_PREFIX: [u8; 10] = [4, 0, 4, 0, 0x17, 0, 0, 0, 0x10, 0];
-const SVC_ACTIVITY: u8 = 0x0E;
-const SVC_MOTION: u8 = 0x10;
+pub const WX_PREFIX: [u8; 10] = [4, 0, 4, 0, 0x17, 0, 0, 0, 0x10, 0];
+pub const SVC_ACTIVITY: u8 = 0x0E;
+pub const SVC_MOTION: u8 = 0x10;
 
 #[repr(C)]
 struct SockaddrL2 {
@@ -264,11 +264,7 @@ impl Channel {
     /// Starts (interval > 0) or stops (0) a SensorDataWX service stream.
     pub fn stream(&mut self, service: u8, interval_us: u32) -> io::Result<()> {
         self.seq = (self.seq + 1) & 0x7F;
-        let mut body = vec![0x08, self.seq, 0x42, 0x0B, 0x08, service, 0x10, 0x02, 0x1A, 0x05, 0x01];
-        body.extend_from_slice(&interval_us.to_le_bytes());
-        let mut pkt = WX_PREFIX.to_vec();
-        pkt.extend_from_slice(&(body.len() as u16).to_le_bytes());
-        pkt.extend_from_slice(&body);
+        let pkt = stream_packet(self.seq, service, interval_us);
         self.send(&pkt)
     }
 
@@ -348,6 +344,16 @@ fn take_frame(pending: &mut Vec<u8>, out: &mut [u8]) -> Option<usize> {
     out[..m].copy_from_slice(&pending[2..2 + m]);
     pending.drain(..2 + n);
     Some(m)
+}
+
+/// A SensorDataWX request starting (interval > 0) or stopping (0) a service stream.
+pub fn stream_packet(seq: u8, service: u8, interval_us: u32) -> Vec<u8> {
+    let mut body = vec![0x08, seq & 0x7F, 0x42, 0x0B, 0x08, service, 0x10, 0x02, 0x1A, 0x05, 0x01];
+    body.extend_from_slice(&interval_us.to_le_bytes());
+    let mut pkt = WX_PREFIX.to_vec();
+    pkt.extend_from_slice(&(body.len() as u16).to_le_bytes());
+    pkt.extend_from_slice(&body);
+    pkt
 }
 
 fn varint(b: &[u8], i: &mut usize) -> Option<u64> {

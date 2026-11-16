@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`
 
 bool spatialSupported() =>
     RustLib.instance.api.crateApiSpatialSpatialSupported();
@@ -29,6 +29,43 @@ void spatialCalibrateUp() =>
 
 SpatialStatus spatialStatus() =>
     RustLib.instance.api.crateApiSpatialSpatialStatus();
+
+/// The handshake and the requests that start the AirPods' motion stream.
+List<HeadPacket> spatialHeadStartPackets() =>
+    RustLib.instance.api.crateApiSpatialSpatialHeadStartPackets();
+
+/// The request that stops the motion stream (send before closing).
+List<Uint8List> spatialHeadStopPackets() =>
+    RustLib.instance.api.crateApiSpatialSpatialHeadStopPackets();
+
+/// One packet the AirPods sent.
+void spatialHeadFeed({required List<int> data}) =>
+    RustLib.instance.api.crateApiSpatialSpatialHeadFeed(data: data);
+
+/// What the app's AirPods connection is doing, for the settings screen.
+void spatialHeadLink({required String state, required String detail}) => RustLib
+    .instance
+    .api
+    .crateApiSpatialSpatialHeadLink(state: state, detail: detail);
+
+/// One packet to send to the AirPods, and how long to wait after it.
+class HeadPacket {
+  final Uint8List data;
+  final int waitMs;
+
+  const HeadPacket({required this.data, required this.waitMs});
+
+  @override
+  int get hashCode => data.hashCode ^ waitMs.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is HeadPacket &&
+          runtimeType == other.runtimeType &&
+          data == other.data &&
+          waitMs == other.waitMs;
+}
 
 class SpatialOptions {
   final bool headTracking;

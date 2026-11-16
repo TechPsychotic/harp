@@ -13,12 +13,17 @@ pub mod head;
 pub mod hrir;
 pub mod render;
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub mod aacp;
+pub mod head_link;
 #[cfg(target_os = "linux")]
 pub mod route;
 #[cfg(target_os = "linux")]
 mod service;
+
+/// Tests that touch the shared engine state (pose, Bounce, outputs) take turns.
+#[cfg(test)]
+pub(crate) static TEST_GLOBALS: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 /// What 3D audio is doing.
 #[derive(Clone, Debug, Default)]
@@ -78,6 +83,10 @@ pub fn start(opts: &Options) -> Result<String, String> {
     {
         // Inside the engine: no output to switch to (an empty device keeps the usual one).
         dsp::enable(opts.room, opts.bounce)?;
+        head_link::configure(opts.flip, &opts.recenter, &opts.up_calibration);
+        if !opts.head_tracking {
+            dsp::set_pose(0.0, 0.0);
+        }
         ANDROID_ON.store(true, std::sync::atomic::Ordering::Relaxed);
         Ok(String::new())
     }
@@ -92,6 +101,8 @@ pub fn start(opts: &Options) -> Result<String, String> {
 pub fn calibrate_up() {
     #[cfg(target_os = "linux")]
     service::calibrate_up();
+    #[cfg(not(target_os = "linux"))]
+    head_link::calibrate_up();
 }
 
 pub fn stop() {
@@ -107,6 +118,8 @@ pub fn stop() {
 pub fn recenter() {
     #[cfg(target_os = "linux")]
     service::recenter();
+    #[cfg(not(target_os = "linux"))]
+    head_link::recenter();
 }
 
 pub fn status() -> Status {
@@ -116,10 +129,15 @@ pub fn status() -> Status {
     }
     #[cfg(target_os = "android")]
     {
+        let (head, head_detail, yaw, pitch, calibrating, up_calibration) = head_link::status();
         Status {
             running: ANDROID_ON.load(std::sync::atomic::Ordering::Relaxed),
-            head: "unsupported".into(),
-            head_detail: "Head tracking isn't on Android yet".into(),
+            head,
+            head_detail,
+            yaw,
+            pitch,
+            calibrating,
+            up_calibration,
             engine: dsp::diagnostics(),
             ..Status::default()
         }

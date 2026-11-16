@@ -15,6 +15,8 @@ import java.io.File
 import java.util.Date
 
 class MainActivity : AudioServiceActivity() {
+    private var airpods: AirPodsLink? = null
+    private var pendingBluetooth: MethodChannel.Result? = null
     private var wake: PowerManager.WakeLock? = null
     private var wifi: WifiManager.WifiLock? = null
 
@@ -66,6 +68,12 @@ class MainActivity : AudioServiceActivity() {
         if (requestCode == 8) {
             pendingAudio?.success(grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED)
             pendingAudio = null
+        }
+        if (requestCode == 41) {
+            val ok = Build.VERSION.SDK_INT < 31 || checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+            if (ok) airpods?.init()
+            pendingBluetooth?.success(ok)
+            pendingBluetooth = null
         }
     }
 
@@ -133,6 +141,26 @@ class MainActivity : AudioServiceActivity() {
                 } else {
                     result.notImplemented()
                 }
+            }
+        }
+        // 3D audio's head tracking: the AirPods' control channel (see AirPodsLink).
+        val link = AirPodsLink(applicationContext).also { airpods = it }
+        io.flutter.plugin.common.EventChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.harp/airpods/events").setStreamHandler(link)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.harp/airpods").setMethodCallHandler { call, result ->
+            when (call.method) {
+                "permission" -> {
+                    if (Build.VERSION.SDK_INT < 31 || checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
+                        link.init()
+                        result.success(true)
+                    } else {
+                        pendingBluetooth = result
+                        requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_CONNECT), 41)
+                    }
+                }
+                "open" -> link.open(result)
+                "send" -> link.send(call.argument<ByteArray>("data")!!, result)
+                "close" -> { link.close(); result.success(null) }
+                else -> result.notImplemented()
             }
         }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.harp/native")
@@ -226,4 +254,5 @@ class MainActivity : AudioServiceActivity() {
         setWake(false)
         super.onDestroy()
     }
+
 }

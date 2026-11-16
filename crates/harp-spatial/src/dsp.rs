@@ -296,8 +296,10 @@ mod tests {
     fn two_players_at_once_are_both_fully_rendered() {
         // A crossfade: two outputs on two threads. Every chunk of both must be rendered (a
         // chunk left as it is would click), and each stream must match its own reference.
+        let _g = crate::TEST_GLOBALS.lock().unwrap_or_else(|e| e.into_inner());
         SETTINGS.room.store(false, Relaxed);
         SETTINGS.bounce.store(false, Relaxed);
+        set_pose(0.0, 0.0);
         let a = std::thread::spawn(|| run_stream(0xA0, 2));
         let b = std::thread::spawn(|| run_stream(0xB0, 2));
         for (got, want) in [a.join().unwrap(), b.join().unwrap()] {

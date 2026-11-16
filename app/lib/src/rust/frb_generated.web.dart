@@ -118,6 +118,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   double dco_decode_f_64(dynamic raw);
 
   @protected
+  HeadPacket dco_decode_head_packet(dynamic raw);
+
+  @protected
   HomeFeed dco_decode_home_feed(dynamic raw);
 
   @protected
@@ -160,10 +163,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<EqFilterView> dco_decode_list_eq_filter_view(dynamic raw);
 
   @protected
+  List<HeadPacket> dco_decode_list_head_packet(dynamic raw);
+
+  @protected
   List<ImportPlaylistView> dco_decode_list_import_playlist_view(dynamic raw);
 
   @protected
   List<ImportTrackView> dco_decode_list_import_track_view(dynamic raw);
+
+  @protected
+  List<Uint8List> dco_decode_list_list_prim_u_8_strict(dynamic raw);
 
   @protected
   List<LyricLineView> dco_decode_list_lyric_line_view(dynamic raw);
@@ -423,6 +432,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   double sse_decode_f_64(SseDeserializer deserializer);
 
   @protected
+  HeadPacket sse_decode_head_packet(SseDeserializer deserializer);
+
+  @protected
   HomeFeed sse_decode_home_feed(SseDeserializer deserializer);
 
   @protected
@@ -481,12 +493,20 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  List<HeadPacket> sse_decode_list_head_packet(SseDeserializer deserializer);
+
+  @protected
   List<ImportPlaylistView> sse_decode_list_import_playlist_view(
     SseDeserializer deserializer,
   );
 
   @protected
   List<ImportTrackView> sse_decode_list_import_track_view(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<Uint8List> sse_decode_list_list_prim_u_8_strict(
     SseDeserializer deserializer,
   );
 
@@ -813,6 +833,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_f_64(double self, SseSerializer serializer);
 
   @protected
+  void sse_encode_head_packet(HeadPacket self, SseSerializer serializer);
+
+  @protected
   void sse_encode_home_feed(HomeFeed self, SseSerializer serializer);
 
   @protected
@@ -888,6 +911,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_head_packet(
+    List<HeadPacket> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_import_playlist_view(
     List<ImportPlaylistView> self,
     SseSerializer serializer,
@@ -896,6 +925,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_import_track_view(
     List<ImportTrackView> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_list_prim_u_8_strict(
+    List<Uint8List> self,
     SseSerializer serializer,
   );
 

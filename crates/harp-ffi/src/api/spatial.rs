@@ -85,3 +85,36 @@ pub fn spatial_status() -> SpatialStatus {
         engine: s.engine,
     }
 }
+
+// --- Head tracking where the app holds the AirPods connection (Android) ---
+
+/// One packet to send to the AirPods, and how long to wait after it.
+#[derive(Clone, Debug)]
+pub struct HeadPacket {
+    pub data: Vec<u8>,
+    pub wait_ms: u32,
+}
+
+/// The handshake and the requests that start the AirPods' motion stream.
+#[flutter_rust_bridge::frb(sync)]
+pub fn spatial_head_start_packets() -> Vec<HeadPacket> {
+    harp_spatial::head_link::start_packets().into_iter().map(|p| HeadPacket { data: p.data, wait_ms: p.wait_ms }).collect()
+}
+
+/// The request that stops the motion stream (send before closing).
+#[flutter_rust_bridge::frb(sync)]
+pub fn spatial_head_stop_packets() -> Vec<Vec<u8>> {
+    harp_spatial::head_link::stop_packets()
+}
+
+/// One packet the AirPods sent.
+#[flutter_rust_bridge::frb(sync)]
+pub fn spatial_head_feed(data: Vec<u8>) {
+    harp_spatial::head_link::feed(&data);
+}
+
+/// What the app's AirPods connection is doing, for the settings screen.
+#[flutter_rust_bridge::frb(sync)]
+pub fn spatial_head_link(state: String, detail: String) {
+    harp_spatial::head_link::set_link(&state, &detail);
+}

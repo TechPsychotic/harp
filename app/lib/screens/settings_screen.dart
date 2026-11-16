@@ -588,24 +588,18 @@ class _HeadTrackingTilesState extends State<_HeadTrackingTiles> {
           title: const Text('Audio engine'),
           subtitle: Text(st.engine.replaceFirst('Audio engine: ', ''), style: TextStyle(color: tok.textDim)),
         ),
-      if (Platform.isAndroid)
-        ListTile(
-          title: const Text('Head tracking'),
-          subtitle: Text("Not on Android yet: the music stays in front of you, Bounce moves it around.", style: TextStyle(color: tok.textDim)),
-        ),
-      if (!Platform.isAndroid)
       SwitchListTile(
         title: const Text('Head tracking'),
         subtitle: Text(
           s.headTracking
               ? '${_describe(st.head, st.headDetail, st.yaw)}${st.running && st.latencyMs > 0 ? ' · +${st.latencyMs} ms' : ''}'
-              : 'The music stays put when you turn your head. Needs AirPods Pro, 4 or Max connected to this computer.',
+              : 'The music stays put when you turn your head. Needs AirPods Pro, 4 or Max connected to this ${Platform.isAndroid ? 'phone (close Lyre while using it)' : 'computer'}.',
           style: TextStyle(color: tok.textDim),
         ),
         value: s.headTracking,
         onChanged: s.setHeadTracking,
       ),
-      if (s.headTracking && !Platform.isAndroid) ...[
+      if (s.headTracking) ...[
         ListTile(
           title: const Text('Up and down'),
           subtitle: Text(calText, style: TextStyle(color: tok.textDim)),
