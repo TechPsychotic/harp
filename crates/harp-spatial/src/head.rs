@@ -69,9 +69,9 @@ fn up_in_bud(q: Quat) -> [f32; 3] {
 pub enum Recenter {
     /// Never by itself (Recenter button only).
     Off,
-    /// After 8 s held still, over about 15 s.
+    /// After 15 s held still, over about 25 s.
     Slow,
-    /// After 3 s held still, over about 5 s: like AirPods with an iPhone or Mac.
+    /// After 8 s held still, over about 12 s (a quick look around never moves the front).
     Dynamic,
 }
 
@@ -87,8 +87,8 @@ impl Recenter {
     fn timing(self) -> Option<(f32, f32)> {
         match self {
             Recenter::Off => None,
-            Recenter::Slow => Some((8.0, 15.0)),
-            Recenter::Dynamic => Some((3.0, 5.0)),
+            Recenter::Slow => Some((15.0, 25.0)),
+            Recenter::Dynamic => Some((8.0, 12.0)),
         }
     }
 }
@@ -151,7 +151,7 @@ pub struct TrackerConfig {
 
 impl Default for TrackerConfig {
     fn default() -> Self {
-        TrackerConfig { predict_s: 0.05, predict_max_deg: 8.0, recenter: Recenter::Dynamic, still_dps: 15.0, flip: false }
+        TrackerConfig { predict_s: 0.05, predict_max_deg: 8.0, recenter: Recenter::Dynamic, still_dps: 8.0, flip: false }
     }
 }
 
@@ -256,9 +256,16 @@ impl Tracker {
         self.restart();
     }
 
-    /// The calibration that fits how the bud sits now, if any.
+    /// The calibration that fits how the bud sits now, if any. Once one is in use it is kept
+    /// through nods and tilts (only another bud, sitting quite differently, switches it), so
+    /// looking down doesn't recenter.
     fn matching_calibration(&self, q: Quat) -> Option<usize> {
         let up = up_in_bud(q);
+        if let Some(i) = self.using_calibration {
+            if i < self.calibrations.len() && dot(self.calibrations[i].up, up) > 0.3 {
+                return Some(i);
+            }
+        }
         self.calibrations
             .iter()
             .enumerate()
@@ -439,10 +446,18 @@ mod tests {
         t.update(q0, 0.0);
         let q = mul(axis_angle([0.0, 0.0, 1.0], 40.0), q0);
         let mut yaw = 0.0;
-        for i in 1..=480 {
-            yaw = t.update(q, i as f64 * 0.025).0; // 12 s facing 40° left
+        for i in 1..=1200 {
+            yaw = t.update(q, i as f64 * 0.025).0; // 30 s facing 40° left
         }
-        assert!(yaw.abs() < 8.0, "after 12 s the scene has mostly followed: {yaw}");
+        assert!(yaw.abs() < 8.0, "after 30 s the scene has mostly followed: {yaw}");
+        // But a 6 s look doesn't move the front at all.
+        let mut t = Tracker::new(TrackerConfig { predict_s: 0.0, ..Default::default() });
+        t.update(q0, 0.0);
+        let mut y6 = 0.0;
+        for i in 1..=240 {
+            y6 = t.update(q, i as f64 * 0.025).0;
+        }
+        assert!((y6 - 40.0).abs() < 0.5, "6 s held: still {y6}");
     }
 
     /// A bud sitting rolled and pitched in the ear (like the real readings), on a head that
@@ -465,6 +480,7 @@ mod tests {
             t.update(worn(0.0, p), time);
         }
         assert_eq!(t.calibrating, Calibrating::Done);
+        // Looking far down keeps the calibration (no recenter): 60° down reads about -60.
         // Still looking up when it finishes: that must not become "level".
         let (_, p_up) = t.update(worn(0.0, 35.0), time + 0.0125);
         assert!((p_up - 35.0).abs() < 1.0, "still looking up: {p_up}");
@@ -473,6 +489,11 @@ mod tests {
         assert!((pitch - 20.0).abs() < 1.0 && yaw.abs() < 1.0, "up 20: yaw {yaw} pitch {pitch}");
         let (yaw, pitch) = t.update(worn(30.0, -15.0), time + 0.075);
         assert!((pitch + 15.0).abs() < 1.5 && (yaw - 30.0).abs() < 1.5, "left 30 down 15: yaw {yaw} pitch {pitch}");
+        // Far down and back: the calibration (and the front) stay.
+        let (_, down) = t.update(worn(30.0, -55.0), time + 0.1);
+        assert!((down + 55.0).abs() < 2.0, "55 down: {down}");
+        let (yaw, pitch) = t.update(worn(30.0, 0.0), time + 0.125);
+        assert!((yaw - 30.0).abs() < 1.5 && pitch.abs() < 1.5, "back level: yaw {yaw} pitch {pitch}");
         // Saved and loaded.
         let saved = UpCalibration::encode(&t.calibrations);
         let back = UpCalibration::decode(&saved);

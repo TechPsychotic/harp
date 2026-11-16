@@ -8,6 +8,17 @@ Legend: ✅ checked here · 🧪 automated test · 📱 needs a real phone · �
 
 ---
 
+## 2026-11-16 (evening): head tracking no longer snaps back
+
+"It recenters as soon as I turn my head": the dynamic drift back to where you face started after
+only 3 s of holding still and was mostly done 5 s later, which feels like the music following your
+head. Now it starts after 8 s still and takes about 12 s (Slowly: 15 s and 25 s); a head counts as
+still below 8°/s (was 15). After the up/down setup, tilting the head far down no longer swaps the
+calibration out (which recentred at once). 🧪 a 6 s look doesn't move the front at all, a 30 s hold
+mostly follows, 55° down and back keeps the front. 📱 not verified.
+
+---
+
 ## 2026-11-16 (afternoon, later): the 3D renderer for other apps
 
 - `harp-spatial` gains `dsp::process_interleaved`, `dsp::set_options` and `dsp::chunks_rendered`, so
